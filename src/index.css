@@ -22,10 +22,13 @@
   --gray-700: #495057;
   --gray-800: #343a40;
   --gray-900: #212529;
+  --sidebar-width: 30rem; /* 320px if 1rem = 16px. Corresponds to w-80 */
+  --header-height: 57px; /* Approximate height of your Header.tsx */
+  --sidebar-tabs-height: 65px; /* Approximate height of the tab bar in Sidebar.tsx */
 }
 
 body {
-  @apply antialiased text-gray-800;
+  @apply antialiased text-gray-800 bg-gray-100; /* Added a subtle bg to body for contrast if map doesn't fill */
   margin: 0;
   padding: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
@@ -34,6 +37,9 @@ body {
   overflow: hidden;
 }
 
+#root {
+  height: 100%; /* Ensure root also takes full height */
+}
 h1, h2, h3, h4, h5, h6 {
   @apply font-semibold;
 }
@@ -53,26 +59,86 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Custom styling for the sidebar and map layout */
 .dashboard-layout {
-  @apply flex flex-col h-screen;
+  @apply flex flex-col h-full; /* Use h-full to respect #root's height */
 }
 
 .dashboard-content {
-  @apply flex flex-1 overflow-hidden;
+  @apply flex flex-1 relative overflow-hidden; /* Key for side-by-side layout that fills remaining space */
 }
 
 .map-container {
-  @apply flex-1 relative;
+  @apply absolute inset-0 z-0; /* Map takes full space of parent, behind sidebar */
 }
 
 .sidebar {
-  @apply w-80 bg-white shadow-lg overflow-y-auto;
-  transition: transform 0.3s ease;
+  @apply bg-white shadow-xl flex flex-col absolute top-0 right-0 h-full z-10; /* Sidebar is absolute, on top */
+  width: var(--sidebar-width);
+  transform: translateX(0%); /* Default state: visible */
+  transition: transform 0.3s ease-in-out;
+  /* overflow-y-auto; -- Apply this to the content part of sidebar, not whole sidebar if header/tabs are fixed */
+}
+.sidebar-open {
+  display: flex !important; /* Ensure it's flex when open */
+  width: var(--sidebar-width);
+  transform: translateX(0%);
 }
 
 .sidebar-collapsed {
   transform: translateX(100%);
+
 }
 
+.sidebar-content-area { 
+  height: calc(100vh - var(--header-height) - var(--sidebar-tabs-height));
+  overflow-y: auto; 
+  flex-grow: 1; 
+  /* For Firefox - more modern scrollbar look */
+  scrollbar-width: thin;          /* "auto" or "thin" */
+  scrollbar-color: #a0aec0 #edf2f7; /* thumb color track color (Tailwind gray-500, gray-200) */
+}
+
+/* MODERNIZED CUSTOM SCROLLBAR STYLES (Primarily WebKit) */
+.sidebar-content-area::-webkit-scrollbar {
+  width: 6px; /* Even thinner scrollbar */
+}
+
+.sidebar-content-area::-webkit-scrollbar-track {
+  background: transparent; /* Make track invisible */
+}
+
+.sidebar-content-area::-webkit-scrollbar-thumb {
+  background: #cbd5e0; /* Tailwind gray-400 - subtle */
+  border-radius: 6px; /* Fully rounded thumb */
+  /* border: 1px solid #edf2f7; */ /* Optional: very light border around thumb */
+}
+
+.sidebar-content-area::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0; /* Tailwind gray-500 - slightly darker on hover */
+}
+
+/* ADD THIS NEW UTILITY CLASS FOR HIDING SCROLLBARS */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* For WebKit browsers */
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* For IE and Edge legacy */
+  scrollbar-width: none;     /* For Firefox */
+}
+
+.shadow-top-lg {
+  box-shadow: 0 -10px 15px -3px rgba(0, 0, 0, 0.1), 0 -4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* LEAFLET SPECIFIC OVERRIDES */
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  background-color: #f0f0f0; 
+}
+
+.sidebar .overflow-y-auto { /* Style for the scrollable content area within sidebar */
+  flex-grow: 1;
+}
 .map-legend {
   @apply bg-white bg-opacity-90 p-3 rounded-md shadow-md text-sm;
 }
@@ -121,9 +187,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Animations */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+@keyframes fadeIn { 
+  from { opacity: 0; transform: translateY(-10px); } 
+  to { opacity: 1; transform: translateY(0); } 
+}
+
+.animate-fade-in { 
+  animation: fadeIn 0.2s ease-out; /* Made it a bit faster */
 }
 
 .animate-fade-in {
@@ -167,11 +237,31 @@ h1, h2, h3, h4, h5, h6 {
 .search-container {
   @apply absolute top-4 left-4 z-10 w-64;
 }
-
-.search-input {
+.search-input { /* General style for text inputs if needed */
   @apply pl-10 pr-4 py-2 w-full bg-white rounded-md shadow-md focus:outline-none focus:ring-2 focus:ring-primary-500;
 }
-
-.search-icon {
-  @apply absolute left-3 top-2.5 text-gray-500;
+.search-icon { /* For custom search icons if you build your own search again */
+  @apply absolute left-3 top-1/2 -translate-y-1/2 text-gray-500;
 }
+/* Map controls (layers button from MapControls.tsx) */
+.map-controls {
+  @apply bg-white shadow-md rounded-md p-0.5 z-[1000]; /* Ensure high z-index, p-0.5 for tighter look if buttons are small */
+}
+.map-controls button {
+  @apply p-2; /* Add padding to buttons inside .map-controls */
+}
+
+/* Ensure leaflet-bar (used by geocoder and zoom) has a high z-index if not already handled */
+.leaflet-bar {
+  @apply shadow-lg z-[1000]; /* z-[1000] is often default for leaflet controls */
+}
+.leaflet-control-geocoder.leaflet-bar {
+    /* Specific styles for geocoder if leaflet-bar isn't enough */
+}
+
+/* Animations */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+
+/* Tree Popup (if you customize it further) */
+.tree-popup { min-width: 200px; }

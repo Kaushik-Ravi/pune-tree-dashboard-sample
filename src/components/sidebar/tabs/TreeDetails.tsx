@@ -1,3 +1,4 @@
+// src/components/sidebar/tabs/TreeDetails.tsx
 import React, { useEffect, useState } from 'react';
 import { Info, Leaf, CircleDashed, Thermometer, TreePine } from 'lucide-react';
 import { useTreeStore } from '../../../store/TreeStore';
@@ -79,15 +80,15 @@ const TreeDetails: React.FC<TreeDetailsProps> = ({ treeId }) => {
         <div className="card-body grid grid-cols-3 gap-4">
           <div className="text-center">
             <div className="text-sm text-gray-500">Height</div>
-            <div className="text-lg font-semibold">{treeDetails.height_m.toFixed(2)} m</div>
+            <div className="text-lg font-semibold">{treeDetails.height_m?.toFixed(2) || 'N/A'} m</div>
           </div>
           <div className="text-center">
             <div className="text-sm text-gray-500">Girth</div>
-            <div className="text-lg font-semibold">{treeDetails.girth_cm.toFixed(2)} cm</div>
+            <div className="text-lg font-semibold">{treeDetails.girth_cm?.toFixed(2) || 'N/A'} cm</div>
           </div>
           <div className="text-center">
             <div className="text-sm text-gray-500">Canopy Diameter</div>
-            <div className="text-lg font-semibold">{treeDetails.canopy_dia_m.toFixed(2)} m</div>
+            <div className="text-lg font-semibold">{treeDetails.canopy_dia_m?.toFixed(2) || 'N/A'} m</div>
           </div>
         </div>
       </div>
@@ -105,21 +106,17 @@ const TreeDetails: React.FC<TreeDetailsProps> = ({ treeId }) => {
             <div>
               <div className="text-sm text-gray-500">CO₂ Sequestered</div>
               <div className="text-lg font-semibold text-success-500">
-                {treeDetails.CO2_sequestered_kg.toFixed(2)} kg
+                {treeDetails.CO2_sequestered_kg?.toFixed(2) || 'N/A'} kg
               </div>
             </div>
             <div className="text-3xl text-success-500">
               <Thermometer size={36} />
             </div>
           </div>
-          <div className="mt-3">
-            <div className="text-sm text-gray-500">Wood Density</div>
-            <div className="text-base">{treeDetails.wood_density.toFixed(2)} g/cm³</div>
-          </div>
         </div>
       </div>
 
-      {/* Additional information section */}
+      {/* Additional information section - UPDATED GRID LAYOUT */}
       <div className="card">
         <div className="card-header">
           <h3 className="font-medium flex items-center">
@@ -128,18 +125,23 @@ const TreeDetails: React.FC<TreeDetailsProps> = ({ treeId }) => {
           </h3>
         </div>
         <div className="card-body">
-          <div className="grid grid-cols-2 gap-4">
+          {/* Changed to grid-cols-2 for all items in this section */}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3"> {/* gap-y-3 for vertical spacing between rows */}
             <div>
               <div className="text-sm text-gray-500">Ward</div>
-              <div className="text-base">Ward {treeDetails.ward}</div>
+              <div className="text-base">{treeDetails.ward ? `Ward ${treeDetails.ward}` : 'N/A'}</div>
             </div>
             <div>
               <div className="text-sm text-gray-500">Economic Importance</div>
-              <div className="text-base">{treeDetails.economic_i}</div>
+              <div className="text-base">{treeDetails.economic_i || 'N/A'}</div>
             </div>
-            <div className="col-span-2">
+            <div> {/* Flowering now in the first column of the second row */}
               <div className="text-sm text-gray-500">Flowering</div>
-              <div className="text-base">{treeDetails.flowering}</div>
+              <div className="text-base">{treeDetails.flowering || 'N/A'}</div>
+            </div>
+            <div> {/* Wood Density now in the second column of the second row */}
+              <div className="text-sm text-gray-500">Wood Density</div>
+              <div className="text-base">{treeDetails.wood_density?.toFixed(2) || 'N/A'} g/cm³</div>
             </div>
           </div>
         </div>

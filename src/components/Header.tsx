@@ -1,7 +1,21 @@
+// src/components/Header.tsx
 import React from 'react';
-import { Leaf } from 'lucide-react';
+import { Leaf } from 'lucide-react'; 
+import InfoPopover from './common/InfoPopover'; // CORRECTED IMPORT PATH
 
 const Header: React.FC = () => {
+  const headerInfoContent = (
+    <>
+      <p>This dashboard visualizes urban tree data for Pune, including:</p>
+      <ul className="list-disc list-inside pl-2 mt-1 space-y-1">
+        <li>CO₂ sequestration levels</li>
+        <li>Tree locations and details</li>
+        <li>Ward-wise statistics</li>
+      </ul>
+      <p className="mt-2">You can explore tree details, analyze specific neighborhoods using drawing tools, and get planting advice.</p>
+    </>
+  );
+
   return (
     <header className="bg-primary-600 text-white shadow-md">
       <div className="container mx-auto px-4 py-3 flex items-center">
@@ -9,28 +23,13 @@ const Header: React.FC = () => {
         <h1 className="text-xl font-bold">Pune Urban Tree Dashboard</h1>
         
         <div className="ml-auto flex items-center space-x-4">
-          <button 
-            className="text-white hover:text-accent-300 transition-colors"
-            aria-label="Information"
-            title="About this dashboard"
+          <InfoPopover 
+            titleContent="About This Dashboard" 
+            iconSize={20}
+            className="text-white hover:text-gray-200" 
           >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              width="20" 
-              height="20" 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="currentColor" 
-              strokeWidth="2" 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              className="lucide lucide-info"
-            >
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="16" x2="12" y2="12"/>
-              <line x1="12" y1="8" x2="12.01" y2="8"/>
-            </svg>
-          </button>
+            {headerInfoContent}
+          </InfoPopover>
         </div>
       </div>
     </header>

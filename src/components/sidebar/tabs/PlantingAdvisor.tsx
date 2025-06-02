@@ -1,510 +1,347 @@
+// src/components/sidebar/tabs/PlantingAdvisor.tsx
 import React, { useState, useEffect } from 'react';
-import { TreeDeciduous, AreaChart, Thermometer, ScissorsSquare, Map, XCircle } from 'lucide-react';
-import { Bar } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
-import { useTreeStore } from '../../../store/TreeStore';
+import { TreeDeciduous, Info, Thermometer, Scaling, Bot, MapPin, PlayCircle, XCircle } from 'lucide-react';
+import { useTreeStore, TreeSpeciesData, DrawnGeoJson } from '../../../store/TreeStore';
+import * as turf from '@turf/turf';
+import InfoPopover from '../../common/InfoPopover';
 
-// Register ChartJS components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-);
+// Helper function (generateTreeCentersJS - THIS MUST BE THE FULL, WORKING VERSION FROM YOUR PROJECT)
+// I am including the last known good version based on our successful simulation tests.
+const generateTreeCentersJS = (
+  polygonFeature: turf.Feature<turf.Polygon | turf.MultiPolygon>,
+  canopyDiameterMeters: number,
+  boundaryBufferMeters: number,
+  treeSpacingBufferMeters: number
+): turf.helpers.Position[] => {
+  console.log("--- generateTreeCentersJS START ---");
+  console.log("Inputs:", { 
+    canopyDiameterMeters, 
+    boundaryBufferMeters, 
+    treeSpacingBufferMeters 
+  });
 
-interface TreeArchetype {
-  Archetype_Display_Name: string;
-  Archetype_Dropdown_Name: string;
-  Season: string;
-  botanical_name_short: string;
-  common_name: string;
-  CoolEff_P90NV_mean: number;
-  CoolEff_P90NV_std: number;
-  HeatRelief_P10NV_Abs_mean: number;
-  HeatRelief_P10NV_Abs_std: number;
-  CoolEff_MaxNV_mean: number;
-  CoolEff_MaxNV_std: number;
-  HeatRelief_MinNV_Abs_mean: number;
-  HeatRelief_MinNV_Abs_std: number;
-  height_m_min_range: number;
-  height_m_max_range: number;
-  CO2_Seq_Min_kg: number;
-  CO2_Seq_Max_kg: number;
-  wood_density: number;
+  if (!polygonFeature || !polygonFeature.geometry || !polygonFeature.geometry.coordinates || 
+      (polygonFeature.geometry.type === "Polygon" && polygonFeature.geometry.coordinates.length === 0) ||
+      (polygonFeature.geometry.type === "MultiPolygon" && polygonFeature.geometry.coordinates.length === 0) ) {
+    console.error("generateTreeCentersJS: Invalid polygon feature (no geometry or coordinates).");
+    return [];
+  }
+
+  const canopyRadiusMeters = canopyDiameterMeters / 2.0;
+  const effectiveRadiusMeters = canopyRadiusMeters + treeSpacingBufferMeters;
+  const totalInsetMeters = boundaryBufferMeters + effectiveRadiusMeters;
+  console.log("Calculated (meters):", { canopyRadiusMeters, effectiveRadiusMeters, totalInsetMeters });
+
+  if (totalInsetMeters < 0) { 
+      console.warn("generateTreeCentersJS: Total inset is negative. This could lead to unexpected buffer results.");
+  }
+   if (canopyDiameterMeters <= 0 || effectiveRadiusMeters <=0) {
+    console.error("generateTreeCentersJS: Canopy diameter or effective radius is zero or negative.");
+    return [];
+  }
+
+  let plantingZone: turf.Feature<turf.Polygon | turf.MultiPolygon> | null = null;
+  try {
+    let validGeoJsonToBuffer: turf.Feature<turf.Polygon | turf.MultiPolygon>;
+    if (polygonFeature.geometry.type === "Polygon") {
+        validGeoJsonToBuffer = turf.polygon(polygonFeature.geometry.coordinates, polygonFeature.properties || {});
+    } else if (polygonFeature.geometry.type === "MultiPolygon") {
+        validGeoJsonToBuffer = turf.multiPolygon(polygonFeature.geometry.coordinates, polygonFeature.properties || {});
+    } else {
+        console.error("generateTreeCentersJS: Unsupported geometry type for buffering:", polygonFeature.geometry.type);
+        return [];
+    }
+    
+    const originalArea = turf.area(validGeoJsonToBuffer);
+    console.log("Original polygon area (sq m, calculated by Turf):", originalArea);
+    if (originalArea === 0 && totalInsetMeters > 0) { 
+        console.warn("generateTreeCentersJS: Original polygon area is 0, cannot apply negative buffer.");
+        return []; 
+    }
+
+    if (totalInsetMeters !== 0) { 
+        plantingZone = turf.buffer(validGeoJsonToBuffer, -Math.abs(totalInsetMeters), { units: 'meters' });
+    } else {
+        plantingZone = validGeoJsonToBuffer; 
+    }
+
+  } catch (error) {
+    console.error("generateTreeCentersJS: Error during turf.buffer:", error);
+    return [];
+  }
+  
+  if (!plantingZone || !plantingZone.geometry || (plantingZone.geometry.coordinates && plantingZone.geometry.coordinates.length === 0) || turf.area(plantingZone) === 0) {
+    console.log("generateTreeCentersJS: Planting zone is empty or too small after buffering.");
+    console.log("Total Inset (m):", totalInsetMeters);
+    if(plantingZone && plantingZone.geometry) console.log("Buffered planting zone (GeoJSON geometry):", JSON.stringify(plantingZone.geometry));
+    else if(plantingZone) console.log("Buffered planting zone was not null, but geometry might be invalid or area 0.");
+    else console.log("Planting zone was null after buffer attempt.");
+    return [];
+  }
+  console.log("generateTreeCentersJS: Planting zone created. Area (sq m, calculated by Turf):", turf.area(plantingZone));
+
+  const dxMeters = 2 * effectiveRadiusMeters;
+  const dyMeters = Math.sqrt(3) * effectiveRadiusMeters; 
+  console.log("generateTreeCentersJS: Hex grid spacing (dxMeters, dyMeters):", dxMeters, dyMeters);
+
+  if (dxMeters <= 1e-6 || dyMeters <= 1e-6) { 
+    console.error("generateTreeCentersJS: Effective radius or spacing parameters result in zero or negligible grid steps.");
+    return [];
+  }
+
+  const plantingZoneBounds = turf.bbox(plantingZone); 
+  const treeCenters: turf.helpers.Position[] = [];
+  console.log("generateTreeCentersJS: Planting zone bounds (degrees Lon/Lat):", plantingZoneBounds);
+
+  const avgLat = (plantingZoneBounds[1] + plantingZoneBounds[3]) / 2;
+  const metersPerDegreeLat = 111132.954 - 559.822 * Math.cos(2 * avgLat * (Math.PI/180)) + 1.175 * Math.cos(4 * avgLat * (Math.PI/180)) - 0.00229 * Math.cos(6 * avgLat * (Math.PI/180));
+  const metersPerDegreeLon = (Math.PI/180) * 6378137 * Math.cos(avgLat * Math.PI/180) / Math.sqrt(1 - 0.00669437999014 * Math.pow(Math.sin(avgLat * Math.PI/180), 2));
+
+  const dxDeg = dxMeters / metersPerDegreeLon;
+  const dyDeg = dyMeters / metersPerDegreeLat; 
+
+  console.log("generateTreeCentersJS: Approx degree steps (dxDeg, dyDeg):", dxDeg, dyDeg);
+
+  if (!isFinite(dxDeg) || !isFinite(dyDeg) || dxDeg <= 1e-9 || dyDeg <= 1e-9 ) { 
+      console.error("generateTreeCentersJS: Calculated degree steps are zero, too small, or invalid, aborting grid generation. dxDeg:", dxDeg, "dyDeg:", dyDeg);
+      return [];
+  }
+
+  let row = 0;
+  for (let y = plantingZoneBounds[1]; y <= plantingZoneBounds[3]; y += dyDeg) {
+    const xOffsetInDegrees = (row % 2 === 0) ? 0 : (0.5 * dxDeg); 
+    for (let x = plantingZoneBounds[0] + xOffsetInDegrees; x <= plantingZoneBounds[2]; x += dxDeg) {
+      const candidatePointCoords: turf.helpers.Position = [x, y]; 
+      if (turf.booleanPointInPolygon(candidatePointCoords, plantingZone)) {
+        treeCenters.push(candidatePointCoords);
+      }
+    }
+    row++;
+  }
+  
+  console.log("generateTreeCentersJS: Generated tree centers:", treeCenters.length);
+  if (treeCenters.length > 0 && treeCenters.length < 10) console.log("First few centers (Lon,Lat):", treeCenters); 
+  console.log("--- generateTreeCentersJS END ---");
+  return treeCenters;
+};
+
+
+interface PlantingAdvisorProps {
+  setShowTemperatureChart: (show: boolean) => void; 
+  onSpeciesChangeForChart: (speciesDetails: TreeSpeciesData | null) => void;
 }
 
-const PlantingAdvisor: React.FC = () => {
-  const { treeArchetypes, fetchTreeArchetypes } = useTreeStore();
+const PlantingAdvisor: React.FC<PlantingAdvisorProps> = ({ setShowTemperatureChart, onSpeciesChangeForChart }) => {
+  const { 
+    treeSpeciesData, 
+    selectedArea, 
+    setSelectedArea, 
+    setSimulatedPlantingPoints 
+  } = useTreeStore();
   
-  const [selectedSeason, setSelectedSeason] = useState<string>('Summer');
-  const [selectedArchetype, setSelectedArchetype] = useState<string>('');
-  const [filteredArchetypes, setFilteredArchetypes] = useState<TreeArchetype[]>([]);
-  const [topPerformers, setTopPerformers] = useState<TreeArchetype[]>([]);
-  const [selectedArchetypeData, setSelectedArchetypeData] = useState<TreeArchetype | null>(null);
-  const [topArchetypeData, setTopArchetypeData] = useState<TreeArchetype | null>(null);
-  const [bufferDistance, setBufferDistance] = useState<number>(3);
-  const [areaSelected, setAreaSelected] = useState<boolean>(false);
-  const [showPlanting, setShowPlanting] = useState<boolean>(false);
-  const [showCooling, setShowCooling] = useState<boolean>(false);
-  const [treeCount, setTreeCount] = useState<number>(0);
-  const [areaSize, setAreaSize] = useState<number>(0);
-  
-  useEffect(() => {
-    fetchTreeArchetypes();
-  }, [fetchTreeArchetypes]);
+  const [topPerformers, setTopPerformers] = useState<TreeSpeciesData[]>([]);
+  const [selectedSpeciesId, setSelectedSpeciesId] = useState<string>('');
+  const [selectedSpeciesDetails, setSelectedSpeciesDetails] = useState<TreeSpeciesData | null>(null);
+  const [canopyDiameterInput, setCanopyDiameterInput] = useState<number>(8); 
+  const [boundaryBufferInput, setBoundaryBufferInput] = useState<number>(2); 
+  const [treeSpacingBufferInput, setTreeSpacingBufferInput] = useState<number>(1); 
+  const [isAreaDefinedForPlanting, setIsAreaDefinedForPlanting] = useState(false);
+  const [showSimulationResults, setShowSimulationResults] = useState(false);
+  const [simulationCount, setSimulationCount] = useState(0);
 
   useEffect(() => {
-    // Filter archetypes by selected season
-    const filtered = treeArchetypes.filter(arch => arch.Season === selectedSeason);
-    setFilteredArchetypes(filtered);
-    
-    // Get top 5 performers by cooling potential
-    const sorted = [...filtered].sort((a, b) => b.CoolEff_P90NV_mean - a.CoolEff_P90NV_mean);
-    setTopPerformers(sorted.slice(0, 5));
-    
-    if (sorted.length > 0) {
-      setTopArchetypeData(sorted[0]);
+    if (treeSpeciesData.length > 0) {
+      const sortedByCooling = [...treeSpeciesData].sort((a, b) => b.mean_cooling_effect_celsius - a.mean_cooling_effect_celsius);
+      setTopPerformers(sortedByCooling.slice(0, 3));
     }
-  }, [treeArchetypes, selectedSeason]);
+  }, [treeSpeciesData]);
 
-  const handleSeasonChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedSeason(e.target.value);
-    setSelectedArchetype('');
-    setSelectedArchetypeData(null);
-    setShowPlanting(false);
-    setShowCooling(false);
-  };
-
-  const handleArchetypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selected = e.target.value;
-    setSelectedArchetype(selected);
-    
-    const archetype = filteredArchetypes.find(arch => arch.Archetype_Dropdown_Name === selected);
-    if (archetype) {
-      setSelectedArchetypeData(archetype);
-    }
-    
-    setShowPlanting(false);
-    setShowCooling(false);
-  };
-
-  const activateAreaSelection = () => {
-    // This would trigger the map selection tool
-    // In a real implementation, this would communicate with the map component
-    setAreaSelected(true);
-    setAreaSize(8000); // Mock area size in square meters
-  };
-
-  const clearAreaSelection = () => {
-    setAreaSelected(false);
-    setShowPlanting(false);
-    setShowCooling(false);
-  };
-
-  const resetAdvisor = () => {
-    setSelectedArchetype('');
-    setSelectedArchetypeData(null);
-    setAreaSelected(false);
-    setShowPlanting(false);
-    setShowCooling(false);
-  };
-
-  const visualizePlanting = () => {
-    if (!selectedArchetypeData || !areaSelected) return;
-    
-    // In a real implementation, this would calculate based on the actual area and archetype
-    // Simple calculation for demonstration
-    const canopyDiameter = 5; // Mock canopy diameter in meters
-    const spacing = canopyDiameter + 1; // Add 1m buffer
-    
-    // Simple calculation of trees that would fit in a grid
-    const areaSqrt = Math.sqrt(areaSize);
-    const bufferedAreaSqrt = areaSqrt - (bufferDistance * 2);
-    const treesPerRow = Math.floor(bufferedAreaSqrt / spacing);
-    const rows = Math.floor(bufferedAreaSqrt / spacing);
-    const calculatedTreeCount = treesPerRow * rows;
-    
-    setTreeCount(calculatedTreeCount);
-    setShowPlanting(true);
-    setShowCooling(false);
-  };
-
-  const simulateCooling = () => {
-    setShowCooling(true);
-  };
-
-  const clearPlantingVisualisation = () => {
-    setShowPlanting(false);
-  };
-
-  const clearCoolingSimulation = () => {
-    setShowCooling(false);
-  };
-
-  // Bar chart for comparing cooling metrics
-  const coolingComparisonData = selectedArchetypeData && topArchetypeData ? {
-    labels: ['High Cooling Potential (P90)', 'Significant Heat Relief (P10)'],
-    datasets: [
-      {
-        label: selectedArchetypeData.botanical_name_short,
-        data: [
-          selectedArchetypeData.CoolEff_P90NV_mean,
-          selectedArchetypeData.HeatRelief_P10NV_Abs_mean
-        ],
-        backgroundColor: 'rgba(46, 125, 50, 0.7)',
-      },
-      {
-        label: `${topArchetypeData.botanical_name_short} (Top Ranked)`,
-        data: [
-          topArchetypeData.CoolEff_P90NV_mean,
-          topArchetypeData.HeatRelief_P10NV_Abs_mean
-        ],
-        backgroundColor: 'rgba(25, 118, 210, 0.7)',
-      }
-    ]
-  } : null;
-
-  const coolingComparisonOptions = {
-    responsive: true,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      tooltip: {
-        callbacks: {
-          label: function(context: any) {
-            return `${context.dataset.label}: ${context.raw.toFixed(2)}°C`;
-          }
-        }
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        title: {
-          display: true,
-          text: 'Temperature Difference (°C)'
-        }
+  useEffect(() => {
+    let speciesDetailsUpdate: TreeSpeciesData | null = null;
+    if (selectedSpeciesId) {
+      const foundSpecies = treeSpeciesData.find(s => s.id === selectedSpeciesId);
+      if (foundSpecies) {
+        speciesDetailsUpdate = foundSpecies;
+        setCanopyDiameterInput(foundSpecies.canopy_dia_m_max); 
       }
     }
+    setSelectedSpeciesDetails(speciesDetailsUpdate);
+    onSpeciesChangeForChart(speciesDetailsUpdate);
+  }, [selectedSpeciesId, treeSpeciesData, onSpeciesChangeForChart]);
+  
+  useEffect(() => {
+    if (selectedArea && selectedArea.type === 'geojson' && selectedArea.geojsonData) {
+      setIsAreaDefinedForPlanting(true);
+    } else {
+      setIsAreaDefinedForPlanting(false);
+      setShowSimulationResults(false); 
+      setSimulatedPlantingPoints([]); 
+      setSimulationCount(0);
+      setShowTemperatureChart(false); 
+      onSpeciesChangeForChart(null); 
+    }
+  }, [selectedArea, setSimulatedPlantingPoints, setShowTemperatureChart, onSpeciesChangeForChart]);
+
+  const handleSpeciesChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedSpeciesId(e.target.value); 
+    setShowSimulationResults(false); 
+    setSimulatedPlantingPoints([]); 
+    setSimulationCount(0);
+    setShowTemperatureChart(false); 
   };
+  
+  const handleSimulatePlanting = () => {
+    if (!isAreaDefinedForPlanting || !selectedArea?.geojsonData ) {
+        alert("Please draw an area on the map first using the drawing tools (top-left)."); return;
+    }
+    if (!selectedSpeciesDetails) {
+        alert("Please select a tree species first."); return;
+    }
+    const polygonFeature = selectedArea.geojsonData as turf.Feature<turf.Polygon | turf.MultiPolygon>;
+    const centers = generateTreeCentersJS( polygonFeature, canopyDiameterInput, boundaryBufferInput, treeSpacingBufferInput );
+    setSimulatedPlantingPoints(centers); 
+    setSimulationCount(centers.length); 
+    setShowSimulationResults(true);
+    if (centers.length > 0) { setShowTemperatureChart(true); } else { setShowTemperatureChart(false); }
+    console.log(`Simulation complete: ${centers.length} trees can be planted.`);
+  };
+  
+  const handleClearSimulation = () => {
+      setShowSimulationResults(false); setSimulatedPlantingPoints([]); setSimulationCount(0); setShowTemperatureChart(false); 
+  };
+
+  const plantingSimulationInfo = (
+    <>
+      <p>1. Select a tree species above to pre-fill its maximum canopy diameter.</p>
+      <p>2. Use drawing tools on the map (top-left) to define a planting area.</p>
+      <p>3. Adjust canopy diameter, boundary buffer (distance from area edge to canopy edge), and tree spacing buffer (gap between canopies) as needed.</p>
+      <p>4. Click "Simulate" to estimate tree placement using a hexagonal grid pattern.</p>
+    </>
+  );
+
+  const p90p10Info = (
+    <div className="text-sm text-gray-700 space-y-2">
+      <p>
+        These values estimate the cooling impact of this tree species, based on Land Surface Temperature (LST) data:
+      </p>
+      <div className="pl-2 space-y-1">
+        <p className="text-xs">
+          <strong className="font-semibold">P90 Cooling (High Potential):</strong> This is the temperature difference between the hottest 10% of non-vegetated areas (within a 500m buffer around typical tree locations) and the temperature directly under this tree species during those hot conditions. It indicates strong cooling during peak heat.
+        </p>
+        <p className="text-xs">
+          <strong className="font-semibold">P10 Cooling (Moderate/Consistent):</strong> This is the temperature difference between the 10th percentile of non-vegetated LST (representing milder warm conditions within a 500m buffer) and the temperature directly under this tree species during those conditions. It suggests a more consistent cooling effect.
+        </p>
+      </div>
+      <p className="text-xs mt-2 italic">
+      </p>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
-      <div className="card">
-        <div className="card-header">
-          <h3 className="text-lg font-medium">Planting Advisor Tool</h3>
-        </div>
-        <div className="card-body">
-          <p className="text-sm text-gray-600 mb-4">
-            Use this tool to plan tree planting in specific areas of Pune. Follow these steps:
-          </p>
-          <ol className="list-decimal pl-5 text-sm text-gray-600 mb-4 space-y-1">
-            <li>Define your planting area on the map</li>
-            <li>Select a target season for optimization</li>
-            <li>Choose a tree species and archetype</li>
-            <li>Get insights on cooling potential and planting layout</li>
-          </ol>
-          
-          <button 
-            className="btn btn-primary flex items-center"
-            onClick={activateAreaSelection}
-            disabled={areaSelected}
-          >
-            <ScissorsSquare size={18} className="mr-2" />
-            Define Planting Area
-          </button>
-          
-          {areaSelected && (
-            <div className="mt-3 p-3 bg-green-50 rounded-md">
-              <div className="flex justify-between items-center">
-                <div>
-                  <span className="text-sm text-gray-500">Selected Area Size</span>
-                  <div className="font-semibold">{areaSize.toLocaleString()} m²</div>
+      {/* Top Performing Species Section */}
+      {topPerformers.length > 0 && (
+        <div className="card">
+          <div className="card-header"><h3 className="text-lg font-medium flex items-center"><TreeDeciduous size={20} className="mr-2 text-primary-600" />Top 3 Species for Cooling</h3></div>
+          <div className="card-body space-y-3">
+            {topPerformers.map((species, index) => (
+              <div key={species.id} className="p-3 bg-gray-50 rounded-md hover:bg-primary-50 transition-colors cursor-pointer" onClick={() => setSelectedSpeciesId(species.id)}>
+                <div className="flex justify-between items-center">
+                  <div><span className="font-semibold text-primary-700">#{index + 1} {species.common_name}</span><p className="text-xs text-gray-500 italic">{species.botanical_name}</p></div>
+                  <div className="text-right"><p className="text-lg font-bold text-blue-600">{typeof species.mean_cooling_effect_celsius === 'number' ? species.mean_cooling_effect_celsius.toFixed(1) : 'N/A'}°C</p><p className="text-xs text-gray-500">Avg. Cooling</p></div>
                 </div>
-                <button 
-                  className="text-gray-500 hover:text-red-500"
-                  onClick={clearAreaSelection}
-                  title="Clear selection"
-                >
-                  <XCircle size={18} />
-                </button>
               </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Species Selection Dropdown */}
+      <div className="card">
+        <div className="card-header"><h3 className="text-lg font-medium">Explore Tree Species</h3></div>
+        <div className="card-body">
+          <label htmlFor="species-select" className="block text-sm font-medium text-gray-700 mb-1">Select a Species:</label>
+          <select id="species-select" className="input" value={selectedSpeciesId} onChange={handleSpeciesChange}>
+            <option value="">-- Select a Species --</option>
+            {treeSpeciesData.sort((a,b) => a.common_name.localeCompare(b.common_name)).map(species => (
+              <option key={species.id} value={species.id}>{species.common_name} ({species.botanical_name})</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Selected Species Details Section */}
+      {selectedSpeciesDetails && (
+        <div className="card animate-fade-in">
+          <div className="card-header bg-primary-50"><h3 className="text-xl font-semibold text-primary-700">{selectedSpeciesDetails.common_name}</h3><p className="text-sm text-primary-600 italic">{selectedSpeciesDetails.botanical_name}</p></div>
+          <div className="card-body space-y-4">
+            {/* Cooling Effect Potential Section - WITH ALIGNMENT FIX */}
+            <div> 
+              <div className="flex justify-between items-center mb-2"><h4 className="font-medium text-gray-700 flex items-center"><Thermometer size={18} className="mr-2 text-blue-500" /> Cooling Effect Potential</h4><InfoPopover titleContent="Cooling Percentiles Explained" iconSize={16} popoverWidthClass="w-80 sm:w-96" >{p90p10Info}</InfoPopover></div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-red-50 p-3 rounded-md text-center ring-1 ring-red-200">
+                  <p className="text-xs text-red-700 font-medium min-h-[2.25rem] flex items-center justify-center">P90 Cooling (High)</p>
+                  <p className="text-xl font-bold text-red-600 mt-1">{typeof selectedSpeciesDetails.p90_cooling_effect_celsius === 'number' ? selectedSpeciesDetails.p90_cooling_effect_celsius.toFixed(1) : 'N/A'}°C</p>
+                </div>
+                <div className="bg-sky-50 p-3 rounded-md text-center ring-1 ring-sky-200">
+                  <p className="text-xs text-sky-700 font-medium min-h-[2.25rem] flex items-center justify-center">P10 Cooling (Moderate)</p>
+                  <p className="text-xl font-bold text-sky-600 mt-1">{typeof selectedSpeciesDetails.p10_cooling_effect_celsius === 'number' ? selectedSpeciesDetails.p10_cooling_effect_celsius.toFixed(1) : 'N/A'}°C</p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded-md text-center ring-1 ring-blue-200">
+                  <p className="text-xs text-blue-700 font-medium min-h-[2.25rem] flex items-center justify-center">Mean Cooling</p>
+                  <p className="text-xl font-bold text-blue-600 mt-1">{typeof selectedSpeciesDetails.mean_cooling_effect_celsius === 'number' ? selectedSpeciesDetails.mean_cooling_effect_celsius.toFixed(1) : 'N/A'}°C</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Typical Dimensions Section - WITH ALIGNMENT FIX */}
+            <div>
+              <h4 className="font-medium text-gray-700 mb-2 flex items-center"><Scaling size={18} className="mr-2 text-green-500" /> Typical Dimensions</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                <div className="bg-gray-50 p-2 rounded-md text-center">
+                  <p className="font-semibold text-gray-600 min-h-[2rem] flex items-center justify-center">Height</p> 
+                  <p className="mt-0.5">{selectedSpeciesDetails.height_m_min ?? 'N/A'} - {selectedSpeciesDetails.height_m_max ?? 'N/A'} m</p>
+                </div>
+                <div className="bg-gray-50 p-2 rounded-md text-center">
+                  <p className="font-semibold text-gray-600 min-h-[2rem] flex items-center justify-center">Girth</p>
+                  <p className="mt-0.5">{selectedSpeciesDetails.girth_cm_min ?? 'N/A'} - {selectedSpeciesDetails.girth_cm_max ?? 'N/A'} cm</p>
+                </div>
+                <div className="bg-gray-50 p-2 rounded-md text-center">
+                  <p className="font-semibold text-gray-600 min-h-[2rem] flex items-center justify-center">Canopy Diameter</p>
+                  <p className="mt-0.5">{selectedSpeciesDetails.canopy_dia_m_min ?? 'N/A'} - {selectedSpeciesDetails.canopy_dia_m_max ?? 'N/A'} m</p>
+                </div>
+              </div>
+            </div>
+
+            {/* CO2 Sequestration Section */}
+            <div><h4 className="font-medium text-gray-700 mb-2 flex items-center"><Bot size={18} className="mr-2 text-teal-500" /> CO₂ Sequestration</h4><div className="bg-teal-50 p-3 rounded-md"><p className="text-lg font-semibold text-teal-700 text-center">{(selectedSpeciesDetails.co2_seq_kg_min ?? 'N/A')} - {(selectedSpeciesDetails.co2_seq_kg_max ?? 'N/A')} kg/year (approx.)</p></div></div>
+            <div className="mt-3 text-xs text-gray-400">Note: All values are typical ranges or averages for the species. Actual values can vary.</div>
+          </div>
+        </div>
+      )}
+
+      {/* Planting Simulation Section */}
+      <div className="card">
+        <div className="card-header flex justify-between items-center"><h3 className="text-lg font-medium flex items-center"><MapPin size={20} className="mr-2 text-green-600" />Planting Area Simulation</h3><InfoPopover titleContent="Planting Simulation Help">{plantingSimulationInfo}</InfoPopover></div>
+        <div className="card-body space-y-4">
+          {!isAreaDefinedForPlanting && (<div className="p-4 bg-yellow-50 border border-yellow-300 rounded-md text-center"><p className="text-sm text-yellow-700">Please draw an area on the map using the drawing tools (top-left) to enable simulation.</p></div>)}
+          {isAreaDefinedForPlanting && !selectedSpeciesDetails && (<div className="p-4 bg-orange-50 border border-orange-300 rounded-md text-center"><p className="text-sm text-orange-700">Please select a tree species above to set a canopy diameter for the simulation.</p></div>)}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-2 items-start">
+            <div className="flex flex-col"><label htmlFor="canopy-diameter" className="block text-xs font-medium text-gray-700 mb-0.5 truncate" title="Maximum Canopy Diameter (m)">Max Canopy Dia. (m)</label><input type="number" id="canopy-diameter" className="input text-sm w-full" value={canopyDiameterInput} onChange={e => setCanopyDiameterInput(parseFloat(e.target.value))} step="0.5" min="1" /></div>
+            <div className="flex flex-col"><label htmlFor="boundary-buffer" className="block text-xs font-medium text-gray-700 mb-0.5">Boundary Buffer (m)</label><input type="number" id="boundary-buffer" className="input text-sm w-full" value={boundaryBufferInput} onChange={e => setBoundaryBufferInput(parseFloat(e.target.value))} step="0.5" min="0"/></div>
+            <div className="flex flex-col"><label htmlFor="tree-spacing" className="block text-xs font-medium text-gray-700 mb-0.5 truncate" title="Tree Spacing Buffer (m)">Tree Spacing (m)</label><input type="number" id="tree-spacing" className="input text-sm w-full" value={treeSpacingBufferInput} onChange={e => setTreeSpacingBufferInput(parseFloat(e.target.value))} step="0.5" min="0"/></div>
+          </div>
+          <button className="btn btn-primary w-full flex items-center justify-center" onClick={handleSimulatePlanting} disabled={!isAreaDefinedForPlanting || !selectedSpeciesDetails}><PlayCircle size={18} className="mr-2" /> Simulate Planting Layout</button>
+          {showSimulationResults && (
+            <div className="mt-4 p-4 bg-green-50 border border-green-300 rounded-md animate-fade-in">
+              <h4 className="text-md font-semibold text-green-700 mb-2">Simulation Results:</h4>
+              <p className="text-sm text-green-600">Based on the selected area and parameters, approximately <span className="font-bold">{simulationCount}</span> trees of <span className="font-bold">{selectedSpeciesDetails?.common_name || 'the selected species'}</span> could be planted.</p>
+              <p className="text-xs text-gray-500 mt-1">Simulated tree locations are displayed on the map.</p>
+              <button className="btn btn-outline btn-sm mt-3 text-xs" onClick={handleClearSimulation}><XCircle size={16} className="mr-1" /> Clear Simulation & Map Markers</button>
             </div>
           )}
         </div>
       </div>
-
-      {areaSelected && (
-        <div className="card">
-          <div className="card-header">
-            <h3 className="font-medium">Planning Parameters</h3>
-          </div>
-          <div className="card-body space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Target Season
-              </label>
-              <select 
-                className="input"
-                value={selectedSeason}
-                onChange={handleSeasonChange}
-              >
-                <option value="Summer">Summer</option>
-                <option value="Monsoon">Monsoon</option>
-                <option value="Post-Monsoon">Post-Monsoon</option>
-                <option value="Winter">Winter</option>
-                <option value="All Seasons">All Seasons</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tree Species & Archetype
-              </label>
-              <select 
-                className="input"
-                value={selectedArchetype}
-                onChange={handleArchetypeChange}
-                disabled={filteredArchetypes.length === 0}
-              >
-                <option value="">Select an archetype...</option>
-                {filteredArchetypes.map((arch, index) => (
-                  <option key={index} value={arch.Archetype_Dropdown_Name}>
-                    {arch.Archetype_Dropdown_Name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            <button 
-              className="btn btn-secondary w-full"
-              disabled={!selectedArchetype}
-              onClick={() => {
-                // This button would trigger more detailed analysis in a real implementation
-              }}
-            >
-              Get Planting Insights
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Top performing archetypes */}
-      {areaSelected && topPerformers.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <h3 className="font-medium flex items-center">
-              <AreaChart size={18} className="mr-2 text-gray-500" />
-              Top Performing Archetypes for {selectedSeason}
-            </h3>
-          </div>
-          <div className="card-body">
-            <div className="space-y-2">
-              {topPerformers.map((arch, index) => (
-                <div 
-                  key={index}
-                  className={`p-2 rounded-md cursor-pointer ${
-                    selectedArchetype === arch.Archetype_Dropdown_Name 
-                      ? 'bg-primary-50 border border-primary-200' 
-                      : 'hover:bg-gray-50 border border-transparent'
-                  }`}
-                  onClick={() => {
-                    setSelectedArchetype(arch.Archetype_Dropdown_Name);
-                    setSelectedArchetypeData(arch);
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{arch.botanical_name_short}</div>
-                      <div className="text-xs text-gray-500">{arch.Archetype_Dropdown_Name}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-medium text-primary-600">
-                        {arch.CoolEff_P90NV_mean.toFixed(2)}°C
-                      </div>
-                      <div className="text-xs text-gray-500">P90 Cooling</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Selected archetype details */}
-      {selectedArchetypeData && (
-        <div className="card">
-          <div className="card-header">
-            <h3 className="font-medium flex items-center">
-              <TreeDeciduous size={18} className="mr-2 text-gray-500" />
-              Archetype Details
-            </h3>
-          </div>
-          <div className="card-body space-y-4">
-            <div>
-              <h4 className="font-medium text-primary-700">{selectedArchetypeData.botanical_name_short}</h4>
-              <div className="text-sm text-gray-600">{selectedArchetypeData.common_name}</div>
-            </div>
-            
-            <div className="grid grid-cols-3 gap-2 text-sm">
-              <div className="bg-gray-50 p-2 rounded">
-                <div className="text-gray-500">Height</div>
-                <div>
-                  {selectedArchetypeData.height_m_min_range.toFixed(2)}-{selectedArchetypeData.height_m_max_range.toFixed(2)}m
-                </div>
-              </div>
-              <div className="bg-gray-50 p-2 rounded">
-                <div className="text-gray-500">CO₂ Seq.</div>
-                <div>
-                  {selectedArchetypeData.CO2_Seq_Min_kg.toFixed(2)}-{selectedArchetypeData.CO2_Seq_Max_kg.toFixed(2)}kg
-                </div>
-              </div>
-              <div className="bg-gray-50 p-2 rounded">
-                <div className="text-gray-500">Wood Density</div>
-                <div>{selectedArchetypeData.wood_density.toFixed(2)}</div>
-              </div>
-            </div>
-            
-            <div className="bg-blue-50 p-3 rounded-md">
-              <h4 className="font-medium text-blue-700 mb-2 flex items-center">
-                <Thermometer size={16} className="mr-1" />
-                Cooling Performance
-              </h4>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                <div>
-                  <div className="text-gray-600">High Cooling Potential (P90)</div>
-                  <div className="font-medium">
-                    {selectedArchetypeData.CoolEff_P90NV_mean.toFixed(2)} ± {selectedArchetypeData.CoolEff_P90NV_std.toFixed(2)}°C
-                  </div>
-                </div>
-                <div>
-                  <div className="text-gray-600">Significant Heat Relief (P10)</div>
-                  <div className="font-medium">
-                    {selectedArchetypeData.HeatRelief_P10NV_Abs_mean.toFixed(2)} ± {selectedArchetypeData.HeatRelief_P10NV_Abs_std.toFixed(2)}°C
-                  </div>
-                </div>
-                <div>
-                  <div className="text-gray-600">Peak Cooling (MaxNV)</div>
-                  <div className="font-medium">
-                    {selectedArchetypeData.CoolEff_MaxNV_mean.toFixed(2)} ± {selectedArchetypeData.CoolEff_MaxNV_std.toFixed(2)}°C
-                  </div>
-                </div>
-                <div>
-                  <div className="text-gray-600">Peak Heat Relief (MinNV)</div>
-                  <div className="font-medium">
-                    {selectedArchetypeData.HeatRelief_MinNV_Abs_mean.toFixed(2)} ± {selectedArchetypeData.HeatRelief_MinNV_Abs_std.toFixed(2)}°C
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* Comparative cooling chart */}
-            {coolingComparisonData && (
-              <div>
-                <h4 className="font-medium text-gray-700 mb-2">Cooling Comparison</h4>
-                <div style={{ height: '200px' }}>
-                  <Bar 
-                    data={coolingComparisonData} 
-                    options={coolingComparisonOptions} 
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Spatial planting layout tool */}
-      {selectedArchetypeData && areaSelected && (
-        <div className="card">
-          <div className="card-header">
-            <h3 className="font-medium flex items-center">
-              <Map size={18} className="mr-2 text-gray-500" />
-              Spatial Planting Layout
-            </h3>
-          </div>
-          <div className="card-body space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Buffer from edge (meters)
-              </label>
-              <input 
-                type="number" 
-                className="input"
-                value={bufferDistance}
-                min={1}
-                max={10}
-                onChange={(e) => setBufferDistance(Number(e.target.value))}
-              />
-            </div>
-            
-            <div>
-              <div className="text-sm text-gray-500 mb-1">
-                Tree Spacing (based on max canopy diameter)
-              </div>
-              <div className="font-medium">
-                6.0 meters
-              </div>
-            </div>
-            
-            {!showPlanting ? (
-              <button 
-                className="btn btn-primary w-full"
-                onClick={visualizePlanting}
-              >
-                Visualize Planting on Map
-              </button>
-            ) : (
-              <>
-                <div className="p-3 bg-primary-50 rounded-md">
-                  <div className="font-medium text-primary-800">
-                    Number of Trees that Fit: {treeCount}
-                  </div>
-                </div>
-                
-                <button 
-                  className="btn btn-outline w-full"
-                  onClick={clearPlantingVisualisation}
-                >
-                  Clear Planting Visualisation
-                </button>
-                
-                {!showCooling ? (
-                  <button 
-                    className="btn btn-secondary w-full"
-                    onClick={simulateCooling}
-                  >
-                    Simulate Cooling Impact
-                  </button>
-                ) : (
-                  <button 
-                    className="btn btn-outline w-full"
-                    onClick={clearCoolingSimulation}
-                  >
-                    Clear Cooling Simulation
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Reset button */}
-      {(selectedArchetype || areaSelected) && (
-        <div className="text-center">
-          <button 
-            className="btn btn-outline"
-            onClick={resetAdvisor}
-          >
-            Reset Planting Advisor
-          </button>
-        </div>
-      )}
     </div>
   );
 };

@@ -1,23 +1,26 @@
 import React, { useState } from 'react';
-import { useMap } from 'react-leaflet';
-import { Layers, MapPin } from 'lucide-react';
+// useMap is not used here if we remove the toggleWardBoundaries functionality,
+// but it's fine to keep if other controls might need it later.
+// For now, let's remove it if not strictly needed by remaining functionality.
+// import { useMap } from 'react-leaflet';
+import { Layers } from 'lucide-react'; // MapPin is no longer needed
 
 interface MapControlsProps {
-  showWardBoundaries: boolean;
-  toggleWardBoundaries: () => void;
+  // showWardBoundaries: boolean; // REMOVE
+  // toggleWardBoundaries: () => void; // REMOVE
   baseMap: string;
   changeBaseMap: (mapType: string) => void;
 }
 
 const MapControls: React.FC<MapControlsProps> = ({
-  showWardBoundaries,
-  toggleWardBoundaries,
+  // showWardBoundaries, // REMOVE
+  // toggleWardBoundaries, // REMOVE
   baseMap,
   changeBaseMap
 }) => {
   const [showBasemaps, setShowBasemaps] = useState(false);
-  const map = useMap();
-  
+  // const map = useMap(); // REMOVE if not used by other parts of this component
+
   const toggleBasemapsMenu = () => {
     setShowBasemaps(!showBasemaps);
   };
@@ -28,7 +31,7 @@ const MapControls: React.FC<MapControlsProps> = ({
   };
 
   return (
-    <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2">
+    <div className="absolute top-4 right-4 z-[1002] flex flex-col space-y-2">
       {/* Basemap control */}
       <div className="relative">
         <button 
@@ -80,15 +83,7 @@ const MapControls: React.FC<MapControlsProps> = ({
         )}
       </div>
       
-      {/* Ward boundaries toggle */}
-      <button 
-        className={`map-controls flex items-center justify-center w-10 h-10 ${showWardBoundaries ? 'bg-primary-100' : ''}`}
-        onClick={toggleWardBoundaries}
-        aria-label={showWardBoundaries ? "Hide ward boundaries" : "Show ward boundaries"}
-        title={showWardBoundaries ? "Hide ward boundaries" : "Show ward boundaries"}
-      >
-        <MapPin size={20} className={showWardBoundaries ? 'text-primary-600' : ''} />
-      </button>
+      {/* Ward boundaries toggle button has been removed from here */}
     </div>
   );
 };

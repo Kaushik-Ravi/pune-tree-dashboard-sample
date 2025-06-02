@@ -1,277 +1,179 @@
-import React, { useState, useEffect } from 'react';
-import { Info, ScissorsSquare, XCircle } from 'lucide-react';
+// src/components/sidebar/tabs/CityOverview.tsx
+import React, { useState, useEffect, useRef } from 'react';
+import { ScissorsSquare, XCircle } from 'lucide-react'; // Info icon comes from InfoPopover
 import { Line, Pie } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler } from 'chart.js';
-import { useTreeStore } from '../../../store/TreeStore';
+import {
+  Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler, ChartType, ChartDataset,
+} from 'chart.js';
+import { useTreeStore, DrawnGeoJson } from '../../../store/TreeStore';
+import * as turf from '@turf/turf';
+import InfoPopover from '../../common/InfoPopover'; // IMPORT THE NEW COMPONENT
 
-// Register ChartJS components
 ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-  Filler
+  CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler
 );
 
+type ChartViewType = 'co2' | 'trees';
+
+interface Tree {
+  id: string;
+  latitude: number;
+  longitude: number;
+  CO2_sequestered_kg: number;
+}
+
 const CityOverview: React.FC = () => {
-  const { 
-    cityStats, 
-    fetchCityStats,
-    wardCO2Data,
-    fetchWardCO2Data,
-    selectedArea,
-    setSelectedArea
+  const {
+    cityStats, trees,
+    wardCO2Data, wardTreeCountData,
+    selectedArea, setSelectedArea,
   } = useTreeStore();
-  
-  const [selectionActive, setSelectionActive] = useState(false);
-  const [areaStats, setAreaStats] = useState<{
-    size: number;
-    treeCount: number;
-    totalCO2: number;
-  } | null>(null);
+
+  const chartRef = useRef<ChartJS<ChartType, number[], string> | null>(null);
+  const [selectedChartView, setSelectedChartView] = useState<ChartViewType>('co2'); 
+  const [showNeighbourhoodStats, setShowNeighbourhoodStats] = useState(false);
+  const [neighbourhoodTreeCount, setNeighbourhoodTreeCount] = useState(0);
+  const [neighbourhoodCO2, setNeighbourhoodCO2] = useState(0);
+  const [selectedGeoJsonArea, setSelectedGeoJsonArea] = useState<DrawnGeoJson>(null);
 
   useEffect(() => {
-    fetchCityStats();
-    fetchWardCO2Data();
-  }, [fetchCityStats, fetchWardCO2Data]);
+    if (selectedArea && selectedArea.type === 'geojson' && selectedArea.geojsonData && trees.length > 0) {
+      const drawnPolygon = selectedArea.geojsonData;
+      setSelectedGeoJsonArea(drawnPolygon);
+      let countInPolygon = 0;
+      let co2InPolygon = 0;
+      trees.forEach(tree => {
+        const point = turf.point([tree.longitude, tree.latitude]);
+        let isInside = false;
+        if (drawnPolygon.geometry.type === 'Polygon' || drawnPolygon.geometry.type === 'MultiPolygon') {
+            isInside = turf.booleanPointInPolygon(point, drawnPolygon as turf.Feature<turf.Polygon | turf.MultiPolygon>);
+        }
+        if (isInside) {
+          countInPolygon++;
+          co2InPolygon += tree.CO2_sequestered_kg;
+        }
+      });
+      setNeighbourhoodTreeCount(countInPolygon);
+      setNeighbourhoodCO2(co2InPolygon / 1000);
+      setShowNeighbourhoodStats(true);
+    } else {
+      setShowNeighbourhoodStats(false);
+      setSelectedGeoJsonArea(null);
+    }
+  }, [selectedArea, trees]);
 
   const activateAreaSelection = () => {
-    // This would trigger the map selection tool
-    setSelectionActive(true);
-    // In a real implementation, this would communicate with the map component
-  };
-
-  const clearSelection = () => {
-    setSelectionActive(false);
-    setSelectedArea(null);
-    setAreaStats(null);
-  };
-
-  // Mock function to simulate area statistics calculation
-  useEffect(() => {
-    if (selectedArea) {
-      // In a real implementation, this would calculate based on the actual selection
-      setAreaStats({
-        size: 120000, // 120,000 sq meters
-        treeCount: Math.floor(cityStats.total_trees * 0.08), // 8% of total trees
-        totalCO2: cityStats.total_co2_annual_kg * 0.07 / 1000 // 7% of total CO2, converted to tons
-      });
-    }
-  }, [selectedArea, cityStats]);
-
-  // Line chart data for ward CO2 sequestration
-  const lineChartData = {
-    labels: wardCO2Data.map(ward => `Ward ${ward.ward}`),
-    datasets: [
-      {
-        label: 'CO₂ Sequestered (tons)',
-        data: wardCO2Data.map(ward => ward.co2_kg / 1000), // Convert kg to tons
-        fill: true,
-        backgroundColor: 'rgba(46, 125, 50, 0.2)',
-        borderColor: 'rgba(46, 125, 50, 1)',
-        tension: 0.4
-      }
-    ]
-  };
-
-  const lineChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      tooltip: {
-        callbacks: {
-          label: function(context: any) {
-            return `CO₂: ${context.raw.toFixed(2)} tons`;
-          }
-        }
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        title: {
-          display: true,
-          text: 'CO₂ Sequestered (tons)'
-        }
-      },
-      x: {
-        title: {
-          display: true,
-          text: 'Ward'
-        }
-      }
+    if (!selectedArea) { 
+        setShowNeighbourhoodStats(true); 
     }
   };
 
-  // Pie chart data for tree comparison
-  const treePieData = areaStats ? {
-    labels: ['Selected Area', 'Rest of Pune'],
-    datasets: [
-      {
-        data: [areaStats.treeCount, cityStats.total_trees - areaStats.treeCount],
-        backgroundColor: ['#2E7D32', '#90CAF9'],
-        borderColor: ['#1B5E20', '#1976D2'],
-        borderWidth: 1
-      }
-    ]
+  const clearDrawnSelection = () => {
+    setSelectedArea(null); 
+    setShowNeighbourhoodStats(false);
+  };
+
+  const wardLabels = wardCO2Data.length > 0 ? wardCO2Data.map(d => d.ward) : (wardTreeCountData.length > 0 ? wardTreeCountData.map(d => d.ward) : []);
+  const getCurrentDataset = (): ChartDataset<'line', number[]> => { 
+    if (selectedChartView === 'co2') {
+      return { label: 'CO₂ Sequestered (tons)', data: wardCO2Data.map(w => w.co2_kg / 1000), borderColor: 'rgba(46, 125, 50, 1)', backgroundColor: 'rgba(46, 125, 50, 0.2)', tension: 0.4, fill: true, yAxisID: 'y', };
+    } else { 
+      return { label: 'Number of Trees', data: wardTreeCountData.map(w => w.tree_count), borderColor: 'rgba(25, 118, 210, 1)', backgroundColor: 'rgba(25, 118, 210, 0.2)', tension: 0.4, fill: true, yAxisID: 'y', };
+    }
+  };
+  const lineChartData = { labels: wardLabels, datasets: [getCurrentDataset()], };
+  const yAxisTitle = selectedChartView === 'co2' ? 'CO₂ Sequestered (tons)' : 'Number of Trees';
+  const lineChartOptions = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index' as const, intersect: false, }, plugins: { legend: { display: false, }, tooltip: { callbacks: { label: function(ctx: any) { let l = ctx.dataset.label||''; if(l){l+=': '} if(ctx.parsed.y!==null){l+=ctx.parsed.y.toLocaleString(); if(selectedChartView==='co2'){l+=' tons'}else{l+=' trees'}} return l;}}}}, scales: { y: { type: 'linear'as const, display:true, position:'left'as const, beginAtZero:true, title:{display:true,text:yAxisTitle,font:{size:12}}, ticks:{font:{size:10}},}, x: {title:{display:true,text:'Ward',font:{size:12}}, ticks:{font:{size:10},maxRotation:0,minRotation:0}}}};
+  const handleChartViewChange = (event: React.ChangeEvent<HTMLSelectElement>) => setSelectedChartView(event.target.value as ChartViewType);
+
+  const neighbourhoodTreePieData = cityStats && showNeighbourhoodStats ? {
+    labels: ['In Selected Area', 'Rest of City'],
+    datasets: [{ data: [neighbourhoodTreeCount, Math.max(0, cityStats.total_trees - neighbourhoodTreeCount)], backgroundColor: ['#4CAF50', '#E0E0E0'], borderColor: ['#FFFFFF', '#FFFFFF'], borderWidth: 2, }],
   } : null;
-
-  // Pie chart data for CO2 comparison
-  const co2PieData = areaStats ? {
-    labels: ['Selected Area', 'Rest of Pune'],
-    datasets: [
-      {
-        data: [areaStats.totalCO2, cityStats.total_co2_annual_kg / 1000 - areaStats.totalCO2],
-        backgroundColor: ['#FF8F00', '#FFE082'],
-        borderColor: ['#E65100', '#FFC107'],
-        borderWidth: 1
-      }
-    ]
+  const neighbourhoodCO2PieData = cityStats && showNeighbourhoodStats ? {
+    labels: ['In Selected Area', 'Rest of City'],
+    datasets: [{ data: [neighbourhoodCO2, Math.max(0, (cityStats.total_co2_annual_kg / 1000) - neighbourhoodCO2)], backgroundColor: ['#FFC107', '#E0E0E0'], borderColor: ['#FFFFFF', '#FFFFFF'], borderWidth: 2, }],
   } : null;
+  const pieChartOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' as const, labels: { boxWidth:15, font:{size:10} } }, tooltip: { callbacks: { label: function(context: any) { const value = context.raw as number; return `${context.label}: ${value.toLocaleString()}`; } } } } };
 
-  const pieChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      tooltip: {
-        callbacks: {
-          label: function(context: any) {
-            const value = context.raw;
-            const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
-            const percentage = ((value / total) * 100).toFixed(1);
-            return `${context.label}: ${value.toFixed(2)} (${percentage}%)`;
-          }
-        }
-      }
-    }
-  };
+  const knowYourNeighbourhoodInfo = (
+    <p>
+      Use the drawing tools on the map (top-left) to select an area of interest. 
+      This section will then display pie charts comparing the tree count and CO₂ sequestration 
+      within your selected area against the rest of the city.
+    </p>
+  );
 
   return (
     <div className="space-y-6">
+      {/* Summary Card */}
       <div className="card">
-        <div className="card-header">
-          <h3 className="text-lg font-medium">Dashboard Metrics</h3>
-        </div>
-        <div className="card-body grid grid-cols-2 gap-4">
-          <div className="bg-gray-50 p-3 rounded-md">
-            <span className="text-sm text-gray-500">Total Trees</span>
-            <div className="text-2xl font-bold text-primary-600">
-              {selectionActive && areaStats 
-                ? areaStats.treeCount.toLocaleString() 
-                : cityStats.total_trees.toLocaleString()}
-            </div>
-            {selectionActive && areaStats && (
-              <div className="text-xs text-gray-500">
-                in selected area
-              </div>
-            )}
-          </div>
-          <div className="bg-gray-50 p-3 rounded-md">
-            <span className="text-sm text-gray-500">Total CO₂ Sequestered</span>
-            <div className="text-2xl font-bold text-accent-600">
-              {selectionActive && areaStats 
-                ? `${areaStats.totalCO2.toFixed(2)}` 
-                : `${(cityStats.total_co2_annual_kg / 1000).toFixed(2)}`}
-              <span className="text-sm font-normal"> tons</span>
-            </div>
-            {selectionActive && areaStats && (
-              <div className="text-xs text-gray-500">
-                in selected area
-              </div>
-            )}
-          </div>
+        <div className="card-header"><h3 className="text-lg font-medium">Summary</h3></div>
+        <div className="card-body space-y-4">
+          <div><span className="text-base text-gray-600 block mb-1">Number of Trees</span><div className="text-4xl font-bold text-primary-700">{cityStats ? cityStats.total_trees.toLocaleString() : 'Loading...'}</div></div>
+          <hr className="border-gray-200" />
+          <div><span className="text-base text-gray-600 block mb-1">Total CO₂ Sequestered</span><div className="text-4xl font-bold text-accent-700">{cityStats ? (cityStats.total_co2_annual_kg / 1000).toFixed(2) : 'Loading...'}<span className="text-xl font-medium"> tons</span></div></div>
         </div>
       </div>
 
+      {/* Ward Statistics Chart Card */}
       <div className="card">
-        <div className="card-header">
-          <h3 className="text-lg font-medium">CO₂ Sequestration by Ward</h3>
-        </div>
-        <div className="card-body">
-          <div style={{ height: '250px' }}>
-            <Line data={lineChartData} options={lineChartOptions} />
-          </div>
+        <div className="card-header"><h3 className="text-lg font-medium">Ward Statistics</h3></div>
+        <div className="card-body space-y-3">
+          <div><select value={selectedChartView} onChange={handleChartViewChange} className="input text-sm py-1.5 px-3 pr-8 rounded-md border-gray-300 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-auto" aria-label="Select chart data view"><option value="co2">CO₂ Sequestered</option><option value="trees">Number of Trees</option></select></div>
+          <div style={{ height: '280px' }}>{(wardCO2Data.length > 0 || wardTreeCountData.length > 0) ? (<Line ref={chartRef} data={lineChartData} options={lineChartOptions as any} />) : (<p className="text-center text-gray-500">Loading chart data...</p>)}</div>
         </div>
       </div>
 
+      {/* Know Your Neighbourhood Card */}
       <div className="card">
         <div className="card-header flex justify-between items-center">
           <h3 className="text-lg font-medium">Know Your Neighbourhood</h3>
-          <button 
-            className="text-gray-500 hover:text-primary-600"
-            title="How to use this feature"
-          >
-            <Info size={18} />
-          </button>
+          <InfoPopover titleContent="How to Use This Section">
+            {knowYourNeighbourhoodInfo}
+          </InfoPopover>
         </div>
         <div className="card-body">
-          {!selectionActive ? (
+          {!showNeighbourhoodStats && (
             <div className="text-center py-4">
-              <button 
-                className="btn btn-primary flex items-center mx-auto"
-                onClick={activateAreaSelection}
-              >
-                <ScissorsSquare size={18} className="mr-2" />
-                Snip Out Your Neighbourhood
+              <button className="btn btn-primary flex items-center mx-auto" onClick={activateAreaSelection}>
+                <ScissorsSquare size={18} className="mr-2" /> Snip Out Your Neighbourhood
               </button>
-              <p className="text-sm text-gray-500 mt-2">
-                Draw a rectangle on the map to analyze a specific area
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {areaStats && (
-                <>
-                  <div className="bg-gray-50 p-3 rounded-md">
-                    <span className="text-sm text-gray-500">Selected Area Size</span>
-                    <div className="text-xl font-semibold">
-                      {(areaStats.size).toLocaleString()} m²
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="card">
-                      <div className="card-header">
-                        <h4 className="text-sm font-medium">Tree Count</h4>
-                      </div>
-                      <div className="card-body" style={{ height: '180px' }}>
-                        {treePieData && <Pie data={treePieData} options={pieChartOptions} />}
-                      </div>
-                    </div>
-                    
-                    <div className="card">
-                      <div className="card-header">
-                        <h4 className="text-sm font-medium">CO₂ Sequestered</h4>
-                      </div>
-                      <div className="card-body" style={{ height: '180px' }}>
-                        {co2PieData && <Pie data={co2PieData} options={pieChartOptions} />}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="text-center">
-                    <button 
-                      className="btn btn-outline flex items-center mx-auto"
-                      onClick={clearSelection}
-                    >
-                      <XCircle size={18} className="mr-2" />
-                      Clear Selection
-                    </button>
-                  </div>
-                </>
-              )}
+              <p className="text-sm text-gray-500 mt-2">Use the drawing tools (top-left of map) to select an area.</p>
             </div>
           )}
+
+          {showNeighbourhoodStats && selectedArea && selectedArea.geojsonData && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-3 rounded-md text-center">
+                <p className="text-sm text-gray-600">Displaying stats for the selected area on the map.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="card border">
+                  <div className="card-header"><h4 className="text-sm font-medium text-center">Tree Count Comparison</h4></div>
+                  <div className="card-body" style={{ height: '200px' }}>
+                    {neighbourhoodTreePieData ? <Pie data={neighbourhoodTreePieData} options={pieChartOptions as any} /> : <p className="text-center text-gray-500">No data for selected area.</p>}
+                  </div>
+                </div>
+                <div className="card border">
+                  <div className="card-header"><h4 className="text-sm font-medium text-center">CO₂ Sequestered Comparison</h4></div>
+                  <div className="card-body" style={{ height: '200px' }}>
+                    {neighbourhoodCO2PieData ? <Pie data={neighbourhoodCO2PieData} options={pieChartOptions as any} /> : <p className="text-center text-gray-500">No data for selected area.</p>}
+                  </div>
+                </div>
+              </div>
+              <div className="text-center mt-4">
+                <button className="btn btn-outline flex items-center mx-auto" onClick={clearDrawnSelection}>
+                  <XCircle size={18} className="mr-2" /> Clear Selected Area Analysis
+                </button>
+              </div>
+            </div>
+          )}
+           {showNeighbourhoodStats && !(selectedArea && selectedArea.geojsonData) && (
+                <p className="text-center text-gray-500 py-4">
+                  Please draw an area on the map using the drawing tools (now at the top-left of the map).
+                </p>
+           )}
         </div>
       </div>
     </div>
