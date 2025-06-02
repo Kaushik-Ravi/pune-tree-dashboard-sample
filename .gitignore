@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 .env
 public/lst_grid.geojson
+docs/lst_grid.geojson  # ADD THIS LINE
