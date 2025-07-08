@@ -1,19 +1,17 @@
-# .github/workflows/deploy.yml
+# .github/workflows/deploy.yml (Version 2.0 - With Explicit LFS Pull)
 
 name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ "main" ] # Run this workflow on a push to the main branch
-  workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
+    branches: [ "main" ]
+  workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
 concurrency:
   group: "pages"
   cancel-in-progress: true
@@ -27,13 +25,19 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        # We keep lfs:true here, but the next step makes it foolproof.
         with:
-          lfs: true # <<< THIS IS THE CRITICAL FIX
+          lfs: true
+
+      # --- THIS IS THE SURGICAL FIX ---
+      # Add this step to explicitly pull the LFS file content
+      - name: Pull LFS objects
+        run: git lfs pull
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18 # Use a version compatible with your project
+          node-version: 18
 
       - name: Install dependencies
         run: npm install
@@ -47,7 +51,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './docs' # Deploy the contents of the 'docs' folder
+          path: './docs'
 
       - name: Deploy to GitHub Pages
         id: deployment
