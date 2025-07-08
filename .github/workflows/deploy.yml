@@ -1,4 +1,4 @@
-# .github/workflows/deploy.yml (Version 2.0 - With Explicit LFS Pull)
+# .github/workflows/deploy.yml (Version 3.0 - The Definitive Fix)
 
 name: Deploy to GitHub Pages
 
@@ -25,14 +25,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        # We keep lfs:true here, but the next step makes it foolproof.
         with:
           lfs: true
+          fetch-depth: 0 # <<< THIS IS THE GUARANTEED FIX. 0 means fetch all history.
 
-      # --- THIS IS THE SURGICAL FIX ---
-      # Add this step to explicitly pull the LFS file content
       - name: Pull LFS objects
-        run: git lfs pull
+        run: git lfs pull # This step is now technically redundant, but acts as a safeguard.
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
