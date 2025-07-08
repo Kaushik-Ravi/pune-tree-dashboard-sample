@@ -1,14 +1,14 @@
+// vite.config.ts (Corrected for Netlify)
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// https://vitejs.dev/config/
 export default defineConfig({
-  base: '/pune-tree-dashboard-sample/',
+  // base: '/pune-tree-dashboard-sample/', // <-- DELETE THIS LINE
   plugins: [react()],
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
-  build: { // Add this build object
-    outDir: 'docs' // Specify the output directory as 'docs'
+  build: {
+    outDir: 'docs'
   }
 });

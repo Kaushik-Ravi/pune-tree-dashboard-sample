@@ -151,7 +151,7 @@ export const TreeStoreProvider: React.FC<{ children: ReactNode }> = ({ children 
     const loadLiveData = async () => {
       console.log("Attempting to load live data from pune_trees_live.geojson...");
       try {
-        const response = await fetch('/pune-tree-dashboard-sample/pune_trees_live.geojson');
+        const response = await fetch('/pune_trees_live.geojson');
         if (!response.ok) {
           throw new Error(`Failed to fetch live data: ${response.status} ${response.statusText}`);
         }
