@@ -8,8 +8,10 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-# dist  <-- Commented out or removed
-dist-ssr
+-.# dist  <-- Commented out or removed
++docs
++dist
+ dist-ssr
 *.local
 
 # Editor directories and files
@@ -23,4 +25,12 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Ignore generated data assets
+/public/details/
+/public/city-stats.json
 public/lst_grid.geojson
++public/pune_trees_live.geojson
+
+# Local Netlify folder
+.netlify
