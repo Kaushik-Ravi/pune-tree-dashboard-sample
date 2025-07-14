@@ -1,11 +1,11 @@
-# netlify.toml
-
-# This section explicitly sets your build command and publish directory.
+# Netlify build configuration
 [build]
   command = "npm run build"
   publish = "docs"
+  functions = "netlify/functions"
 
-# This section is the critical fix. It forces the build system
-# to fetch all Git LFS tracked files.
-[build.lfs]
-  fetch_include = "*"
+# Redirect rule for Single Page Applications
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
