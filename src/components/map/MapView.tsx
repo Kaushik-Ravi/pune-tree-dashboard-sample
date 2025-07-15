@@ -53,7 +53,7 @@ const MapView: React.FC<MapViewProps> = ({ onTreeSelect, setMapInstance }) => {
 
   const handleMapClick = (event: MapLayerMouseEvent) => {
     if (event.features && event.features.length > 0) {
-      const treeFeature = event.features.find(f => f.layer.id === 'trees-layer');
+      const treeFeature = event.features.find(f => f.layer?.id === 'trees-layer');
       if (treeFeature) {
         const treeId = treeFeature.properties?.Tree_ID;
         if (treeId) {

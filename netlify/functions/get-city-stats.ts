@@ -1,31 +1,28 @@
-// netlify/functions/get-city-stats.ts
 import { Handler } from "@netlify/functions";
 import pkg from 'pg';
-
 const { Pool } = pkg;
 
-// Use the exact same secure pool configuration
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: true, // Enforce security
-    ca: process.env.DO_CA_CERT, // Provide the CA certificate
-  }
+  ssl: { rejectUnauthorized: true, ca: process.env.DO_CA_CERT }
 });
 
 const handler: Handler = async () => {
   try {
-    const cityWideResult = await pool.query('SELECT COUNT(*) AS total_trees, COALESCE(SUM("CO2_Sequestration_kg_yr"), 0) AS total_co2_annual_kg FROM trees');
-    const byWardResult = await pool.query(`SELECT ward, COUNT(*) AS tree_count, COALESCE(SUM("CO2_Sequestration_kg_yr"), 0) AS co2_kg FROM trees WHERE ward IS NOT NULL AND ward != '' GROUP BY ward ORDER BY ward ASC`);
-    const finalStats = {
-      city_wide: { total_trees: Number(cityWideResult.rows[0].total_trees), total_co2_annual_kg: parseFloat(cityWideResult.rows[0].total_co2_annual_kg) },
-      by_ward: byWardResult.rows.map(row => ({ ward: row.ward, tree_count: Number(row.tree_count), co2_kg: parseFloat(row.co2_kg) }))
+    const cityResult = await pool.query('SELECT COUNT(*) as total_trees, SUM("CO2_Sequestration_kg_yr") as total_co2 FROM trees');
+    const wardResult = await pool.query('SELECT ward, COUNT(*) as tree_count, SUM("CO2_Sequestration_kg_yr") as co2_kg FROM trees WHERE ward IS NOT NULL GROUP BY ward ORDER BY ward');
+    const stats = {
+      city_wide: {
+        total_trees: Number(cityResult.rows[0].total_trees),
+        total_co2_annual_kg: Number(cityResult.rows[0].total_co2)
+      },
+      by_ward: wardResult.rows.map(r => ({ ...r, tree_count: Number(r.tree_count), co2_kg: Number(r.co2_kg) }))
     };
-    return { statusCode: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(finalStats), };
-  } catch (error) {
-    console.error('Database Query Error for Stats:', error);
-    return { statusCode: 500, body: JSON.stringify({ error: "Internal Server Error fetching stats", details: (error as Error).message }), };
+    return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(stats) };
+  } catch (e) {
+    const error = e as Error;
+    console.error("DB Error in get-city-stats:", error.message);
+    return { statusCode: 500, body: JSON.stringify({ error: "DB Stats Error", details: error.message }) };
   }
 };
-
 export { handler };
