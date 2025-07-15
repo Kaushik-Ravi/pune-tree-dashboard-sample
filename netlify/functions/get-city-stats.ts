@@ -25,13 +25,17 @@ const handler: Handler = async () => {
          COUNT(*) AS tree_count,
          COALESCE(SUM("CO2_Sequestration_kg_yr"), 0) AS co2_kg
        FROM trees
-       WHERE ward IS NOT NULL AND ward != ''
+       WHERE ward IS NOT NULL AND ward ~ E'^\\d+(\\.\\d+)?$' -- Ensures ward is a number (int or float)
        GROUP BY ward
-       ORDER BY CAST(ward AS INTEGER)`
+       ORDER BY CAST(ward AS double precision)` // CORRECTED: Cast to float for safe sorting
     );
 
     const finalStats = {
-      city_wide: cityWideResult.rows[0],
+      city_wide: {
+        // Ensure total_trees is a number, as COUNT returns bigint
+        total_trees: Number(cityWideResult.rows[0].total_trees),
+        total_co2_annual_kg: cityWideResult.rows[0].total_co2_annual_kg
+      },
       by_ward: byWardResult.rows
     };
 
@@ -47,7 +51,7 @@ const handler: Handler = async () => {
     console.error('Database Query Error for Stats:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Internal Server Error fetching stats" }),
+      body: JSON.stringify({ error: "Internal Server Error fetching stats", details: (error as Error).message }),
     };
   }
 };
