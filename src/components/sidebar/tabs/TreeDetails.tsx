@@ -8,6 +8,7 @@ interface TreeDetailsProps {
 }
 
 const TreeDetails: React.FC<TreeDetailsProps> = ({ treeId }) => {
+  // ... useEffect and initial checks are unchanged ...
   const { getTreeDetails } = useTreeStore();
   const [treeDetails, setTreeDetails] = useState<TreeDetailsType | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,6 +55,7 @@ const TreeDetails: React.FC<TreeDetailsProps> = ({ treeId }) => {
     );
   }
 
+
   return (
     <div className="space-y-6">
       <div className="bg-primary-50 rounded-lg p-4">
@@ -62,7 +64,8 @@ const TreeDetails: React.FC<TreeDetailsProps> = ({ treeId }) => {
             <h2 className="text-xl font-bold text-primary-800">{treeDetails.common_name}</h2>
             <p className="text-gray-600 italic">{treeDetails.botanical_name}</p>
           </div>
-          <span className="bg-primary-100 text-primary-800 text-xs font-medium px-2.5 py-1 rounded-full">ID: {treeDetails.tree_id}</span>
+          {/* CORRECTED: Use the correct property 'id' */}
+          <span className="bg-primary-100 text-primary-800 text-xs font-medium px-2.5 py-1 rounded-full">ID: {treeDetails.id}</span>
         </div>
       </div>
       <div className="card">
@@ -70,7 +73,8 @@ const TreeDetails: React.FC<TreeDetailsProps> = ({ treeId }) => {
         <div className="card-body grid grid-cols-3 gap-4">
           <div className="text-center"><div className="text-sm text-gray-500">Height</div><div className="text-lg font-semibold">{treeDetails.height_m != null ? treeDetails.height_m.toFixed(2) : 'N/A'} m</div></div>
           <div className="text-center"><div className="text-sm text-gray-500">Girth</div><div className="text-lg font-semibold">{treeDetails.girth_cm != null ? treeDetails.girth_cm.toFixed(2) : 'N/A'} cm</div></div>
-          <div className="text-center"><div className="text-sm text-gray-500">Canopy</div><div className="text-lg font-semibold">{treeDetails.canopy_diameter_m != null ? treeDetails.canopy_diameter_m.toFixed(2) : 'N/A'} m</div></div>
+          {/* CORRECTED: Use 'canopy_dia_m' */}
+          <div className="text-center"><div className="text-sm text-gray-500">Canopy</div><div className="text-lg font-semibold">{treeDetails.canopy_dia_m != null ? treeDetails.canopy_dia_m.toFixed(2) : 'N/A'} m</div></div>
         </div>
       </div>
       <div className="card">
@@ -79,7 +83,8 @@ const TreeDetails: React.FC<TreeDetailsProps> = ({ treeId }) => {
           <div className="flex items-center justify-between bg-green-50 p-3 rounded-md">
             <div>
               <div className="text-sm text-gray-500">CO₂ Sequestered</div>
-              <div className="text-lg font-semibold text-success-500">{treeDetails.co2_sequestration_kg_yr != null ? treeDetails.co2_sequestration_kg_yr.toFixed(2) : 'N/A'} kg/yr</div>
+              {/* CORRECTED: Use 'co2_sequestered_kg' */}
+              <div className="text-lg font-semibold text-success-500">{treeDetails.co2_sequestered_kg != null ? treeDetails.co2_sequestered_kg.toFixed(2) : 'N/A'} kg/yr</div>
             </div>
             <div className="text-3xl text-success-500"><Thermometer size={36} /></div>
           </div>

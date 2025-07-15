@@ -10,9 +10,9 @@ const pool = new Pool({
 
 const handler: Handler = async () => {
   try {
-    // CORRECTED: Use lowercase unquoted column names.
-    const cityResult = await pool.query('SELECT COUNT(*) as total_trees, SUM(co2_sequestration_kg_yr) as total_co2 FROM trees');
-    const wardResult = await pool.query('SELECT ward, COUNT(*) as tree_count, SUM(co2_sequestration_kg_yr) as co2_kg FROM trees WHERE ward IS NOT NULL AND ward != \'\' GROUP BY ward ORDER BY ward ASC');
+    // CORRECTED: Use the actual column name 'co2_sequestered_kg'.
+    const cityResult = await pool.query('SELECT COUNT(*) as total_trees, SUM(co2_sequestered_kg) as total_co2 FROM trees');
+    const wardResult = await pool.query('SELECT ward, COUNT(*) as tree_count, SUM(co2_sequestered_kg) as co2_kg FROM trees WHERE ward IS NOT NULL AND ward != \'\' GROUP BY ward ORDER BY ward ASC');
     
     const stats = {
       city_wide: {
