@@ -9,18 +9,17 @@ export type DrawnGeoJson = Feature<Polygon | MultiPolygon> | null;
 
 // This interface is now for the *full detail* view of a tree.
 export interface TreeDetails {
-  Tree_ID: string;
-  Botanical_Name: string;
-  Common_Name: string;
-  Height_m?: number;
-  Girth_cm?: number;
-  Canopy_Diameter_m?: number;
-  CO2_Sequestration_kg_yr?: number;
+  tree_id: string;
+  botanical_name: string;
+  common_name: string;
+  height_m?: number;
+  girth_cm?: number;
+  canopy_diameter_m?: number;
+  co2_sequestration_kg_yr?: number;
   ward?: string;
   economic_i?: string;
   flowering?: string;
   wood_density?: number;
-  // This flexible interface will accommodate all properties from your detail files.
   [key: string]: any; 
 }
 

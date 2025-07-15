@@ -59,18 +59,18 @@ const TreeDetails: React.FC<TreeDetailsProps> = ({ treeId }) => {
       <div className="bg-primary-50 rounded-lg p-4">
         <div className="flex justify-between items-start">
           <div>
-            <h2 className="text-xl font-bold text-primary-800">{treeDetails.Common_Name}</h2>
-            <p className="text-gray-600 italic">{treeDetails.Botanical_Name}</p>
+            <h2 className="text-xl font-bold text-primary-800">{treeDetails.common_name}</h2>
+            <p className="text-gray-600 italic">{treeDetails.botanical_name}</p>
           </div>
-          <span className="bg-primary-100 text-primary-800 text-xs font-medium px-2.5 py-1 rounded-full">ID: {treeDetails.Tree_ID}</span>
+          <span className="bg-primary-100 text-primary-800 text-xs font-medium px-2.5 py-1 rounded-full">ID: {treeDetails.tree_id}</span>
         </div>
       </div>
       <div className="card">
         <div className="card-header"><h3 className="font-medium flex items-center"><CircleDashed size={18} className="mr-2 text-gray-500" />Dimensions</h3></div>
         <div className="card-body grid grid-cols-3 gap-4">
-          <div className="text-center"><div className="text-sm text-gray-500">Height</div><div className="text-lg font-semibold">{treeDetails.Height_m != null ? treeDetails.Height_m.toFixed(2) : 'N/A'} m</div></div>
-          <div className="text-center"><div className="text-sm text-gray-500">Girth</div><div className="text-lg font-semibold">{treeDetails.Girth_cm != null ? treeDetails.Girth_cm.toFixed(2) : 'N/A'} cm</div></div>
-          <div className="text-center"><div className="text-sm text-gray-500">Canopy</div><div className="text-lg font-semibold">{treeDetails.Canopy_Diameter_m != null ? treeDetails.Canopy_Diameter_m.toFixed(2) : 'N/A'} m</div></div>
+          <div className="text-center"><div className="text-sm text-gray-500">Height</div><div className="text-lg font-semibold">{treeDetails.height_m != null ? treeDetails.height_m.toFixed(2) : 'N/A'} m</div></div>
+          <div className="text-center"><div className="text-sm text-gray-500">Girth</div><div className="text-lg font-semibold">{treeDetails.girth_cm != null ? treeDetails.girth_cm.toFixed(2) : 'N/A'} cm</div></div>
+          <div className="text-center"><div className="text-sm text-gray-500">Canopy</div><div className="text-lg font-semibold">{treeDetails.canopy_diameter_m != null ? treeDetails.canopy_diameter_m.toFixed(2) : 'N/A'} m</div></div>
         </div>
       </div>
       <div className="card">
@@ -79,7 +79,7 @@ const TreeDetails: React.FC<TreeDetailsProps> = ({ treeId }) => {
           <div className="flex items-center justify-between bg-green-50 p-3 rounded-md">
             <div>
               <div className="text-sm text-gray-500">CO₂ Sequestered</div>
-              <div className="text-lg font-semibold text-success-500">{treeDetails.CO2_Sequestration_kg_yr != null ? treeDetails.CO2_Sequestration_kg_yr.toFixed(2) : 'N/A'} kg/yr</div>
+              <div className="text-lg font-semibold text-success-500">{treeDetails.co2_sequestration_kg_yr != null ? treeDetails.co2_sequestration_kg_yr.toFixed(2) : 'N/A'} kg/yr</div>
             </div>
             <div className="text-3xl text-success-500"><Thermometer size={36} /></div>
           </div>
