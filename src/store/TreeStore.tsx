@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { Feature, Polygon, MultiPolygon } from 'geojson';
 import * as turf from '@turf/turf';
+import { type Position } from 'geojson';
 
 // --- Type definitions remain unchanged, ensuring component compatibility ---
 export type DrawnGeoJson = Feature<Polygon | MultiPolygon> | null;
@@ -55,8 +56,8 @@ interface TreeStoreContextType {
   treeSpeciesData: TreeSpeciesData[];
   selectedArea: { type: 'geojson', geojsonData: DrawnGeoJson } | null;
   setSelectedArea: (area: { type: 'geojson', geojsonData: DrawnGeoJson } | null) => void;
-  simulatedPlantingPoints: turf.helpers.Position[];
-  setSimulatedPlantingPoints: (points: turf.helpers.Position[]) => void;
+  simulatedPlantingPoints: Position[];
+  setSimulatedPlantingPoints: (points: Position[]) => void;
 }
 
 const TreeStoreContext = createContext<TreeStoreContextType | undefined>(undefined);
@@ -67,19 +68,27 @@ export const TreeStoreProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [cityStats, setCityStats] = useState<{ total_trees: number; total_co2_annual_kg: number } | null>(null);
   const [treeSpeciesData, setTreeSpeciesData] = useState<TreeSpeciesData[]>([]);
   const [selectedArea, setSelectedArea] = useState<{ type: 'geojson', geojsonData: DrawnGeoJson } | null>(null);
-  const [simulatedPlantingPoints, setSimulatedPlantingPoints] = useState<turf.helpers.Position[]>([]);
+  const [simulatedPlantingPoints, setSimulatedPlantingPoints] = useState<Position[]>([]);
 
   // This effect now fetches the pre-aggregated summary data on initial load.
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const statsResponse = await fetch('/city-stats.json');
-        if (!statsResponse.ok) throw new Error("city-stats.json not found.");
+        const statsResponse = await fetch('/.netlify/functions/get-city-stats');
+        if (!statsResponse.ok) {
+        console.error("Failed to fetch city stats from API", statsResponse.statusText);
+        throw new Error("city-stats API call failed.");
+        }
         const statsData = await statsResponse.json();
         setCityStats(statsData.city_wide);
-        setWardCO2Data(statsData.by_ward);
-        setWardTreeCountData(statsData.by_ward);
-        console.log("City-wide stats loaded successfully.");
+        const formattedWardData = statsData.by_ward.map((d: any) => ({
+        ...d,
+        co2_kg: parseFloat(d.co2_kg),
+        tree_count: parseInt(d.tree_count, 10)
+        }));
+        setWardCO2Data(formattedWardData);
+        setWardTreeCountData(formattedWardData);
+        console.log("City-wide stats loaded successfully from API.");
 
         // Planting advisor data remains mock, preserving feature integrity.
         setTreeSpeciesData(mockSpeciesDataList);
