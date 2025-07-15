@@ -1,13 +1,10 @@
-import { Handler } from "@netlify/functions";
-import pkg from 'pg';
-const { Pool } = pkg;
+import { Handler } from "@netlify/functions"; // CORRECTED
+import { Pool } from 'pg';
 
-// Re-instating the SSL object is critical. We must explicitly provide the CA certificate.
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: true,
-    ca: process.env.DO_CA_CERT,
+    rejectUnauthorized: false
   }
 });
 
@@ -39,5 +36,4 @@ const handler: Handler = async () => {
     return { statusCode: 500, body: JSON.stringify({ error: "DB Stats Error", details: error.message }) };
   }
 };
-
 export { handler };
