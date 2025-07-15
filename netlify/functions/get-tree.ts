@@ -1,7 +1,7 @@
 // netlify/functions/get-tree.ts (DIAGNOSTIC VERSION)
 import { Handler, HandlerEvent } from "@netlify/functions";
 import pkg from 'pg';
-
+//check
 const { Pool } = pkg;
 let pool: any; // Define pool in a broader scope
 
