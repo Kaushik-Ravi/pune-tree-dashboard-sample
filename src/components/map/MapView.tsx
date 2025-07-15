@@ -1,16 +1,14 @@
 // src/components/map/MapView.tsx
 import React, { useState, useRef, useCallback } from 'react';
-import Map, { MapRef, Source, Layer, MapLayerMouseEvent, NavigationControl, FullscreenControl, ScaleControl, GeolocateControl, MapProps } from 'react-map-gl';
+import Map, { MapRef, Source, Layer, MapLayerMouseEvent, NavigationControl, FullscreenControl, ScaleControl, GeolocateControl } from 'react-map-gl';
+import * as maplibregl from 'maplibre-gl';
 import MapLibreGeocoder from './MapLibreGeocoder';
 import DrawControl from './DrawControl';
 import { useTreeStore } from '../../store/TreeStore';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css'
 
-// !!! IMPORTANT: Replace this with the TileJSON URL from your MapTiler account !!!
 const TILE_JSON_URL = "https://api.maptiler.com/tiles/0197f37a-c205-7e6f-8c64-151bca4d9195/tiles.json?key=mR1XGymeKBveWLadgW0A"; 
-
-// !!! IMPORTANT: Replace this with your actual MapTiler API Key !!!
 const MAPTILER_API_KEY = "mR1XGymeKBveWLadgW0A";
 
 interface MapViewProps {
@@ -37,23 +35,6 @@ const MapView: React.FC<MapViewProps> = ({ onTreeSelect, setMapInstance }) => {
   const onMouseEnter = useCallback(() => setCursor('pointer'), []);
   const onMouseLeave = useCallback(() => setCursor('grab'), []);
   
-  const initialViewState = {
-    longitude: 73.8567, latitude: 18.5204, zoom: 11, pitch: 0, bearing: 0
-  };
-
-  const handleMapClick = (event: MapLayerMouseEvent) => {
-    if (event.features && event.features.length > 0) {
-      const treeFeature = event.features.find(f => f.layer.id === 'trees-layer');
-      if (treeFeature) {
-        const treeId = treeFeature.properties?.Tree_ID;
-        if (treeId) {
-          console.log("Clicked Tree ID:", treeId);
-          onTreeSelect(String(treeId));
-        }
-      }
-    }
-  };
-  
   const onDrawCreate = useCallback((e: any) => {
     const geoJson = e.features[0];
     setGlobalSelectedArea({ type: 'geojson', geojsonData: geoJson });
@@ -70,37 +51,50 @@ const MapView: React.FC<MapViewProps> = ({ onTreeSelect, setMapInstance }) => {
     setGlobalSelectedArea(null);
   }, [setGlobalSelectedArea]);
 
-  const maplibreMapProps: MapProps = {
-    ref: mapRef,
-    initialViewState: initialViewState,
-    style: { width: '100%', height: '100%' },
-    mapStyle: `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_API_KEY}`,
-    interactiveLayerIds: ['trees-layer'],
-    onMouseEnter: onMouseEnter,
-    onMouseLeave: onMouseLeave,
-    onClick: handleMapClick,
-    cursor: cursor,
-    onLoad: (evt) => {
-        setMapInstance(evt.target);
+  const handleMapClick = (event: MapLayerMouseEvent) => {
+    if (event.features && event.features.length > 0) {
+      const treeFeature = event.features.find(f => f.layer.id === 'trees-layer');
+      if (treeFeature) {
+        const treeId = treeFeature.properties?.Tree_ID;
+        if (treeId) {
+          onTreeSelect(String(treeId));
+        }
+      }
     }
   };
 
   return (
     <div className="map-container">
-      <Map {...maplibreMapProps}>
+      <Map
+        ref={mapRef}
+        initialViewState={{
+          longitude: 73.8567,
+          latitude: 18.5204,
+          zoom: 11,
+          pitch: 0,
+          bearing: 0
+        }}
+        style={{ width: '100%', height: '100%' }}
+        mapStyle={`https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_API_KEY}`}
+        mapLib={maplibregl as any} // <-- THE DEFINITIVE FIX
+        interactiveLayerIds={['trees-layer']}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        onClick={handleMapClick}
+        cursor={cursor}
+        onLoad={(evt: any) => setMapInstance(evt.target)}
+      >
         <GeolocateControl position="top-left" />
         <FullscreenControl position="top-left" />
         <NavigationControl position="top-left" />
         <ScaleControl />
         <MapLibreGeocoder apiKey={MAPTILER_API_KEY} />
-        
         <DrawControl
           position="top-left"
           onDrawCreate={onDrawCreate}
           onDrawUpdate={onDrawUpdate}
           onDrawDelete={onDrawDelete}
         />
-        
         <Source id="pune-trees-source" type="vector" url={TILE_JSON_URL}>
           <Layer {...treeLayerStyle} source-layer="trees" />
         </Source>

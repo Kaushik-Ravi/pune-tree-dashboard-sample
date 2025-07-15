@@ -13,38 +13,38 @@ const pool = new Pool({
 
 const handler: Handler = async () => {
   try {
-    // Query for city-wide statistics
     const cityWideResult = await pool.query(
       'SELECT COUNT(*) AS total_trees, COALESCE(SUM("CO2_Sequestration_kg_yr"), 0) AS total_co2_annual_kg FROM trees'
     );
 
-    // Query for ward-by-ward statistics
+    // MODIFIED QUERY: Removed the failing CAST and relaxed the WHERE clause.
+    // The frontend can handle parsing the ward numbers if needed. This query prioritizes reliability.
     const byWardResult = await pool.query(
       `SELECT
          ward,
          COUNT(*) AS tree_count,
          COALESCE(SUM("CO2_Sequestration_kg_yr"), 0) AS co2_kg
        FROM trees
-       WHERE ward IS NOT NULL AND ward ~ E'^\\d+(\\.\\d+)?$' -- Ensures ward is a number (int or float)
+       WHERE ward IS NOT NULL AND ward != ''
        GROUP BY ward
-       ORDER BY CAST(ward AS double precision)` // CORRECTED: Cast to float for safe sorting
+       ORDER BY ward ASC` // Sorting alphabetically is safe.
     );
 
     const finalStats = {
       city_wide: {
-        // Ensure total_trees is a number, as COUNT returns bigint
         total_trees: Number(cityWideResult.rows[0].total_trees),
-        total_co2_annual_kg: cityWideResult.rows[0].total_co2_annual_kg
+        total_co2_annual_kg: parseFloat(cityWideResult.rows[0].total_co2_annual_kg)
       },
-      by_ward: byWardResult.rows
+      by_ward: byWardResult.rows.map(row => ({
+        ward: row.ward,
+        tree_count: Number(row.tree_count),
+        co2_kg: parseFloat(row.co2_kg)
+      }))
     };
 
     return {
       statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      },
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify(finalStats),
     };
   } catch (error) {
