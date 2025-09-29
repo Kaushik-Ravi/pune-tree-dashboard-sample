@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "server/server.js": {
+      "memory": 1024
+    }
+  },
   "rewrites": [
     {
       "source": "/api/:path*",
