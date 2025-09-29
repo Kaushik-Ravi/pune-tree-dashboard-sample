@@ -1,48 +1,49 @@
-// src/components/map/SimulatedTreesLayer.tsx
-import React from 'react';
-import { CircleMarker, Tooltip } from 'react-leaflet';
+import React, { useMemo } from 'react';
+import { Source, Layer } from 'react-map-gl/maplibre';
+import type { LayerProps } from 'react-map-gl/maplibre';
 import { useTreeStore } from '../../store/TreeStore';
-import L from 'leaflet'; // For L.LatLngExpression
-// turf is not needed here as points are already [lon, lat] from the store
+import { FeatureCollection, Point } from 'geojson';
+
+const simulatedTreesLayerStyle: LayerProps = {
+  id: 'simulated-trees',
+  type: 'circle',
+  paint: {
+    'circle-radius': 4,
+    'circle-color': '#4ade80',
+    'circle-stroke-color': '#ffffff',
+    'circle-stroke-width': 1,
+    'circle-opacity': 0.9,
+  },
+};
 
 const SimulatedTreesLayer: React.FC = () => {
   const { simulatedPlantingPoints } = useTreeStore();
+
+  const geojson: FeatureCollection<Point> = useMemo(() => {
+    return {
+      type: 'FeatureCollection',
+      features: simulatedPlantingPoints.map((point, index) => ({
+        type: 'Feature',
+        properties: {
+          id: `sim-tree-${index}`,
+          label: `Simulated Tree #${index + 1}`,
+        },
+        geometry: {
+          type: 'Point',
+          coordinates: point, // Already in [longitude, latitude] format
+        },
+      })),
+    };
+  }, [simulatedPlantingPoints]);
 
   if (!simulatedPlantingPoints || simulatedPlantingPoints.length === 0) {
     return null;
   }
 
   return (
-    <>
-      {simulatedPlantingPoints.map((point, index) => {
-        // Turf.js Position is [longitude, latitude]
-        // Leaflet LatLngExpression is [latitude, longitude]
-        const position: L.LatLngExpression = [point[1], point[0]]; 
-        
-        // Define lat and lon here for use in the Tooltip
-        const longitude = point[0].toFixed(5); // Corrected variable name
-        const latitude = point[1].toFixed(5);  // Corrected variable name
-
-        return (
-          <CircleMarker
-            key={`simulated-tree-${index}`}
-            center={position}
-            radius={4} 
-            pathOptions={{
-              color: '#ffffff',       
-              weight: 1,            
-              fillColor: '#4ade80', 
-              fillOpacity: 0.8,
-            }}
-          >
-            <Tooltip>
-              <div>Simulated Tree #{index + 1}</div>
-              <div>Lat: {latitude}, Lon: {longitude}</div> {/* USED CORRECTED VARIABLES HERE */}
-            </Tooltip>
-          </CircleMarker>
-        );
-      })}
-    </>
+    <Source id="simulated-trees-source" type="geojson" data={geojson}>
+      <Layer {...simulatedTreesLayerStyle} />
+    </Source>
   );
 };
 

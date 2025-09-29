@@ -12,7 +12,8 @@ import CityOverview from './tabs/CityOverview';
 import TreeDetails from './tabs/TreeDetails';
 import PlantingAdvisor from './tabs/PlantingAdvisor';
 import MapLayers from './tabs/MapLayers';
-import { TreeSpeciesData } from '../../store/TreeStore'; // Import type
+import { ArchetypeData } from '../../store/TreeStore';
+import { LightConfig } from './tabs/LightAndShadowControl'; // --- FIX: Import type from its new source ---
 
 interface SidebarProps {
   isOpen: boolean;
@@ -26,7 +27,9 @@ interface SidebarProps {
   lstMinValue: number; 
   lstMaxValue: number; 
   setShowTemperatureChart: (show: boolean) => void;
-  onActiveSpeciesChangeForChart: (speciesDetails: TreeSpeciesData | null) => void; // NEW PROP
+  onActiveSpeciesChangeForChart: (speciesDetails: ArchetypeData | null) => void;
+  onLightChange: (config: LightConfig | null) => void;
+  is3D: boolean;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -41,7 +44,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   lstMinValue,
   lstMaxValue,
   setShowTemperatureChart,
-  onActiveSpeciesChangeForChart // Destructure new prop
+  onActiveSpeciesChangeForChart,
+  onLightChange,
+  is3D
 }) => {
   const tabs = [
     { id: 'city-overview', label: 'City Overview', icon: <BarChartBig size={18} /> },
@@ -66,7 +71,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       case 2: 
         return <PlantingAdvisor 
                   setShowTemperatureChart={setShowTemperatureChart} 
-                  onSpeciesChangeForChart={onActiveSpeciesChangeForChart} // Pass the new callback
+                  onSpeciesChangeForChart={onActiveSpeciesChangeForChart}
                />;
       case 3: return (
         <MapLayers 
@@ -76,6 +81,8 @@ const Sidebar: React.FC<SidebarProps> = ({
           toggleLSTOverlay={toggleLSTOverlay}
           lstMinValue={lstMinValue} 
           lstMaxValue={lstMaxValue} 
+          onLightChange={onLightChange}
+          is3D={is3D}
         />
       ); 
       default: return <CityOverview />;
@@ -88,40 +95,21 @@ const Sidebar: React.FC<SidebarProps> = ({
         <h2 className="text-lg font-semibold text-gray-800">Dashboard</h2>
       </div>
       <div className="bg-gray-50 border-b border-gray-200 relative h-[var(--sidebar-tabs-height)] flex items-center">
-        <button 
-          onClick={() => scrollTabs('left')} 
-          className="absolute left-0 top-1/2 -translate-y-1/2 z-20 p-2 text-gray-500 hover:text-gray-800"
-          aria-label="Scroll tabs left"
-        >
-          <ChevronLeft size={20} />
-        </button>
+        <button onClick={() => scrollTabs('left')} className="absolute left-0 top-1/2 -translate-y-1/2 z-20 p-2 text-gray-500 hover:text-gray-800" aria-label="Scroll tabs left"><ChevronLeft size={20} /></button>
         <div ref={tabContainerRef} className="flex overflow-x-auto hide-scrollbar mx-8 flex-nowrap h-full">
           {tabs.map((tab, index) => (
             <button
               key={tab.id}
-              className={`flex-shrink-0 px-4 flex items-center space-x-2 whitespace-nowrap transition-colors focus:outline-none h-full
-                ${ activeTabIndex === index 
-                    ? 'bg-white text-primary-600 border-b-2 border-primary-600 font-medium' 
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-primary-500'
-                }`}
+              className={`flex-shrink-0 px-4 flex items-center space-x-2 whitespace-nowrap transition-colors focus:outline-none h-full ${ activeTabIndex === index ? 'bg-white text-primary-600 border-b-2 border-primary-600 font-medium' : 'text-gray-600 hover:bg-gray-100 hover:text-primary-500'}`}
               onClick={() => setActiveTabIndex(index)}
             >
-              {tab.icon}
-              <span>{tab.label}</span>
+              {tab.icon}<span>{tab.label}</span>
             </button>
           ))}
         </div>
-        <button 
-          onClick={() => scrollTabs('right')} 
-          className="absolute right-0 top-1/2 -translate-y-1/2 z-20 p-2 text-gray-500 hover:text-gray-800"
-          aria-label="Scroll tabs right"
-        >
-          <ChevronRight size={20} />
-        </button>
+        <button onClick={() => scrollTabs('right')} className="absolute right-0 top-1/2 -translate-y-1/2 z-20 p-2 text-gray-500 hover:text-gray-800" aria-label="Scroll tabs right"><ChevronRight size={20} /></button>
       </div>
-      <div className="sidebar-content-area p-4">
-        {renderTabContent()}
-      </div>
+      <div className="sidebar-content-area p-4">{renderTabContent()}</div>
     </div>
   );
 };

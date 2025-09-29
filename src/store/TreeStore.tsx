@@ -1,125 +1,87 @@
 // src/store/TreeStore.tsx
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { Feature, Polygon, MultiPolygon } from 'geojson';
-import * as turf from '@turf/turf'; // For turf.helpers.Position type
+import axios from 'axios';
+
+const API_BASE_URL = 'http://localhost:3001';
 
 export type DrawnGeoJson = Feature<Polygon | MultiPolygon> | null;
+export type Position = [number, number];
 
-// --- Tree Species Data Structure for Planting Advisor ---
-export interface TreeSpeciesData {
-  id: string; 
+// --- NEW Data Structures for Real Archetype Data ---
+
+// Represents a single, processed archetype from our database
+export interface ArchetypeData {
+  id: string;
+  archetype_name: string;
   common_name: string;
-  botanical_name: string; 
-  mean_cooling_effect_celsius: number; 
-  p90_cooling_effect_celsius: number;  // Added for 90th percentile cooling
-  p10_cooling_effect_celsius: number;  // Added for 10th percentile cooling
+  botanical_name: string;
+  mean_cooling_effect_celsius: number;
+  p90_cooling_effect_celsius: number;
+  p10_cooling_effect_celsius: number;
   height_m_min: number;
   height_m_max: number;
   girth_cm_min: number;
   girth_cm_max: number;
   canopy_dia_m_min: number;
-  canopy_dia_m_max: number; 
+  canopy_dia_m_max: number;
   co2_seq_kg_min: number;
   co2_seq_kg_max: number;
+  season: string;
 }
 
-// --- Mock Data Generation ---
-const mockTreesRaw = Array(100).fill(null).map((_, index) => ({
-  id: `tree_${index + 1}`,
-  latitude: 18.52 + (Math.random() * 0.1 - 0.05),
-  longitude: 73.85 + (Math.random() * 0.1 - 0.05),
-  botanical_name_short: `Tree Species ${index % 8 + 1}`,
-  common_name: `Common Name ${index % 8 + 1}`,
-  CO2_sequestered_kg: 50 + Math.random() * 100,
-  ward: String(Math.floor(Math.random() * 15) + 1) 
-}));
+// Represents a species, containing its representative 'best' archetype and a list of all its archetypes
+export interface TreeSpeciesData {
+  common_name: string;
+  botanical_name: string;
+  representative_archetype: ArchetypeData;
+  archetypes: ArchetypeData[];
+}
 
-const mockTreeDetailsFull = mockTreesRaw.map(tree => ({
-  ...tree, 
-  height_m: 5 + Math.random() * 10,
-  girth_cm: 30 + Math.random() * 100,
-  canopy_dia_m: 3 + Math.random() * 5,
-  wood_density: 0.4 + Math.random() * 0.5, // Wood density is in treeDetails
-  economic_i: ['Timber', 'Fruit', 'Medicinal', 'Ornamental', 'Shade'][Math.floor(Math.random() * 5)],
-  flowering: ['Spring', 'Summer', 'Monsoon', 'Winter', 'Year-round'][Math.floor(Math.random() * 5)],
-}));
-
-const distinctWards = [...new Set(mockTreesRaw.map(t => t.ward))].sort((a,b) => parseInt(a) - parseInt(b));
-
-const aggregatedWardCO2Data = distinctWards.map(wardId => {
-  const treesInWard = mockTreesRaw.filter(t => t.ward === wardId);
-  const totalCO2 = treesInWard.reduce((sum, tree) => sum + tree.CO2_sequestered_kg, 0);
-  return { ward: wardId, co2_kg: totalCO2 };
-});
-
-const aggregatedWardTreeCountData = distinctWards.map(wardId => {
-  const treesInWard = mockTreesRaw.filter(t => t.ward === wardId);
-  return { ward: wardId, tree_count: treesInWard.length };
-});
-
-const calculatedCityStats = {
-  total_trees: mockTreesRaw.length,
-  total_co2_annual_kg: mockTreesRaw.reduce((sum, tree) => sum + tree.CO2_sequestered_kg, 0),
-};
-
-interface WardBoundaryFeatureCollection { type: "FeatureCollection"; features: Array<{ type: "Feature"; properties: any; geometry: any; }>; }
-const mockWardBoundariesPlaceholder: WardBoundaryFeatureCollection | null = null; 
-
-// UPDATED MOCK SPECIES DATA with P90 and P10 cooling
-const speciesNamesForMock = [
-  { common: "Neem", botanical: "Azadirachta indica" },
-  { common: "Peepal", botanical: "Ficus religiosa" },
-  { common: "Banyan", botanical: "Ficus benghalensis" },
-  { common: "Mango", botanical: "Mangifera indica" },
-  { common: "Tamarind", botanical: "Tamarindus indica" },
-  { common: "Gulmohar", botanical: "Delonix regia" },
-  { common: "Copperpod", botanical: "Peltophorum pterocarpum" },
-  { common: "Rain Tree", botanical: "Samanea saman" },
-];
-
-const mockSpeciesDataList: TreeSpeciesData[] = speciesNamesForMock.map((species, index) => {
-  const meanCooling = parseFloat((2.0 + Math.random() * 3.0).toFixed(1)); // e.g., 2.0 to 5.0 °C avg cooling
-  const p10Cooling = parseFloat(Math.max(0.5, meanCooling - (0.5 + Math.random() * 1.0)).toFixed(1)); // P10 typically lower, but positive
-  const p90Cooling = parseFloat((meanCooling + 0.5 + Math.random() * 2.5).toFixed(1)); // P90 typically higher
-  
-  return {
-    id: `species_${index + 1}`,
-    common_name: species.common,
-    botanical_name: species.botanical,
-    mean_cooling_effect_celsius: meanCooling, 
-    p90_cooling_effect_celsius: p90Cooling,
-    p10_cooling_effect_celsius: p10Cooling,
-    height_m_min: 5 + Math.floor(Math.random() * 5), 
-    height_m_max: 15 + Math.floor(Math.random() * 10), 
-    girth_cm_min: 50 + Math.floor(Math.random() * 50), 
-    girth_cm_max: 150 + Math.floor(Math.random() * 150),
-    canopy_dia_m_min: 3 + Math.floor(Math.random() * 4), 
-    canopy_dia_m_max: 8 + Math.floor(Math.random() * 7),  
-    co2_seq_kg_min: 20 + Math.floor(Math.random() * 30), 
-    co2_seq_kg_max: 80 + Math.floor(Math.random() * 70), 
-  };
-});
-
+// --- Unchanged Data Structures for Existing Features ---
+interface CityStats {
+  total_trees: number;
+  total_co2_annual_kg: number;
+}
+interface WardData {
+  ward: string;
+  tree_count: number;
+  co2_kg: number;
+}
+interface TreeDetailsData {
+    id: string;
+    geom: any;
+    girth_cm: number;
+    height_m: number;
+    canopy_dia_m: number;
+    botanical_name: string;
+    common_name: string;
+    co2_sequestered_kg: number;
+    economic_i: string;
+    flowering: string;
+    ward: string;
+    wood_density: number;
+}
 
 // --- Context Interface ---
 interface TreeStoreContextType {
-  trees: typeof mockTreesRaw;
-  fetchTrees: () => void;
-  getTreeDetails: (id: string) => typeof mockTreeDetailsFull[0] | null;
-  wardCO2Data: typeof aggregatedWardCO2Data;
-  fetchWardCO2Data: () => void;
-  wardTreeCountData: typeof aggregatedWardTreeCountData; 
-  fetchWardTreeCountData: () => void;      
-  cityStats: typeof calculatedCityStats;
+  getTreeDetails: (id: string) => Promise<TreeDetailsData | null>;
+  wardCO2Data: { ward: string; co2_kg: number }[];
+  wardTreeCountData: { ward: string; tree_count: number }[];
+  cityStats: CityStats | null;
   fetchCityStats: () => void;
-  wardBoundaries: WardBoundaryFeatureCollection | null; 
-  fetchWardBoundaries: () => void;
-  treeSpeciesData: TreeSpeciesData[]; 
-  fetchTreeSpeciesData: () => void;   
+  fetchWardData: () => void;
+  getStatsForPolygon: (polygon: DrawnGeoJson) => Promise<{ tree_count: number; co2_kg: number } | null>;
+
+  // --- UPDATED FOR REAL DATA ---
+  treeSpeciesData: TreeSpeciesData[]; // This now holds the grouped species data
+  fetchTreeSpeciesData: () => void;
+
+  // Unchanged parts for planting advisor state
   selectedArea: { type: 'geojson', geojsonData: DrawnGeoJson } | null;
   setSelectedArea: (area: { type: 'geojson', geojsonData: DrawnGeoJson } | null) => void;
-  simulatedPlantingPoints: turf.helpers.Position[];
-  setSimulatedPlantingPoints: (points: turf.helpers.Position[]) => void;
+  simulatedPlantingPoints: Position[];
+  setSimulatedPlantingPoints: (points: Position[]) => void;
 }
 
 // --- Context Creation ---
@@ -127,44 +89,104 @@ const TreeStoreContext = createContext<TreeStoreContextType | undefined>(undefin
 
 // --- Provider Component ---
 export const TreeStoreProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [trees, setTrees] = useState<typeof mockTreesRaw>([]);
-  const [treeDetails, setTreeDetails] = useState<typeof mockTreeDetailsFull>([]);
-  const [wardCO2Data, setWardCO2Data] = useState<typeof aggregatedWardCO2Data>([]);
-  const [wardTreeCountData, setWardTreeCountData] = useState<typeof aggregatedWardTreeCountData>([]);
-  const [cityStats, setCityStats] = useState<typeof calculatedCityStats>(calculatedCityStats); 
-  const [wardBoundaries, setWardBoundaries] = useState<WardBoundaryFeatureCollection | null>(mockWardBoundariesPlaceholder);
+  const [wardCO2Data, setWardCO2Data] = useState<{ ward: string; co2_kg: number }[]>([]);
+  const [wardTreeCountData, setWardTreeCountData] = useState<{ ward: string; tree_count: number }[]>([]);
+  const [cityStats, setCityStats] = useState<CityStats | null>(null);
+  
+  // --- UPDATED STATE FOR REAL SPECIES DATA ---
   const [treeSpeciesData, setTreeSpeciesData] = useState<TreeSpeciesData[]>([]);
+  
   const [selectedArea, setSelectedArea] = useState<{ type: 'geojson', geojsonData: DrawnGeoJson } | null>(null);
-  const [simulatedPlantingPoints, setSimulatedPlantingPoints] = useState<turf.helpers.Position[]>([]);
+  const [simulatedPlantingPoints, setSimulatedPlantingPoints] = useState<Position[]>([]);
 
-  const fetchTrees = useCallback(() => { setTrees(mockTreesRaw); setTreeDetails(mockTreeDetailsFull); }, []);
-  const getTreeDetails = useCallback((id: string) => treeDetails.find(tree => tree.id === id) || null, [treeDetails]);
-  const fetchWardCO2Data = useCallback(() => { setWardCO2Data(aggregatedWardCO2Data); }, []);
-  const fetchWardTreeCountData = useCallback(() => { setWardTreeCountData(aggregatedWardTreeCountData); }, []);
-  const fetchCityStats = useCallback(() => { setCityStats(calculatedCityStats); }, []);
-  const fetchWardBoundaries = useCallback(() => { /* Placeholder */ }, []); 
-  const fetchTreeSpeciesData = useCallback(() => { setTreeSpeciesData(mockSpeciesDataList); }, []);
+  // --- UPDATED: Fetch real species data from the new backend endpoint ---
+  const fetchTreeSpeciesData = useCallback(async () => {
+    try {
+      const response = await axios.get<TreeSpeciesData[]>(`${API_BASE_URL}/api/tree-archetypes`);
+      setTreeSpeciesData(response.data);
+    } catch (error) {
+      console.error('Error fetching tree species data:', error);
+      setTreeSpeciesData([]); // Set to empty array on error
+    }
+  }, []);
 
+  // --- NO CHANGES to existing, working functions below ---
+
+  const getTreeDetails = useCallback(async (id: string): Promise<TreeDetailsData | null> => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/trees/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching details for tree ${id}:`, error);
+      return null;
+    }
+  }, []);
+
+  const fetchCityStats = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/city-stats`);
+      const stats = {
+          total_trees: parseInt(response.data.total_trees, 10),
+          total_co2_annual_kg: parseFloat(response.data.total_co2_annual_kg)
+      };
+      setCityStats(stats);
+    } catch (error) {
+      console.error('Error fetching city stats:', error);
+    }
+  }, []);
+  
+  const fetchWardData = useCallback(async () => {
+    try {
+        const response = await axios.get<WardData[]>(`${API_BASE_URL}/api/ward-data`);
+        const wardsData = response.data;
+        const co2Data = wardsData.map(w => ({ ward: w.ward, co2_kg: parseFloat(String(w.co2_kg)) }));
+        const treeCountData = wardsData.map(w => ({ ward: w.ward, tree_count: parseInt(String(w.tree_count), 10) }));
+        setWardCO2Data(co2Data);
+        setWardTreeCountData(treeCountData);
+    } catch (error) {
+        console.error('Error fetching ward data:', error);
+    }
+  }, []);
+
+  const getStatsForPolygon = useCallback(async (polygonFeature: DrawnGeoJson) => {
+    if (!polygonFeature) return null;
+    try {
+        const response = await axios.post(`${API_BASE_URL}/api/stats-in-polygon`, {
+            polygon: polygonFeature.geometry 
+        });
+        return {
+            tree_count: parseInt(response.data.tree_count, 10),
+            co2_kg: parseFloat(response.data.co2_kg)
+        };
+    } catch (error) {
+        console.error('Error fetching stats for polygon:', error);
+        return null;
+    }
+  }, []);
+
+  // Initial data fetch on component mount
   useEffect(() => {
-    fetchTrees(); 
-    fetchCityStats(); 
-    fetchWardCO2Data(); 
-    fetchWardTreeCountData(); 
-    fetchWardBoundaries(); 
-    fetchTreeSpeciesData(); 
-  }, [fetchTrees, fetchCityStats, fetchWardCO2Data, fetchWardTreeCountData, fetchWardBoundaries, fetchTreeSpeciesData]);
+    fetchCityStats();
+    fetchWardData();
+    fetchTreeSpeciesData();
+  }, [fetchCityStats, fetchWardData, fetchTreeSpeciesData]);
 
   return (
     <TreeStoreContext.Provider
       value={{
-        trees, fetchTrees, getTreeDetails,
-        wardCO2Data, fetchWardCO2Data,
-        wardTreeCountData, fetchWardTreeCountData, 
-        cityStats, fetchCityStats,
-        wardBoundaries, fetchWardBoundaries,
-        treeSpeciesData, fetchTreeSpeciesData, 
-        selectedArea, setSelectedArea, 
-        simulatedPlantingPoints, setSimulatedPlantingPoints 
+        getTreeDetails,
+        wardCO2Data,
+        wardTreeCountData,
+        cityStats,
+        fetchCityStats,
+        fetchWardData,
+        getStatsForPolygon,
+        treeSpeciesData, 
+        fetchTreeSpeciesData, 
+        selectedArea, 
+        setSelectedArea, 
+        simulatedPlantingPoints, 
+        setSimulatedPlantingPoints 
       }}
     >
       {children}

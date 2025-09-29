@@ -1,17 +1,18 @@
 // src/components/sidebar/tabs/MapLayers.tsx
 import React from 'react';
-import { Layers as LayersIcon, Thermometer } from 'lucide-react'; // MapPin was removed
-// InfoPopover can be removed if not used, or kept if you plan to add info icons here
-// import InfoPopover from '../../common/InfoPopover'; 
+import { Layers as LayersIcon, Thermometer } from 'lucide-react';
+import { LightConfig } from './LightAndShadowControl'; // --- MODIFIED ---
+import LightAndShadowControl from './LightAndShadowControl';
 
 interface MapLayersProps {
   baseMap: string;
   changeBaseMap: (mapType: string) => void;
-  // showWardBoundaries and toggleWardBoundaries were removed
   showLSTOverlay: boolean;
   toggleLSTOverlay: () => void;
   lstMinValue: number;
   lstMaxValue: number;
+  onLightChange: (config: LightConfig | null) => void; // --- MODIFIED ---
+  is3D: boolean;
 }
 
 const MapLayers: React.FC<MapLayersProps> = ({
@@ -20,17 +21,19 @@ const MapLayers: React.FC<MapLayersProps> = ({
   showLSTOverlay,      
   toggleLSTOverlay,
   lstMinValue,
-  lstMaxValue
+  lstMaxValue,
+  onLightChange,
+  is3D,
 }) => {
   const lstLegendGradient = 'linear-gradient(to right, #0D1282, #00A9FF, #00E0C7, #90F1AC, #FFF80A, #FFB344, #FF4A4A, #D72323)';
 
   return (
     <div className="space-y-6">
-      {/* Basemap Options Card (Same as before) */}
+      <LightAndShadowControl onLightChange={onLightChange} is3D={is3D} />
+
       <div className="card">
         <div className="card-header"><h3 className="font-medium flex items-center"><LayersIcon size={18} className="mr-2 text-gray-500" />Basemap Options</h3></div>
         <div className="card-body"><div className="space-y-2">
-            {/* Basemap options divs ... (no change from previous version) */}
             <div className={`p-3 rounded-md flex items-center cursor-pointer ${baseMap === 'streets' ? 'bg-primary-50 border border-primary-200 ring-2 ring-primary-300' : 'hover:bg-gray-50 border border-transparent'}`} onClick={() => changeBaseMap('streets')}><div className="h-10 w-10 bg-gray-200 rounded mr-3 flex items-center justify-center text-xs text-gray-500">Street</div><div><div className="font-medium">Streets</div><div className="text-xs text-gray-500">Standard map view</div></div></div>
             <div className={`p-3 rounded-md flex items-center cursor-pointer ${baseMap === 'satellite' ? 'bg-primary-50 border border-primary-200 ring-2 ring-primary-300' : 'hover:bg-gray-50 border border-transparent'}`} onClick={() => changeBaseMap('satellite')}><div className="h-10 w-10 bg-gray-700 rounded mr-3 flex items-center justify-center text-xs text-gray-200">Sat</div><div><div className="font-medium">Satellite</div><div className="text-xs text-gray-500">Aerial imagery</div></div></div>
             <div className={`p-3 rounded-md flex items-center cursor-pointer ${baseMap === 'light' ? 'bg-primary-50 border border-primary-200 ring-2 ring-primary-300' : 'hover:bg-gray-50 border border-transparent'}`} onClick={() => changeBaseMap('light')}><div className="h-10 w-10 bg-gray-100 rounded mr-3 flex items-center justify-center text-xs text-gray-500">Light</div><div><div className="font-medium">Light</div><div className="text-xs text-gray-500">Minimal light theme</div></div></div>
@@ -38,7 +41,6 @@ const MapLayers: React.FC<MapLayersProps> = ({
         </div></div>
       </div>
       
-      {/* Map Overlays Card (Toggle for LST only) */}
       <div className="card">
         <div className="card-header"><h3 className="font-medium">Map Overlays</h3></div>
         <div className="card-body"><div className="space-y-3">
@@ -55,15 +57,13 @@ const MapLayers: React.FC<MapLayersProps> = ({
         </div></div>
       </div>
       
-      {/* Combined Legend Section */}
       <div className="card">
          <div className="card-header"><h3 className="font-medium">Legend</h3></div>
-        <div className="card-body space-y-3"> {/* Adjusted spacing for tighter legend */}
-          {/* UPDATED Tree Location Legend Item */}
+        <div className="card-body space-y-3">
           <div className="flex items-center">
             <div 
               className="h-4 w-4 rounded-full mr-2 border-2 border-white shadow-md" 
-              style={{ backgroundColor: '#00BCD4' }} // Matches new marker fill
+              style={{ backgroundColor: '#2E7D32' }}
             ></div>
             <div className="text-sm">Tree Location</div>
           </div>
