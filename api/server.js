@@ -25,10 +25,10 @@ const pool = new Pool({
   database: process.env.DB_DATABASE,
   password: process.env.DB_PASSWORD,
   port: process.env.DB_PORT,
-  ssl: {
+  ssl: process.env.DB_CA_CERT ? {
     rejectUnauthorized: false,
-    ca: fs.readFileSync(__dirname + '/ca-certificate.crt').toString(),
-  },
+    ca: process.env.DB_CA_CERT.replace(/\\n/g, '\n'),
+  } : false,
 });
 
 pool.connect((err, client, release) => {
