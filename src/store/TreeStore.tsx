@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useCallback, ReactNode, use
 import { Feature, Polygon, MultiPolygon } from 'geojson';
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
 export type DrawnGeoJson = Feature<Polygon | MultiPolygon> | null;
 export type Position = [number, number];
