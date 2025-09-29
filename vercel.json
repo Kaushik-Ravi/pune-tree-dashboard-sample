@@ -1,12 +1,17 @@
 {
-  "functions": {
-    "server/server.js": {
-      "memory": 1024
+  "builds": [
+    {
+      "src": "server/server.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "package.json",
+      "use": "@vercel/vite"
     }
-  },
+  ],
   "rewrites": [
     {
-      "source": "/api/:path*",
+      "source": "/api/(.*)",
       "destination": "/server/server.js"
     }
   ]
