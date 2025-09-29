@@ -1,5 +1,9 @@
 // server/server.js
-require('dotenv').config({ path: '../.env' });
+//added new line
+const fs = require('fs');
+const path = require('path'); // ADD THIS
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') }); // REPLACE WITH THIS
+
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
@@ -22,7 +26,8 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
   port: process.env.DB_PORT,
   ssl: {
-    rejectUnauthorized: false
+    rejectUnauthorized: false,
+    ca: fs.readFileSync(__dirname + '/ca-certificate.crt').toString(),
   },
 });
 
