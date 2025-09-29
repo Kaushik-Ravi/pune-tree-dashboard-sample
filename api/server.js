@@ -280,3 +280,5 @@ app.get('/api/sun-path', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
+
+module.exports = app; // ADD THIS LINE
