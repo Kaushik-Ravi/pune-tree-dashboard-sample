@@ -1,4 +1,6 @@
 // src/components/map/ThreeDTreesLayer.tsx
+
+// ... (keep all your imports and type definitions at the top of the file the same) ...
 import React, { useState, useEffect, useMemo } from 'react';
 import { Source, Layer } from 'react-map-gl/maplibre';
 import type { LayerProps } from 'react-map-gl/maplibre';
@@ -21,54 +23,61 @@ type ThreeDGeoJSON = FeatureCollection<Point, ThreeDTreeFeatureProperties>;
 interface ThreeDTreesLayerProps {
   bounds: { sw: [number, number]; ne: [number, number] } | null;
   selectedTreeId: string | null;
+  is3D: boolean;
 }
 
-// --- FIX: Removed invalid 'fill-extrusion-cast-shadows' property from all styles ---
-const trunkLayerStyle: LayerProps = {
-  id: 'tree-trunks-3d',
-  type: 'fill-extrusion',
-  paint: {
-    'fill-extrusion-color': '#8B4513',
-    'fill-extrusion-height': ['get', 'trunkHeight'],
-    'fill-extrusion-base': 0,
-  }
-};
+// --- START: REPLACEMENT CODE ---
 
-const canopyLayerStyle: LayerProps = {
-  id: 'tree-canopies-3d',
-  type: 'fill-extrusion',
-  paint: {
-    'fill-extrusion-color': '#2E7D32',
-    'fill-extrusion-height': ['get', 'height'],
-    'fill-extrusion-base': ['get', 'base'],
-  }
-};
-
-const highlightedTrunkLayerStyle: LayerProps = {
-    id: 'tree-trunks-3d-highlight',
-    type: 'fill-extrusion',
-    paint: {
-        'fill-extrusion-color': '#ffc107',
-        'fill-extrusion-height': ['get', 'trunkHeight'],
-        'fill-extrusion-base': 0,
-        'fill-extrusion-opacity': 1,
-    }
-};
-
-const highlightedCanopyLayerStyle: LayerProps = {
-    id: 'tree-canopies-3d-highlight',
-    type: 'fill-extrusion',
-    paint: {
-        'fill-extrusion-color': '#ffeb3b',
-        'fill-extrusion-height': ['get', 'height'],
-        'fill-extrusion-base': ['get', 'base'],
-        'fill-extrusion-opacity': 1,
-    }
-};
-
-
-const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTreeId }) => {
+const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTreeId, is3D }) => {
   const [treeData, setTreeData] = useState<ThreeDGeoJSON | null>(null);
+
+  // --- Style objects are now INSIDE the component and wrapped in useMemo ---
+  const trunkLayerStyle: LayerProps = useMemo(() => ({
+    id: 'tree-trunks-3d',
+    type: 'fill-extrusion',
+    layout: { visibility: is3D ? 'visible' : 'none' },
+    paint: {
+      'fill-extrusion-color': '#8B4513',
+      'fill-extrusion-height': ['get', 'trunkHeight'],
+      'fill-extrusion-base': 0,
+    }
+  }), [is3D]);
+
+  const canopyLayerStyle: LayerProps = useMemo(() => ({
+    id: 'tree-canopies-3d',
+    type: 'fill-extrusion',
+    layout: { visibility: is3D ? 'visible' : 'none' },
+    paint: {
+      'fill-extrusion-color': '#2E7D32',
+      'fill-extrusion-height': ['get', 'height'],
+      'fill-extrusion-base': ['get', 'base'],
+    }
+  }), [is3D]);
+
+  const highlightedTrunkLayerStyle: LayerProps = useMemo(() => ({
+      id: 'tree-trunks-3d-highlight',
+      type: 'fill-extrusion',
+      layout: { visibility: is3D ? 'visible' : 'none' },
+      paint: {
+          'fill-extrusion-color': '#ffc107',
+          'fill-extrusion-height': ['get', 'trunkHeight'],
+          'fill-extrusion-base': 0,
+          'fill-extrusion-opacity': 1,
+      }
+  }), [is3D]);
+
+  const highlightedCanopyLayerStyle: LayerProps = useMemo(() => ({
+      id: 'tree-canopies-3d-highlight',
+      type: 'fill-extrusion',
+      layout: { visibility: is3D ? 'visible' : 'none' },
+      paint: {
+          'fill-extrusion-color': '#ffeb3b',
+          'fill-extrusion-height': ['get', 'height'],
+          'fill-extrusion-base': ['get', 'base'],
+          'fill-extrusion-opacity': 1,
+      }
+  }), [is3D]);
+
 
   useEffect(() => {
     if (bounds) {

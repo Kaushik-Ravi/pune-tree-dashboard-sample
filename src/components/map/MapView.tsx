@@ -247,19 +247,24 @@ const MapView: React.FC<MapViewProps> = ({
         onZoom={(e) => setZoom(e.viewState.zoom)}
         fog={fog}
       >
-        {!is3D && (
-          <Source id="trees" type="vector" url={vectorSourceUrl}>
-            <Layer {...treeLayerStyle} />
-            <Layer {...treeLayerHighlightStyle} />
-          </Source>
-        )}
+        
+        
+        <Source id="trees" type="vector" url={vectorSourceUrl}>
+          <Layer {...treeLayerStyle} layout={{ visibility: is3D ? 'none' : 'visible' }} />
+          <Layer {...treeLayerHighlightStyle} layout={{ visibility: is3D ? 'none' : 'visible' }} />
+        </Source>
+        
         {showLSTOverlay && (
           <Source id="lst-image-source" type="image" url={lstImageUrl} coordinates={lstImageBounds}>
             <Layer id="lst-image-layer" type="raster" source="lst-image-source" paint={{ 'raster-opacity': 0.65 }} />
           </Source>
         )}
-        {is3D && <Layer {...buildings3DLayerStyle} />}
-        {is3D && <ThreeDTreesLayer bounds={viewBounds} selectedTreeId={selectedTreeId} />}
+        <Layer {...buildings3DLayerStyle} layout={{ visibility: is3D ? 'visible' : 'none' }} />
+        <ThreeDTreesLayer
+          bounds={viewBounds}
+          selectedTreeId={selectedTreeId}
+          is3D={is3D} // We pass the is3D prop down to this component
+        />
 
         <DrawControl
           ref={drawControlRef as any}
