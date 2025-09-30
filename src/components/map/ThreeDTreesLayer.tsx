@@ -1,6 +1,4 @@
 // src/components/map/ThreeDTreesLayer.tsx
-
-// ... (keep all your imports and type definitions at the top of the file the same) ...
 import React, { useState, useEffect, useMemo } from 'react';
 import { Source, Layer } from 'react-map-gl/maplibre';
 import type { LayerProps } from 'react-map-gl/maplibre';
@@ -9,6 +7,12 @@ import * as turf from '@turf/turf';
 import type { FeatureCollection, Point, Feature, Polygon } from 'geojson';
 
 const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
+
+// --- Helper: Create an empty FeatureCollection ---
+const emptyFeatureCollection = (): FeatureCollection<Polygon> => ({
+  type: 'FeatureCollection',
+  features: [],
+});
 
 interface ThreeDTreeFeatureProperties {
   id: string;
@@ -26,10 +30,9 @@ interface ThreeDTreesLayerProps {
   is3D: boolean;
 }
 
-// --- START: REPLACEMENT CODE ---
-
 const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTreeId, is3D }) => {
-  const [treeData, setTreeData] = useState<ThreeDGeoJSON | null>(null);
+  // FIX: Initialize with an empty FeatureCollection, not null.
+  const [treeData, setTreeData] = useState<ThreeDGeoJSON>({ type: 'FeatureCollection', features: [] });
 
   // --- Style objects are now INSIDE the component and wrapped in useMemo ---
   const trunkLayerStyle: LayerProps = useMemo(() => ({
@@ -80,25 +83,28 @@ const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTre
 
 
   useEffect(() => {
-    if (bounds) {
+    // FIX: Only fetch data if we are in 3D mode AND have bounds.
+    if (bounds && is3D) {
       const fetchTreeData = async () => {
         try {
           const response = await axios.post(`${API_BASE_URL}/api/trees-in-bounds`, { bounds });
           setTreeData(response.data);
         } catch (error) {
           console.error('Failed to fetch 3D tree data:', error);
-          setTreeData(null);
+          setTreeData({ type: 'FeatureCollection', features: [] });
         }
       };
       fetchTreeData();
-    } else {
-      setTreeData(null);
+    } else if (!is3D) {
+      // When switching to 2D, clear the data but don't set to null
+      setTreeData({ type: 'FeatureCollection', features: [] });
     }
-  }, [bounds]);
+  }, [bounds, is3D]);
 
   const { trunkFeatures, canopyFeatures } = useMemo(() => {
-    if (!treeData || !treeData.features) {
-      return { trunkFeatures: null, canopyFeatures: null };
+    // FIX: If there's no data, return empty collections, not null.
+    if (!treeData || !treeData.features || treeData.features.length === 0) {
+      return { trunkFeatures: emptyFeatureCollection(), canopyFeatures: emptyFeatureCollection() };
     }
 
     const trunks: Feature<Polygon>[] = [];
@@ -142,7 +148,7 @@ const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTre
   }, [treeData]);
   
   const { highlightedTrunk, highlightedCanopy } = useMemo(() => {
-    if (!selectedTreeId || !trunkFeatures || !canopyFeatures) {
+    if (!selectedTreeId || !trunkFeatures || trunkFeatures.features.length === 0) {
       return { highlightedTrunk: null, highlightedCanopy: null };
     }
     const trunk = trunkFeatures.features.find(f => f.properties?.id === selectedTreeId);
@@ -154,9 +160,7 @@ const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTre
     };
   }, [selectedTreeId, trunkFeatures, canopyFeatures]);
 
-  if (!trunkFeatures || !canopyFeatures) {
-    return null;
-  }
+  // FIX: The guard clause that caused unmounting has been removed.
 
   return (
     <>
