@@ -6,6 +6,7 @@ import Sidebar from './components/sidebar/Sidebar';
 import TemperaturePredictionChart from './components/common/TemperaturePredictionChart';
 import { ArchetypeData } from './store/TreeStore';
 import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl';
+import UserTour from './components/tour/UserTour'; // NEW: Import the tour component
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false); // Start with sidebar closed on mobile
@@ -61,6 +62,12 @@ function App() {
 
   return (
     <div className="dashboard-layout">
+      {/* NEW: Integrate the UserTour component */}
+      <UserTour 
+        setSidebarOpen={setSidebarOpen}
+        setActiveTabIndex={setActiveTabIndex}
+      />
+      
       <Header />
       <div className="dashboard-content">
         <MapView 
@@ -94,7 +101,7 @@ function App() {
           baseMap={baseMap}
           changeBaseMap={handleChangeBaseMap}
           showLSTOverlay={showLSTOverlay}
-          toggleLSTOverlay={handleToggleLSTOverlay}
+          toggleLSTOverlay={toggleLSTOverlay}
           lstMinValue={LST_MIN_VALUE_FOR_LEGEND_AND_CHART}
           lstMaxValue={LST_MAX_VALUE_FOR_LEGEND_AND_CHART}
           setShowTemperatureChart={setShowTemperatureChart}
