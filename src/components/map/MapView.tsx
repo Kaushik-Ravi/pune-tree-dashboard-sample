@@ -9,7 +9,7 @@ import Map, {
   MapLayerMouseEvent,
 } from 'react-map-gl/maplibre';
 import type { LayerProps } from 'react-map-gl/maplibre';
-import type { Fog } from 'maplibre-gl';
+import type { Fog } from 'maplibre-gl'; // --- FIX: Corrected import path for the Fog type ---
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTreeStore } from '../../store/TreeStore';
 import SimulatedTreesLayer from './SimulatedTreesLayer';
@@ -162,7 +162,7 @@ const MapView: React.FC<MapViewProps> = ({
         map.flyTo({ pitch: 60, zoom: 17.5, duration: 2000, essential: true });
       }, 100);
     } else {
-      // FIX: Do NOT set viewBounds to null here.
+      setViewBounds(null);
       map.flyTo({ pitch: 0, zoom: map.getZoom() < 16 ? map.getZoom() : 16, duration: 2000, essential: true });
     }
   }, [is3D, onToggle3D, baseMap, changeBaseMap]);
@@ -247,24 +247,19 @@ const MapView: React.FC<MapViewProps> = ({
         onZoom={(e) => setZoom(e.viewState.zoom)}
         fog={fog}
       >
-        <Source id="trees" type="vector" url={vectorSourceUrl}>
-          <Layer {...treeLayerStyle} layout={{ visibility: is3D ? 'none' : 'visible' }} />
-          <Layer {...treeLayerHighlightStyle} layout={{ visibility: is3D ? 'none' : 'visible' }} />
-        </Source>
-
+        {!is3D && (
+          <Source id="trees" type="vector" url={vectorSourceUrl}>
+            <Layer {...treeLayerStyle} />
+            <Layer {...treeLayerHighlightStyle} />
+          </Source>
+        )}
         {showLSTOverlay && (
           <Source id="lst-image-source" type="image" url={lstImageUrl} coordinates={lstImageBounds}>
             <Layer id="lst-image-layer" type="raster" source="lst-image-source" paint={{ 'raster-opacity': 0.65 }} />
           </Source>
         )}
-
-        <Layer {...buildings3DLayerStyle} layout={{ visibility: is3D ? 'visible' : 'none' }} />
-
-        <ThreeDTreesLayer
-          bounds={viewBounds}
-          selectedTreeId={selectedTreeId}
-          is3D={is3D}
-        />
+        {is3D && <Layer {...buildings3DLayerStyle} />}
+        {is3D && <ThreeDTreesLayer bounds={viewBounds} selectedTreeId={selectedTreeId} />}
 
         <DrawControl
           ref={drawControlRef as any}

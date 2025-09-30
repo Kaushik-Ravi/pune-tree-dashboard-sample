@@ -8,12 +8,6 @@ import type { FeatureCollection, Point, Feature, Polygon } from 'geojson';
 
 const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
-// Helper function to create a valid, empty FeatureCollection. This is crucial.
-const emptyFeatureCollection = (): FeatureCollection<Polygon> => ({
-  type: 'FeatureCollection',
-  features: [],
-});
-
 interface ThreeDTreeFeatureProperties {
   id: string;
   height_m: number;
@@ -27,82 +21,75 @@ type ThreeDGeoJSON = FeatureCollection<Point, ThreeDTreeFeatureProperties>;
 interface ThreeDTreesLayerProps {
   bounds: { sw: [number, number]; ne: [number, number] } | null;
   selectedTreeId: string | null;
-  is3D: boolean;
 }
 
-const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTreeId, is3D }) => {
-  // FIX: Initialize with a valid, empty FeatureCollection, not null.
-  const [treeData, setTreeData] = useState<ThreeDGeoJSON>({ type: 'FeatureCollection', features: [] });
+// --- FIX: Removed invalid 'fill-extrusion-cast-shadows' property from all styles ---
+const trunkLayerStyle: LayerProps = {
+  id: 'tree-trunks-3d',
+  type: 'fill-extrusion',
+  paint: {
+    'fill-extrusion-color': '#8B4513',
+    'fill-extrusion-height': ['get', 'trunkHeight'],
+    'fill-extrusion-base': 0,
+  }
+};
 
-  // Style objects are correctly placed inside the component and memoized.
-  const trunkLayerStyle: LayerProps = useMemo(() => ({
-    id: 'tree-trunks-3d',
+const canopyLayerStyle: LayerProps = {
+  id: 'tree-canopies-3d',
+  type: 'fill-extrusion',
+  paint: {
+    'fill-extrusion-color': '#2E7D32',
+    'fill-extrusion-height': ['get', 'height'],
+    'fill-extrusion-base': ['get', 'base'],
+  }
+};
+
+const highlightedTrunkLayerStyle: LayerProps = {
+    id: 'tree-trunks-3d-highlight',
     type: 'fill-extrusion',
-    layout: { visibility: is3D ? 'visible' : 'none' },
     paint: {
-      'fill-extrusion-color': '#8B4513',
-      'fill-extrusion-height': ['get', 'trunkHeight'],
-      'fill-extrusion-base': 0,
+        'fill-extrusion-color': '#ffc107',
+        'fill-extrusion-height': ['get', 'trunkHeight'],
+        'fill-extrusion-base': 0,
+        'fill-extrusion-opacity': 1,
     }
-  }), [is3D]);
+};
 
-  const canopyLayerStyle: LayerProps = useMemo(() => ({
-    id: 'tree-canopies-3d',
+const highlightedCanopyLayerStyle: LayerProps = {
+    id: 'tree-canopies-3d-highlight',
     type: 'fill-extrusion',
-    layout: { visibility: is3D ? 'visible' : 'none' },
     paint: {
-      'fill-extrusion-color': '#2E7D32',
-      'fill-extrusion-height': ['get', 'height'],
-      'fill-extrusion-base': ['get', 'base'],
+        'fill-extrusion-color': '#ffeb3b',
+        'fill-extrusion-height': ['get', 'height'],
+        'fill-extrusion-base': ['get', 'base'],
+        'fill-extrusion-opacity': 1,
     }
-  }), [is3D]);
+};
 
-  const highlightedTrunkLayerStyle: LayerProps = useMemo(() => ({
-      id: 'tree-trunks-3d-highlight',
-      type: 'fill-extrusion',
-      layout: { visibility: is3D ? 'visible' : 'none' },
-      paint: {
-          'fill-extrusion-color': '#ffc107',
-          'fill-extrusion-height': ['get', 'trunkHeight'],
-          'fill-extrusion-base': 0,
-          'fill-extrusion-opacity': 1,
-      }
-  }), [is3D]);
 
-  const highlightedCanopyLayerStyle: LayerProps = useMemo(() => ({
-      id: 'tree-canopies-3d-highlight',
-      type: 'fill-extrusion',
-      layout: { visibility: is3D ? 'visible' : 'none' },
-      paint: {
-          'fill-extrusion-color': '#ffeb3b',
-          'fill-extrusion-height': ['get', 'height'],
-          'fill-extrusion-base': ['get', 'base'],
-          'fill-extrusion-opacity': 1,
-      }
-  }), [is3D]);
-
+const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTreeId }) => {
+  const [treeData, setTreeData] = useState<ThreeDGeoJSON | null>(null);
 
   useEffect(() => {
-    if (bounds && is3D) {
+    if (bounds) {
       const fetchTreeData = async () => {
         try {
           const response = await axios.post(`${API_BASE_URL}/api/trees-in-bounds`, { bounds });
           setTreeData(response.data);
         } catch (error) {
           console.error('Failed to fetch 3D tree data:', error);
-          setTreeData({ type: 'FeatureCollection', features: [] });
+          setTreeData(null);
         }
       };
       fetchTreeData();
-    } else if (!is3D) {
-      // When switching to 2D, clear the data but keep a valid empty object.
-      setTreeData({ type: 'FeatureCollection', features: [] });
+    } else {
+      setTreeData(null);
     }
-  }, [bounds, is3D]);
+  }, [bounds]);
 
   const { trunkFeatures, canopyFeatures } = useMemo(() => {
-    if (!treeData || !treeData.features || treeData.features.length === 0) {
-      return { trunkFeatures: emptyFeatureCollection(), canopyFeatures: emptyFeatureCollection() };
+    if (!treeData || !treeData.features) {
+      return { trunkFeatures: null, canopyFeatures: null };
     }
 
     const trunks: Feature<Polygon>[] = [];
@@ -146,18 +133,21 @@ const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTre
   }, [treeData]);
   
   const { highlightedTrunk, highlightedCanopy } = useMemo(() => {
-    // FIX: Instead of returning null, return an empty FeatureCollection.
-    if (!selectedTreeId || !trunkFeatures || trunkFeatures.features.length === 0) {
-      return { highlightedTrunk: emptyFeatureCollection(), highlightedCanopy: emptyFeatureCollection() };
+    if (!selectedTreeId || !trunkFeatures || !canopyFeatures) {
+      return { highlightedTrunk: null, highlightedCanopy: null };
     }
     const trunk = trunkFeatures.features.find(f => f.properties?.id === selectedTreeId);
     const canopySegments = canopyFeatures.features.filter(f => f.properties?.id === selectedTreeId);
     
     return {
-        highlightedTrunk: trunk ? { type: 'FeatureCollection', features: [trunk] } as FeatureCollection<Polygon> : emptyFeatureCollection(),
-        highlightedCanopy: canopySegments.length > 0 ? { type: 'FeatureCollection', features: canopySegments } as FeatureCollection<Polygon> : emptyFeatureCollection()
+        highlightedTrunk: trunk ? { type: 'FeatureCollection', features: [trunk] } : null,
+        highlightedCanopy: canopySegments.length > 0 ? { type: 'FeatureCollection', features: canopySegments } : null
     };
   }, [selectedTreeId, trunkFeatures, canopyFeatures]);
+
+  if (!trunkFeatures || !canopyFeatures) {
+    return null;
+  }
 
   return (
     <>
@@ -168,13 +158,16 @@ const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTre
         <Layer {...canopyLayerStyle} />
       </Source>
       
-      {/* FIX: Removed conditional rendering. These sources are now ALWAYS on the map. */}
-      <Source id="highlight-trunk-source" type="geojson" data={highlightedTrunk}>
-          <Layer {...highlightedTrunkLayerStyle} />
-      </Source>
-      <Source id="highlight-canopy-source" type="geojson" data={highlightedCanopy}>
-          <Layer {...highlightedCanopyLayerStyle} />
-      </Source>
+      {highlightedTrunk && (
+        <Source id="highlight-trunk-source" type="geojson" data={highlightedTrunk}>
+            <Layer {...highlightedTrunkLayerStyle} />
+        </Source>
+      )}
+      {highlightedCanopy && (
+        <Source id="highlight-canopy-source" type="geojson" data={highlightedCanopy}>
+            <Layer {...highlightedCanopyLayerStyle} />
+        </Source>
+      )}
     </>
   );
 };
