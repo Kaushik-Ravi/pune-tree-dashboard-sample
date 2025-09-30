@@ -1,11 +1,11 @@
 // src/components/sidebar/tabs/CityOverview.tsx
-import React, { useState, useEffect, useRef } from 'react';
-import { ScissorsSquare, XCircle, BarChartBig, PieChart, Info } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { XCircle, BarChartBig, Info } from 'lucide-react';
 import { Line, Pie } from 'react-chartjs-2';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler, ChartOptions
 } from 'chart.js';
-import { useTreeStore, DrawnGeoJson } from '../../../store/TreeStore';
+import { useTreeStore } from '../../../store/TreeStore';
 import InfoPopover from '../../common/InfoPopover';
 
 ChartJS.register(
@@ -15,45 +15,32 @@ ChartJS.register(
 type ChartViewType = 'co2' | 'trees';
 
 const CityOverview: React.FC = () => {
-  const {
-    cityStats,
-    wardCO2Data,
-    wardTreeCountData,
-    selectedArea,
-    setSelectedArea,
-    getStatsForPolygon, // New function from the store
-  } = useTreeStore();
-
-  const [selectedChartView, setSelectedChartView] = useState<ChartViewType>('co2'); 
-  const [showNeighbourhoodStats, setShowNeighbourhoodStats] = useState(false);
+  const { cityStats, wardCO2Data, wardTreeCountData, selectedArea, setSelectedArea, getStatsForPolygon } = useTreeStore();
+  const [selectedChartView, setSelectedChartView] = useState<ChartViewType>('co2');
   const [isCalculating, setIsCalculating] = useState(false);
   const [neighbourhoodTreeCount, setNeighbourhoodTreeCount] = useState(0);
-  const [neighbourhoodCO2, setNeighbourhoodCO2] = useState(0); // This will be in TONS now
+  const [neighbourhoodCO2, setNeighbourhoodCO2] = useState(0);
 
   useEffect(() => {
     const calculateStats = async () => {
         if (selectedArea && selectedArea.type === 'geojson' && selectedArea.geojsonData) {
             setIsCalculating(true);
-            setShowNeighbourhoodStats(true);
             const polygonStats = await getStatsForPolygon(selectedArea.geojsonData);
             if (polygonStats) {
                 setNeighbourhoodTreeCount(polygonStats.tree_count);
-                setNeighbourhoodCO2(polygonStats.co2_kg / 1000); // Convert kg to tons
+                setNeighbourhoodCO2(polygonStats.co2_kg / 1000);
             } else {
                 setNeighbourhoodTreeCount(0);
                 setNeighbourhoodCO2(0);
             }
             setIsCalculating(false);
-        } else {
-            setShowNeighbourhoodStats(false);
         }
     };
     calculateStats();
   }, [selectedArea, getStatsForPolygon]);
 
   const clearDrawnSelection = () => {
-    setSelectedArea(null); 
-    setShowNeighbourhoodStats(false);
+    setSelectedArea(null);
     setNeighbourhoodTreeCount(0);
     setNeighbourhoodCO2(0);
   };
@@ -65,7 +52,7 @@ const CityOverview: React.FC = () => {
         selectedChartView === 'co2'
         ? {
             label: 'CO₂ Sequestered (tons)',
-            data: wardCO2Data.map(w => w.co2_kg / 1000), // convert kg to tons
+            data: wardCO2Data.map(w => w.co2_kg / 1000),
             borderColor: 'rgba(46, 125, 50, 1)',
             backgroundColor: 'rgba(46, 125, 50, 0.2)',
             yAxisID: 'y',
@@ -98,7 +85,7 @@ const CityOverview: React.FC = () => {
     labels: ['In Selected Area', 'Rest of City'],
     datasets: [{ data: [neighbourhoodCO2, Math.max(0, (cityStats.total_co2_annual_kg / 1000) - neighbourhoodCO2)], backgroundColor: ['#FFC107', '#E0E0E0'], borderColor: ['#FFFFFF', '#FFFFFF'], borderWidth: 2, }],
   } : null;
-  
+
   const pieChartOptions: ChartOptions<'pie'> = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' as const, labels: { boxWidth:15, font:{size:10} } }, tooltip: { callbacks: { label: (context) => { const value = context.raw as number; let label = context.label || ''; if(label){label+=': ';} label+= value.toLocaleString('en-US', {maximumFractionDigits: 1}); return label; } } } } };
 
   return (
@@ -118,7 +105,11 @@ const CityOverview: React.FC = () => {
         <div className="card-header flex justify-between items-center"><h3 className="text-lg font-medium">Ward Statistics</h3> <BarChartBig size={20} className="text-gray-400"/></div>
         <div className="card-body space-y-3">
           <div><select value={selectedChartView} onChange={e => setSelectedChartView(e.target.value as ChartViewType)} className="input text-sm py-1.5 px-3 pr-8 rounded-md border-gray-300 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-auto" aria-label="Select chart data view"><option value="co2">CO₂ Sequestered</option><option value="trees">Number of Trees</option></select></div>
-          <div style={{ height: '280px' }}>{(wardCO2Data.length > 0 || wardTreeCountData.length > 0) ? (<Line data={lineChartData} options={lineChartOptions} />) : (<p className="text-center text-gray-500">Loading chart data...</p>)}</div>
+          <div className="overflow-x-auto">
+            <div style={{ height: '280px', minWidth: '600px' }}>
+                {(wardCO2Data.length > 0 || wardTreeCountData.length > 0) ? (<Line data={lineChartData} options={lineChartOptions} />) : (<p className="text-center text-gray-500 pt-10">Loading chart data...</p>)}
+            </div>
+          </div>
         </div>
       </div>
 

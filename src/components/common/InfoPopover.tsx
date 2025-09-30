@@ -1,5 +1,4 @@
 // src/components/common/InfoPopover.tsx
-// modified to fix popover overflow issue on mobile
 import React, { useState, useRef, useEffect } from 'react';
 import { Info, X } from 'lucide-react';
 
@@ -57,13 +56,11 @@ const InfoPopover: React.FC<InfoPopoverProps> = ({
           role="dialog"
           aria-modal="true"
           aria-labelledby="info-popover-title"
-          className={`absolute z-50 mt-2 ${popoverWidthClass}
+          className={`absolute top-full z-50 mt-2 ${popoverWidthClass}
                      max-h-[80vh] overflow-y-auto
-                     origin-top-right
+                     origin-top-right right-4 md:right-0
                      bg-white rounded-lg shadow-xl border border-gray-200
                      animate-fade-in`}
-          // Corrected positioning: right-4 on mobile, right-0 on desktop
-          style={{ top: 'calc(100% + 0.5rem)', right: '1rem' }}
         >
           <div className="p-4">
             <div className="flex justify-between items-center mb-3">

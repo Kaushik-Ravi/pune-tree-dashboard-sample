@@ -22,9 +22,9 @@
   --gray-700: #495057;
   --gray-800: #343a40;
   --gray-900: #212529;
-  --sidebar-width: 30rem; /* 320px if 1rem = 16px. Corresponds to w-80 */
-  --header-height: 57px; /* Approximate height of your Header.tsx */
-  --sidebar-tabs-height: 65px; /* Approximate height of the tab bar in Sidebar.tsx */
+  --sidebar-width: 30rem;
+  --header-height: 57px;
+  --sidebar-tabs-height: 65px;
 }
 
 body {
@@ -39,26 +39,12 @@ body {
 }
 
 #root {
-  height: 100%; /* Ensure root also takes full height */
+  height: 100%;
 }
 h1, h2, h3, h4, h5, h6 {
   @apply font-semibold;
 }
 
-.leaflet-container {
-  height: 100%;
-  width: 100%;
-}
-
-.sidebar-tab-active {
-  @apply bg-primary-600 text-white;
-}
-
-.map-controls {
-  @apply bg-white shadow-md rounded-md p-2 z-10;
-}
-
-/* Custom styling for the sidebar and map layout */
 .dashboard-layout {
   @apply flex flex-col h-full;
 }
@@ -75,182 +61,70 @@ h1, h2, h3, h4, h5, h6 {
   @apply bg-white shadow-xl flex flex-col absolute top-0 right-0 h-full z-30;
   @apply w-full md:w-[var(--sidebar-width)];
   transform: translateX(100%);
-  visibility: hidden; /* Hidden by default */
-  transition: transform 0.3s ease-in-out, visibility 0.3s;
+  visibility: hidden;
+  transition: transform 0.3s ease-in-out, visibility 0s linear 0.3s;
 }
 .sidebar-open {
   transform: translateX(0%);
-  visibility: visible; /* Becomes visible when open */
+  visibility: visible;
+  transition: transform 0.3s ease-in-out;
 }
 
-/* This class is no longer strictly needed but kept for clarity */
-.sidebar-collapsed {
-  transform: translateX(100%);
-  visibility: hidden;
+/* NEW: Peek state for mobile sidebar */
+.sidebar-peek {
+  transform: translateX(85%);
+  visibility: visible;
+  transition: transform 0.3s ease-in-out;
 }
 
 .sidebar-content-area {
-  height: calc(100vh - var(--header-height) - var(--sidebar-tabs-height)); /* Fallback */
-  height: calc(100dvh - var(--header-height) - var(--sidebar-tabs-height)); /* Corrected height */
+  height: calc(100vh - var(--header-height) - var(--sidebar-tabs-height));
+  height: calc(100dvh - var(--header-height) - var(--sidebar-tabs-height));
   overflow-y: auto;
   flex-grow: 1;
   scrollbar-width: thin;
   scrollbar-color: #a0aec0 #edf2f7;
 }
 
-.sidebar-content-area::-webkit-scrollbar {
-  width: 6px;
-}
+.sidebar-content-area::-webkit-scrollbar { width: 6px; }
+.sidebar-content-area::-webkit-scrollbar-track { background: transparent; }
+.sidebar-content-area::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 6px; }
+.sidebar-content-area::-webkit-scrollbar-thumb:hover { background: #a0aec0; }
 
-.sidebar-content-area::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.sidebar-content-area::-webkit-scrollbar-thumb {
-  background: #cbd5e0;
-  border-radius: 6px;
-}
-
-.sidebar-content-area::-webkit-scrollbar-thumb:hover {
-  background: #a0aec0;
-}
-
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.hide-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 .shadow-top-lg {
   box-shadow: 0 -10px 15px -3px rgba(0, 0, 0, 0.1), 0 -4px 6px -2px rgba(0, 0, 0, 0.05);
 }
-
-.leaflet-container {
-  height: 100%;
-  width: 100%;
-  background-color: #f0f0f0;
-}
-
-.sidebar .overflow-y-auto {
-  flex-grow: 1;
-}
-.map-legend {
-  @apply bg-white bg-opacity-90 p-3 rounded-md shadow-md text-sm;
-}
-
-.toggle-button {
-  @apply flex items-center justify-center w-8 h-8 rounded-full bg-primary-600 text-white shadow-md;
-}
-
-.toggle-button:hover {
-  @apply bg-primary-700;
-}
-
-.btn {
-  @apply inline-flex items-center px-4 py-2 rounded-md font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2;
-}
-
-.btn-primary {
-  @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
-}
-
-.btn-secondary {
-  @apply bg-secondary-600 text-white hover:bg-secondary-700 focus:ring-secondary-500;
-}
-
-.btn-outline {
-  @apply border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-primary-500;
-}
-
-.input {
-  @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500;
-}
-
-.card {
-  @apply bg-white rounded-lg shadow-md overflow-hidden;
-}
-
-.card-header {
-  @apply px-4 py-3 bg-gray-50 border-b border-gray-200;
-}
-
-.card-body {
-  @apply px-4 py-3;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.2s ease-out;
-}
-
-.tree-marker {
-  border-radius: 50%;
-  width: 8px;
-  height: 8px;
-  background-color: var(--primary-color);
-  border: 1px solid white;
-  transition: all 0.2s ease;
-}
-
-.tree-marker:hover {
-  width: 12px;
-  height: 12px;
-  background-color: var(--accent-color);
-}
-
-.tree-popup {
-  min-width: 200px;
-}
-
-.tab-nav {
-  @apply flex border-b border-gray-200;
-}
-
-.tab-item {
-  @apply px-4 py-2 font-medium text-gray-600 border-b-2 border-transparent hover:text-primary-600 hover:border-primary-300 cursor-pointer;
-}
-
-.tab-item-active {
-  @apply text-primary-600 border-primary-600;
-}
-
-.search-container {
-  @apply absolute top-4 left-4 z-10 w-64;
-}
-.search-input {
-  @apply pl-10 pr-4 py-2 w-full bg-white rounded-md shadow-md focus:outline-none focus:ring-2 focus:ring-primary-500;
-}
-.search-icon {
-  @apply absolute left-3 top-1/2 -translate-y-1/2 text-gray-500;
-}
-.map-controls {
-  @apply bg-white shadow-md rounded-md p-0.5 z-[1000];
-}
-.map-controls button {
-  @apply p-2;
-}
-
-.leaflet-bar {
-  @apply shadow-lg z-[1000];
-}
-.leaflet-control-geocoder.leaflet-bar {
-}
-
-.tree-popup { min-width: 200px; }
 
 .chart-container {
   @apply absolute bottom-0 left-0 z-20 bg-white border-t-2 border-gray-300 shadow-top-lg;
   right: 0;
   transition: right 0.3s ease-in-out;
 }
-
 .chart-container-sidebar-open {
   @apply md:right-[var(--sidebar-width)];
 }
 
+.collapsible-trigger {
+  @apply w-full flex justify-between items-center text-left;
+}
+.collapsible-content {
+  overflow: hidden;
+  transition: max-height 0.3s ease-in-out;
+}
+.collapsible-content-closed {
+  max-height: 0;
+}
+
+.btn { @apply inline-flex items-center px-4 py-2 rounded-md font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2; }
+.btn-primary { @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500; }
+.btn-outline { @apply border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-primary-500; }
+.input { @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500; }
+.card { @apply bg-white rounded-lg shadow-md overflow-hidden; }
+.card-header { @apply px-4 py-3 bg-gray-50 border-b border-gray-200; }
+.card-body { @apply px-4 py-3; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.animate-fade-in { animation: fadeIn 0.3s ease-in-out; }

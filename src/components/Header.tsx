@@ -1,7 +1,7 @@
 // src/components/Header.tsx
 import React from 'react';
-import { Leaf } from 'lucide-react'; 
-import InfoPopover from './common/InfoPopover'; // CORRECTED IMPORT PATH
+import { Leaf } from 'lucide-react';
+import InfoPopover from './common/InfoPopover';
 
 const Header: React.FC = () => {
   const headerInfoContent = (
@@ -17,7 +17,7 @@ const Header: React.FC = () => {
   );
 
   return (
-    <header className="bg-primary-600 text-white shadow-md">
+    <header className="bg-primary-600 text-white shadow-md relative z-20">
       <div className="container mx-auto px-4 py-3 flex items-center">
         <Leaf size={24} className="mr-2" />
         <h1 className="text-xl font-bold">Pune Urban Tree Dashboard</h1>
