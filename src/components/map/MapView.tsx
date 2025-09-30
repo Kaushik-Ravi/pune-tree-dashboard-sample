@@ -10,7 +10,7 @@ import Map, {
   ViewStateChangeEvent,
 } from 'react-map-gl/maplibre';
 import type { LayerProps } from 'react-map-gl/maplibre';
-import type { Fog, LngLatBounds } from 'maplibre-gl';
+import type { Fog } from 'maplibre-gl';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTreeStore } from '../../store/TreeStore';
 import SimulatedTreesLayer from './SimulatedTreesLayer';
@@ -86,8 +86,6 @@ const MapView: React.FC<MapViewProps> = ({
   const { setSelectedArea } = useTreeStore();
   const drawControlRef = useRef<{ draw: MapboxDraw } | null>(null);
   const [zoom, setZoom] = useState(11.5);
-
-  // FIX: The state for fetching 3D data is now correctly defined here.
   const [mapBounds, setMapBounds] = useState<{ sw: [number, number]; ne: [number, number] } | null>(null);
   
   const mapTilerKey = import.meta.env.VITE_MAPTILER_KEY;
@@ -145,11 +143,12 @@ const MapView: React.FC<MapViewProps> = ({
     };
   }, [is3D, lightConfig]);
   
-  // FIX: The logic for toggling 3D is now simpler and more robust.
   const handleToggle3D = useCallback(() => {
-    onToggle3D();
+    // FIX: Added guard clause to ensure mapRef.current is not null.
     const map = mapRef.current;
     if (!map) return;
+
+    onToggle3D();
 
     if (!is3D) { // Transitioning TO 3D
       if (baseMap !== 'streets') {
@@ -157,7 +156,6 @@ const MapView: React.FC<MapViewProps> = ({
       }
       setTimeout(() => {
         map.flyTo({ pitch: 60, zoom: 17.5, duration: 2000, essential: true });
-        // After flying, set the initial bounds to trigger the first data fetch
         const bounds = map.getBounds();
         setMapBounds({
           sw: [bounds.getWest(), bounds.getSouth()],
@@ -169,10 +167,13 @@ const MapView: React.FC<MapViewProps> = ({
     }
   }, [is3D, onToggle3D, baseMap, changeBaseMap]);
 
-  // FIX: This new handler is the correct way to update data for the 3D view.
   const handleMoveEnd = useCallback((e: ViewStateChangeEvent) => {
+    // FIX: Added guard clause to ensure mapRef.current is not null.
+    const map = mapRef.current;
+    if (!map) return;
+
     if (is3D && e.viewState.zoom >= 16) {
-      const bounds = mapRef.current.getBounds();
+      const bounds = map.getBounds();
       setMapBounds({
         sw: [bounds.getWest(), bounds.getSouth()],
         ne: [bounds.getEast(), bounds.getNorth()],
@@ -231,17 +232,17 @@ const MapView: React.FC<MapViewProps> = ({
   }, [onTreeSelect, is3D]);
 
   const handleMouseMove = useCallback((event: MapLayerMouseEvent) => {
-    if (is3D) return;
+    // FIX: Added guard clause to ensure mapRef.current is not null.
     const map = mapRef.current?.getMap();
-    if (!map) return;
+    if (!map || is3D) return;
+    
     const treeFeature = event.features?.find(f => f.layer.id === treeLayerStyle.id);
     map.getCanvas().style.cursor = treeFeature ? 'pointer' : '';
     map.setFilter('trees-point-highlight', ['==', 'Tree_ID', treeFeature ? treeFeature.properties.Tree_ID : '']);
   }, [is3D]);
   
   const interactiveLayers = useMemo(() => {
-    const layers = [treeLayerStyle.id, 'tree-trunks-3d', 'tree-canopies-3d'];
-    return layers.filter(Boolean) as string[];
+    return [treeLayerStyle.id, 'tree-trunks-3d', 'tree-canopies-3d'];
   }, []);
 
   return (
@@ -255,7 +256,7 @@ const MapView: React.FC<MapViewProps> = ({
         onClick={handleMapClick}
         onMouseMove={handleMouseMove}
         onZoom={(e) => setZoom(e.viewState.zoom)}
-        onMoveEnd={handleMoveEnd} // FIX: Added the move end handler here
+        onMoveEnd={handleMoveEnd}
         fog={fog}
       >
         <Source id="trees" type="vector" url={vectorSourceUrl}>
@@ -272,7 +273,7 @@ const MapView: React.FC<MapViewProps> = ({
         <Layer {...buildings3DLayerStyle} layout={{ visibility: is3D ? 'visible' : 'none' }} />
 
         <ThreeDTreesLayer
-          bounds={mapBounds} // FIX: Pass the new state variable here
+          bounds={mapBounds}
           selectedTreeId={selectedTreeId}
           is3D={is3D}
         />
