@@ -6,7 +6,7 @@ import axios from 'axios';
 import * as turf from '@turf/turf';
 import type { FeatureCollection, Point, Feature, Polygon } from 'geojson';
 
-const API_BASE_URL = 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
 interface ThreeDTreeFeatureProperties {
   id: string;
