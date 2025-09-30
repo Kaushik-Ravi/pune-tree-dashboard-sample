@@ -140,8 +140,8 @@ const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTre
     const canopySegments = canopyFeatures.features.filter(f => f.properties?.id === selectedTreeId);
     
     return {
-        highlightedTrunk: trunk ? { type: 'FeatureCollection', features: [trunk] } : null,
-        highlightedCanopy: canopySegments.length > 0 ? { type: 'FeatureCollection', features: canopySegments } : null
+        highlightedTrunk: trunk ? { type: 'FeatureCollection', features: [trunk] } as FeatureCollection<Polygon> : null,
+        highlightedCanopy: canopySegments.length > 0 ? { type: 'FeatureCollection', features: canopySegments } as FeatureCollection<Polygon> : null
     };
   }, [selectedTreeId, trunkFeatures, canopyFeatures]);
 
