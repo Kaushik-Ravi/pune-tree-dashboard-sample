@@ -129,7 +129,7 @@ const MapView: React.FC<MapViewProps> = ({
         map.off('styledata', setup3DEnvironment);
     };
   
-  }, [is3D, lightConfig, mapTilerKey]); // Dependency array is correct, mapStyleUrl removed to prevent re-triggering
+  }, [is3D, lightConfig, mapTilerKey]);
 
   const fog = useMemo((): Fog | undefined => {
     if (!is3D || !lightConfig) {
@@ -144,7 +144,6 @@ const MapView: React.FC<MapViewProps> = ({
     };
   }, [is3D, lightConfig]);
   
-  // FIX: This logic is now simplified and safe.
   const handleToggle3D = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -152,19 +151,16 @@ const MapView: React.FC<MapViewProps> = ({
     onToggle3D();
 
     if (!is3D) { // Transitioning TO 3D
-      // We no longer change the basemap here.
       map.flyTo({ pitch: 60, zoom: 17.5, duration: 2000, essential: true });
     } else { // Transitioning TO 2D
       map.flyTo({ pitch: 0, zoom: map.getZoom() < 16 ? map.getZoom() : 16, duration: 2000, essential: true });
     }
   }, [is3D, onToggle3D]);
 
-  // This handler correctly fetches data when the map stops moving in 3D mode.
-  const handleMoveEnd = useCallback((e: ViewStateChangeEvent) => {
+  // This is the core of the fix. It only updates bounds when the map is idle.
+  const handleMapIdle = useCallback(() => {
     const map = mapRef.current;
-    if (!map) return;
-
-    if (is3D && e.viewState.zoom >= 16) {
+    if (map && is3D && map.getZoom() >= 16) {
       const bounds = map.getBounds();
       setMapBounds({
         sw: [bounds.getWest(), bounds.getSouth()],
@@ -234,7 +230,7 @@ const MapView: React.FC<MapViewProps> = ({
   
   const interactiveLayers = useMemo(() => {
     const layerIds = [treeLayerStyle.id, 'tree-trunks-3d', 'tree-canopies-3d'];
-    return layerIds.filter(id => typeof id === 'string');
+    return layerIds.filter((id): id is string => typeof id === 'string');
   }, []);
 
   return (
@@ -248,7 +244,7 @@ const MapView: React.FC<MapViewProps> = ({
         onClick={handleMapClick}
         onMouseMove={handleMouseMove}
         onZoom={(e) => setZoom(e.viewState.zoom)}
-        onMoveEnd={handleMoveEnd}
+        onIdle={handleMapIdle} // Use the onIdle event for fetching data.
         fog={fog}
       >
         <Source id="trees" type="vector" url={vectorSourceUrl}>
