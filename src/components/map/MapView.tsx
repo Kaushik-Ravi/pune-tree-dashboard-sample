@@ -7,10 +7,11 @@ import Map, {
   MapRef,
   NavigationControl,
   MapLayerMouseEvent,
+  type MapLibreEvent
 } from 'react-map-gl/maplibre';
 import type { LayerProps } from 'react-map-gl/maplibre';
 import type { Fog } from 'maplibre-gl';
-import { ChevronLeft, ChevronRight, LayoutDashboard } from 'lucide-react'; // Import new icon
+import { ChevronLeft, ChevronRight, LayoutDashboard } from 'lucide-react';
 import { useTreeStore } from '../../store/TreeStore';
 import SimulatedTreesLayer from './SimulatedTreesLayer';
 import DrawControl, { DrawEvent, DrawActionEvent } from './DrawControl';
@@ -200,39 +201,74 @@ const MapView: React.FC<MapViewProps> = ({
   const PUNE_TREES_TILESET_ID = '0197f37a-c205-7e6f-8c64-151bca4d9195';
   const vectorSourceUrl = `https://api.maptiler.com/tiles/${PUNE_TREES_TILESET_ID}/tiles.json?key=${mapTilerKey}`;
 
-  const handleMapClick = useCallback((event: MapLayerMouseEvent) => {
-    const features = event.features;
-    if (!features || features.length === 0) return;
-
-    if (is3D) {
-      const threeDFeature = features.find(f => f.layer.id === 'tree-canopies-3d' || f.layer.id === 'tree-trunks-3d');
-      if (threeDFeature && threeDFeature.properties?.id) {
-        onTreeSelect(threeDFeature.properties.id);
-      }
-    } else {
-      const treeFeature = features.find(f => f.layer.id === treeLayerStyle.id);
-      if (treeFeature) {
-        onTreeSelect(treeFeature.properties.Tree_ID);
-      }
-    }
-  }, [onTreeSelect, is3D]);
-
-  const handleMouseMove = useCallback((event: MapLayerMouseEvent) => {
-    if (is3D) return;
+  // --- NEW: Direct, robust event handling ---
+  useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
-    const treeFeature = event.features?.find(f => f.layer.id === treeLayerStyle.id);
-    map.getCanvas().style.cursor = treeFeature ? 'pointer' : '';
-    map.setFilter('trees-point-highlight', ['==', 'Tree_ID', treeFeature ? treeFeature.properties.Tree_ID : '']);
-  }, [is3D]);
 
-  const interactiveLayers = useMemo(() => {
-    const layers = [treeLayerStyle.id];
-    if (is3D) {
-      layers.push('tree-trunks-3d', 'tree-canopies-3d');
-    }
-    return layers.filter(Boolean) as string[];
-  }, [is3D]);
+    // Define layers to listen on for clarity
+    const twoDTreeLayer = 'trees-point';
+    const threeDTreeLayers = ['tree-canopies-3d', 'tree-trunks-3d'];
+    const allInteractiveTreeLayers = [twoDTreeLayer, ...threeDTreeLayers];
+
+    // --- CLICK/TAP HANDLER ---
+    const handleTreeClick = (e: MapLibreEvent<MouseEvent | TouchEvent> & { features?: MapLayerMouseEvent['features'] }) => {
+      // Prevent map click from firing if a draw action is happening
+      if (drawControlRef.current?.draw.getMode().startsWith('draw')) return;
+      if (!e.features || e.features.length === 0) return;
+
+      let treeId: string | undefined;
+      const feature = e.features[0];
+      
+      // Check if the clicked feature belongs to any of our designated tree layers
+      if (feature.layer.id && allInteractiveTreeLayers.includes(feature.layer.id) && feature.properties) {
+          // 3D layers use 'id', 2D vector tile layer uses 'Tree_ID'
+          treeId = feature.properties.id || feature.properties.Tree_ID;
+      }
+
+      if (treeId) {
+        onTreeSelect(String(treeId));
+      }
+    };
+    
+    // Attach a single click listener to the map.
+    // We will check the layer ID inside the handler.
+    map.on('click', handleTreeClick);
+
+    // --- HOVER HANDLER (Desktop Only) ---
+    const handleMouseMove = (e: MapLayerMouseEvent) => {
+      if (is3D || !e.features || e.features.length === 0) {
+        map.getCanvas().style.cursor = '';
+        map.setFilter('trees-point-highlight', ['==', 'Tree_ID', '']);
+        return;
+      }
+      const treeFeature = e.features.find(f => f.layer.id === twoDTreeLayer);
+      if (treeFeature) {
+        map.getCanvas().style.cursor = 'pointer';
+        map.setFilter('trees-point-highlight', ['==', 'Tree_ID', treeFeature.properties.Tree_ID]);
+      } else {
+        map.getCanvas().style.cursor = '';
+        map.setFilter('trees-point-highlight', ['==', 'Tree_ID', '']);
+      }
+    };
+    
+    const handleMouseLeave = () => {
+      if (is3D) return;
+      map.getCanvas().style.cursor = '';
+      map.setFilter('trees-point-highlight', ['==', 'Tree_ID', '']);
+    };
+    
+    // We listen on the map for mousemove, but only act if the feature is on the correct layer
+    map.on('mousemove', handleMouseMove);
+    map.on('mouseleave', twoDTreeLayer, handleMouseLeave); // Can be specific here
+
+    // --- Cleanup function ---
+    return () => {
+      map.off('click', handleTreeClick);
+      map.off('mousemove', handleMouseMove);
+      map.off('mouseleave', twoDTreeLayer, handleMouseLeave);
+    };
+  }, [mapRef, onTreeSelect, is3D]); // Rerun this effect if 3D state changes.
 
   return (
     <div className="map-container">
@@ -241,9 +277,7 @@ const MapView: React.FC<MapViewProps> = ({
         initialViewState={{ longitude: 73.8567, latitude: 18.5204, zoom: 11.5 }}
         style={{ width: '100%', height: '100%' }}
         mapStyle={mapStyleUrl}
-        interactiveLayerIds={interactiveLayers}
-        onClick={handleMapClick}
-        onMouseMove={handleMouseMove}
+        // onClick and onMouseMove props are now removed to favor the direct event handlers
         onZoom={(e) => setZoom(e.viewState.zoom)}
         fog={fog}
       >
@@ -277,7 +311,6 @@ const MapView: React.FC<MapViewProps> = ({
       
       <ViewModeToggle is3D={is3D} onToggle={handleToggle3D} zoom={zoom} />
       
-      {/* Sidebar Toggle for Desktop */}
       <button
         className={`absolute top-1/2 -translate-y-1/2 z-20 bg-white p-2 shadow-xl hover:bg-gray-100 transition-all duration-300 ease-in-out border-t border-b border-gray-300 hidden md:flex ${sidebarOpen ? 'right-[var(--sidebar-width)] rounded-l-md' : 'right-0 rounded-r-md'}`}
         onClick={toggleSidebar}
@@ -287,7 +320,6 @@ const MapView: React.FC<MapViewProps> = ({
         {sidebarOpen ? <ChevronRight size={20} className="text-gray-700" /> : <ChevronLeft size={20} className="text-gray-700" />}
       </button>
 
-      {/* Sidebar Toggle for Mobile */}
       <button
         onClick={toggleSidebar}
         className="md:hidden absolute bottom-5 right-5 z-20 bg-primary-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center hover:bg-primary-700 active:bg-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
