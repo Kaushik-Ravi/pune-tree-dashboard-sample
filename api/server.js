@@ -1,31 +1,20 @@
 // server/server.js
+//added new line
 const fs = require('fs');
-const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+const path = require('path'); // ADD THIS
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') }); // REPLACE WITH THIS
 
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
-const SunCalc = require('suncalc');
+const SunCalc = require('suncalc'); // --- ADDED: For sun position calculations ---
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // --- Middleware ---
-// FIX: Implement a robust CORS policy for production and development
-const allowedOrigins = ['http://localhost:5173'];
-const vercelUrl = process.env.VERCEL_URL;
-if (vercelUrl) {
-  allowedOrigins.push(`https://${'pune-tree-dashboard-sample-main.vercel.app'}`);
-}
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  }
+  origin: 'http://localhost:5173'
 }));
 app.use(express.json());
 
@@ -52,6 +41,8 @@ pool.connect((err, client, release) => {
 
 
 // --- API Endpoints ---
+
+// NO CHANGES to existing, working endpoints. They remain untouched.
 
 app.get('/api/trees/:id', async (req, res) => {
   const { id } = req.params;
@@ -136,9 +127,10 @@ app.post('/api/stats-in-polygon', async (req, res) => {
     }
 });
 
-// REFACTORED API ENDPOINT FOR PLANTING ADVISOR
+// --- NEW API ENDPOINT FOR PLANTING ADVISOR ---
 app.get('/api/tree-archetypes', async (req, res) => {
   try {
+    // We only select Summer data for direct comparison, as it represents the peak cooling need.
     const query = `
       SELECT *
       FROM public.tree_archetypes
@@ -147,28 +139,38 @@ app.get('/api/tree-archetypes', async (req, res) => {
     `;
     const { rows } = await pool.query(query);
 
-    // More performant single-pass grouping using a Map
-    const speciesMap = new Map();
-    rows.forEach(archetype => {
-      if (!speciesMap.has(archetype.botanical_name)) {
-        speciesMap.set(archetype.botanical_name, {
+    // Group the flat list of archetypes by the truncated botanical_name, which is our unique species key
+    const groupedBySpecies = rows.reduce((acc, archetype) => {
+      let speciesGroup = acc.find(s => s.botanical_name === archetype.botanical_name);
+      
+      if (!speciesGroup) {
+        // If the species group doesn't exist, create it.
+        const allArchetypesForThisSpecies = rows.filter(r => r.botanical_name === archetype.botanical_name);
+        
+        // Find the single best archetype for this species based on the highest P90 cooling effect.
+        // This 'best' archetype will be used for ranking in the "Top 3" list.
+        const bestArchetype = allArchetypesForThisSpecies.reduce((best, current) => {
+            return current.p90_cooling_effect_celsius > best.p90_cooling_effect_celsius ? current : best;
+        }, allArchetypesForThisSpecies[0]);
+
+        speciesGroup = {
           common_name: archetype.common_name,
           botanical_name: archetype.botanical_name,
-          representative_archetype: archetype, // Initially set the first one
+          // Store the entire best archetype object. This gives the frontend all info needed
+          // for the "Top 3" display and for auto-filling when a top species is clicked.
+          representative_archetype: bestArchetype,
           archetypes: []
-        });
+        };
+        acc.push(speciesGroup);
       }
-      const speciesGroup = speciesMap.get(archetype.botanical_name);
+      
+      // Add the current archetype to its species group
       speciesGroup.archetypes.push(archetype);
+      
+      return acc;
+    }, []);
 
-      // Update the representative archetype if the current one has better cooling
-      if (archetype.p90_cooling_effect_celsius > speciesGroup.representative_archetype.p90_cooling_effect_celsius) {
-        speciesGroup.representative_archetype = archetype;
-      }
-    });
-
-    const groupedBySpecies = Array.from(speciesMap.values());
-
+    // Sort the final list of species based on the P90 cooling of their single best archetype
     const sortedSpecies = groupedBySpecies.sort((a, b) =>
         b.representative_archetype.p90_cooling_effect_celsius - a.representative_archetype.p90_cooling_effect_celsius
     );
@@ -182,6 +184,7 @@ app.get('/api/tree-archetypes', async (req, res) => {
 });
 
 
+// --- NEW API ENDPOINT FOR 3D TREE DATA ---
 app.post('/api/trees-in-bounds', async (req, res) => {
   const { bounds } = req.body;
 
@@ -192,9 +195,12 @@ app.post('/api/trees-in-bounds', async (req, res) => {
   const [swLon, swLat] = bounds.sw;
   const [neLon, neLat] = bounds.ne;
 
+  // Added a limit to prevent overwhelming requests for very large areas.
   const MAX_TREES_RETURN = 5000;
 
   try {
+    // This query uses a spatial index on `geom` for high performance.
+    // It selects only the necessary columns for 3D rendering and builds a GeoJSON FeatureCollection.
     const query = `
       SELECT json_build_object(
         'type', 'FeatureCollection',
@@ -218,6 +224,7 @@ app.post('/api/trees-in-bounds', async (req, res) => {
     if (result.rows.length > 0 && result.rows[0].json_build_object) {
       res.json(result.rows[0].json_build_object);
     } else {
+      // Return an empty FeatureCollection if no trees are found
       res.json({ type: 'FeatureCollection', features: [] });
     }
   } catch (err) {
@@ -226,6 +233,7 @@ app.post('/api/trees-in-bounds', async (req, res) => {
   }
 });
 
+// --- NEW API ENDPOINT FOR SUN PATH ANIMATION ---
 app.get('/api/sun-path', (req, res) => {
     const { date, lat, lon } = req.query;
 
@@ -235,9 +243,8 @@ app.get('/api/sun-path', (req, res) => {
 
     try {
         const targetDate = new Date(date);
-        // FIX: Correctly parse float values without invalid syntax
-        const latitude = parseFloat(lat);
-        const longitude = parseFloat(lon);
+        const latitude = parseFloat(lat);      // --- FIX: Removed invalid 'as string' ---
+        const longitude = parseFloat(lon);     // --- FIX: Removed invalid 'as string' ---
 
         const times = SunCalc.getTimes(targetDate, latitude, longitude);
         const sunrise = times.sunrise.getTime();
@@ -250,7 +257,9 @@ app.get('/api/sun-path', (req, res) => {
             const currentTime = new Date(time);
             const sunPos = SunCalc.getPosition(currentTime, latitude, longitude);
             
+            // Convert azimuth from radians to degrees (0° North, 180° South)
             const azimuthDegrees = sunPos.azimuth * 180 / Math.PI + 180;
+            // Altitude is already 0 at horizon, 90 at zenith
             const altitudeRatio = sunPos.altitude;
 
             sunPath.push({
@@ -272,4 +281,4 @@ app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
 
-module.exports = app;
+module.exports = app; // ADD THIS LINE
