@@ -122,13 +122,14 @@ const MapView: React.FC<MapViewProps> = ({
       }
     };
   
-    if (map.isStyleLoaded()) {
-      setup3DEnvironment();
-    } else {
-      map.once('styledata', setup3DEnvironment);
-    }
+    // Use 'styledata' event to ensure setup runs after any style change, not just initial load
+    map.on('styledata', setup3DEnvironment);
   
-  }, [is3D, lightConfig, mapTilerKey, mapStyleUrl]);
+    return () => {
+        map.off('styledata', setup3DEnvironment);
+    };
+  
+  }, [is3D, lightConfig, mapTilerKey]); // Dependency array is correct, mapStyleUrl removed to prevent re-triggering
 
   const fog = useMemo((): Fog | undefined => {
     if (!is3D || !lightConfig) {
@@ -143,32 +144,23 @@ const MapView: React.FC<MapViewProps> = ({
     };
   }, [is3D, lightConfig]);
   
+  // FIX: This logic is now simplified and safe.
   const handleToggle3D = useCallback(() => {
-    // FIX: Added guard clause to ensure mapRef.current is not null.
     const map = mapRef.current;
     if (!map) return;
 
     onToggle3D();
 
     if (!is3D) { // Transitioning TO 3D
-      if (baseMap !== 'streets') {
-        changeBaseMap('streets');
-      }
-      setTimeout(() => {
-        map.flyTo({ pitch: 60, zoom: 17.5, duration: 2000, essential: true });
-        const bounds = map.getBounds();
-        setMapBounds({
-          sw: [bounds.getWest(), bounds.getSouth()],
-          ne: [bounds.getEast(), bounds.getNorth()],
-        });
-      }, 100);
+      // We no longer change the basemap here.
+      map.flyTo({ pitch: 60, zoom: 17.5, duration: 2000, essential: true });
     } else { // Transitioning TO 2D
       map.flyTo({ pitch: 0, zoom: map.getZoom() < 16 ? map.getZoom() : 16, duration: 2000, essential: true });
     }
-  }, [is3D, onToggle3D, baseMap, changeBaseMap]);
+  }, [is3D, onToggle3D]);
 
+  // This handler correctly fetches data when the map stops moving in 3D mode.
   const handleMoveEnd = useCallback((e: ViewStateChangeEvent) => {
-    // FIX: Added guard clause to ensure mapRef.current is not null.
     const map = mapRef.current;
     if (!map) return;
 
@@ -232,7 +224,6 @@ const MapView: React.FC<MapViewProps> = ({
   }, [onTreeSelect, is3D]);
 
   const handleMouseMove = useCallback((event: MapLayerMouseEvent) => {
-    // FIX: Added guard clause to ensure mapRef.current is not null.
     const map = mapRef.current?.getMap();
     if (!map || is3D) return;
     
@@ -242,11 +233,7 @@ const MapView: React.FC<MapViewProps> = ({
   }, [is3D]);
   
   const interactiveLayers = useMemo(() => {
-    const layerIds = [
-      treeLayerStyle.id, 
-      'tree-trunks-3d', 
-      'tree-canopies-3d'
-    ];
+    const layerIds = [treeLayerStyle.id, 'tree-trunks-3d', 'tree-canopies-3d'];
     return layerIds.filter(id => typeof id === 'string');
   }, []);
 
