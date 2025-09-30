@@ -71,15 +71,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .sidebar {
-  @apply bg-white shadow-xl flex flex-col absolute top-0 right-0 h-full z-10; /* Sidebar is absolute, on top */
-  width: var(--sidebar-width);
-  transform: translateX(0%); /* Default state: visible */
+  @apply bg-white shadow-xl flex flex-col absolute top-0 right-0 h-full z-30; /* Increased z-index */
+  @apply w-full md:w-[var(--sidebar-width)]; /* Responsive width */
+  transform: translateX(100%); /* Default state is hidden now */
   transition: transform 0.3s ease-in-out;
-  /* overflow-y-auto; -- Apply this to the content part of sidebar, not whole sidebar if header/tabs are fixed */
 }
 .sidebar-open {
-  display: flex !important; /* Ensure it's flex when open */
-  width: var(--sidebar-width);
   transform: translateX(0%);
 }
 
@@ -88,10 +85,10 @@ h1, h2, h3, h4, h5, h6 {
 
 }
 
-.sidebar-content-area { 
+.sidebar-content-area {
   height: calc(100vh - var(--header-height) - var(--sidebar-tabs-height));
-  overflow-y: auto; 
-  flex-grow: 1; 
+  overflow-y: auto;
+  flex-grow: 1;
   /* For Firefox - more modern scrollbar look */
   scrollbar-width: thin;          /* "auto" or "thin" */
   scrollbar-color: #a0aec0 #edf2f7; /* thumb color track color (Tailwind gray-500, gray-200) */
@@ -133,7 +130,7 @@ h1, h2, h3, h4, h5, h6 {
 .leaflet-container {
   height: 100%;
   width: 100%;
-  background-color: #f0f0f0; 
+  background-color: #f0f0f0;
 }
 
 .sidebar .overflow-y-auto { /* Style for the scrollable content area within sidebar */
@@ -187,12 +184,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Animations */
-@keyframes fadeIn { 
-  from { opacity: 0; transform: translateY(-10px); } 
-  to { opacity: 1; transform: translateY(0); } 
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.animate-fade-in { 
+.animate-fade-in {
   animation: fadeIn 0.2s ease-out; /* Made it a bit faster */
 }
 
@@ -265,3 +262,14 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Tree Popup (if you customize it further) */
 .tree-popup { min-width: 200px; }
+
+/* NEW: Responsive Chart Container */
+.chart-container {
+  @apply absolute bottom-0 left-0 z-20 bg-white border-t-2 border-gray-300 shadow-top-lg;
+  right: 0;
+  transition: right 0.3s ease-in-out;
+}
+
+.chart-container-sidebar-open {
+  @apply md:right-[var(--sidebar-width)];
+}

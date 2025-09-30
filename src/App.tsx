@@ -5,7 +5,7 @@ import MapView from './components/map/MapView';
 import Sidebar from './components/sidebar/Sidebar';
 import TemperaturePredictionChart from './components/common/TemperaturePredictionChart';
 import { ArchetypeData } from './store/TreeStore';
-import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl'; // --- FIX: Import type from its new source ---
+import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl';
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -15,7 +15,6 @@ function App() {
   const [showLSTOverlay, setShowLSTOverlay] = useState(false);
   
   const [is3D, setIs3D] = useState(false);
-  // --- FIX: State renamed and correctly typed to match the data structure being sent ---
   const [lightConfig, setLightConfig] = useState<LightConfig | null>(null);
 
   const handleLightChange = useCallback((newLightConfig: LightConfig | null) => {
@@ -74,10 +73,11 @@ function App() {
           selectedTreeId={selectedTreeId}
           is3D={is3D}
           onToggle3D={handleToggle3D}
-          lightConfig={lightConfig} // --- FIX: Pass the correctly named and typed prop ---
+          lightConfig={lightConfig}
         />
         <Sidebar
           isOpen={sidebarOpen}
+          toggleSidebar={toggleSidebar} // Pass the toggle function
           selectedTreeId={selectedTreeId}
           activeTabIndex={activeTabIndex}
           setActiveTabIndex={setActiveTabIndex}
@@ -94,7 +94,9 @@ function App() {
         />
       </div>
       {showTemperatureChart && activeSpeciesCooling && (
-        <div className="absolute bottom-0 left-0 z-20 bg-white border-t-2 border-gray-300 shadow-top-lg" style={{ right: sidebarOpen ? 'var(--sidebar-width)' : '0px' }}>
+        <div 
+          className={`chart-container ${sidebarOpen ? 'chart-container-sidebar-open' : ''}`}
+        >
           <TemperaturePredictionChart
             showChart={showTemperatureChart}
             onClose={() => setShowTemperatureChart(false)}

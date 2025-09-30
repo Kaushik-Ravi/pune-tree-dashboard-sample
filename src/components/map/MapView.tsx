@@ -9,8 +9,8 @@ import Map, {
   MapLayerMouseEvent,
 } from 'react-map-gl/maplibre';
 import type { LayerProps } from 'react-map-gl/maplibre';
-import type { Fog } from 'maplibre-gl'; // --- FIX: Corrected import path for the Fog type ---
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import type { Fog } from 'maplibre-gl';
+import { ChevronLeft, ChevronRight, LayoutDashboard } from 'lucide-react'; // Import new icon
 import { useTreeStore } from '../../store/TreeStore';
 import SimulatedTreesLayer from './SimulatedTreesLayer';
 import DrawControl, { DrawEvent, DrawActionEvent } from './DrawControl';
@@ -86,7 +86,7 @@ const MapView: React.FC<MapViewProps> = ({
   const drawControlRef = useRef<{ draw: MapboxDraw } | null>(null);
   const [zoom, setZoom] = useState(11.5);
   const [viewBounds, setViewBounds] = useState(null);
-  
+
   const mapTilerKey = import.meta.env.VITE_MAPTILER_KEY;
   const getMapStyle = (style: string) => {
     const styleName = style === 'satellite' ? 'satellite' : style === 'dark' ? 'darkmatter' : style === 'streets' ? 'streets-v2' : 'dataviz-light';
@@ -97,9 +97,9 @@ const MapView: React.FC<MapViewProps> = ({
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
-  
+
     const terrainSourceName = 'maptiler-terrain';
-  
+
     const setup3DEnvironment = () => {
       if (is3D) {
         if (!map.getSource(terrainSourceName)) {
@@ -110,7 +110,7 @@ const MapView: React.FC<MapViewProps> = ({
           });
         }
         map.setTerrain({ source: terrainSourceName, exaggeration: 1.5 });
-  
+
         if (lightConfig) {
           map.setLight(lightConfig.directional);
         } else {
@@ -120,13 +120,13 @@ const MapView: React.FC<MapViewProps> = ({
         map.setTerrain(null);
       }
     };
-  
+
     if (map.isStyleLoaded()) {
       setup3DEnvironment();
     } else {
       map.once('styledata', setup3DEnvironment);
     }
-  
+
   }, [is3D, lightConfig, mapTilerKey, mapStyleUrl]);
 
   const fog = useMemo((): Fog | undefined => {
@@ -166,7 +166,7 @@ const MapView: React.FC<MapViewProps> = ({
       map.flyTo({ pitch: 0, zoom: map.getZoom() < 16 ? map.getZoom() : 16, duration: 2000, essential: true });
     }
   }, [is3D, onToggle3D, baseMap, changeBaseMap]);
-  
+
   const onDrawCreate = useCallback((evt: DrawEvent) => {
     const feature = evt.features[0];
     if (feature) {
@@ -225,7 +225,7 @@ const MapView: React.FC<MapViewProps> = ({
     map.getCanvas().style.cursor = treeFeature ? 'pointer' : '';
     map.setFilter('trees-point-highlight', ['==', 'Tree_ID', treeFeature ? treeFeature.properties.Tree_ID : '']);
   }, [is3D]);
-  
+
   const interactiveLayers = useMemo(() => {
     const layers = [treeLayerStyle.id];
     if (is3D) {
@@ -276,14 +276,25 @@ const MapView: React.FC<MapViewProps> = ({
       </Map>
       
       <ViewModeToggle is3D={is3D} onToggle={handleToggle3D} zoom={zoom} />
-
+      
+      {/* Sidebar Toggle for Desktop */}
       <button
-        className={`absolute top-1/2 -translate-y-1/2 z-[1010] bg-white p-2 shadow-xl hover:bg-gray-100 transition-all duration-300 ease-in-out border-t border-b border-gray-300 ${sidebarOpen ? 'right-[var(--sidebar-width)] rounded-r-md' : 'right-0 rounded-l-md'}`}
+        className={`absolute top-1/2 -translate-y-1/2 z-20 bg-white p-2 shadow-xl hover:bg-gray-100 transition-all duration-300 ease-in-out border-t border-b border-gray-300 hidden md:flex ${sidebarOpen ? 'right-[var(--sidebar-width)] rounded-l-md' : 'right-0 rounded-r-md'}`}
         onClick={toggleSidebar}
         aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
         title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
       >
         {sidebarOpen ? <ChevronRight size={20} className="text-gray-700" /> : <ChevronLeft size={20} className="text-gray-700" />}
+      </button>
+
+      {/* Sidebar Toggle for Mobile */}
+      <button
+        onClick={toggleSidebar}
+        className="md:hidden absolute bottom-5 right-5 z-20 bg-primary-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center hover:bg-primary-700 active:bg-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+        aria-label="Open dashboard"
+        title="Open dashboard"
+      >
+        <LayoutDashboard size={24} />
       </button>
     </div>
   );
