@@ -9,8 +9,8 @@ import Map, {
   MapLayerMouseEvent,
 } from 'react-map-gl/maplibre';
 import type { LayerProps } from 'react-map-gl/maplibre';
-import type { Fog } from 'maplibre-gl';
-import { ChevronLeft, ChevronRight, LayoutDashboard } from 'lucide-react'; // Import new icon
+import type { Fog, Map as MapLibreMap, MapTouchEvent } from 'maplibre-gl'; // Import additional types
+import { ChevronLeft, ChevronRight, LayoutDashboard } from 'lucide-react';
 import { useTreeStore } from '../../store/TreeStore';
 import SimulatedTreesLayer from './SimulatedTreesLayer';
 import DrawControl, { DrawEvent, DrawActionEvent } from './DrawControl';
@@ -86,7 +86,7 @@ const MapView: React.FC<MapViewProps> = ({
   const drawControlRef = useRef<{ draw: MapboxDraw } | null>(null);
   const [zoom, setZoom] = useState(11.5);
   const [viewBounds, setViewBounds] = useState(null);
-
+  
   const mapTilerKey = import.meta.env.VITE_MAPTILER_KEY;
   const getMapStyle = (style: string) => {
     const styleName = style === 'satellite' ? 'satellite' : style === 'dark' ? 'darkmatter' : style === 'streets' ? 'streets-v2' : 'dataviz-light';
@@ -94,12 +94,62 @@ const MapView: React.FC<MapViewProps> = ({
   };
   const mapStyleUrl = getMapStyle(baseMap);
 
+  const interactiveLayers = useMemo(() => {
+    const layers = [treeLayerStyle.id];
+    if (is3D) {
+      layers.push('tree-trunks-3d', 'tree-canopies-3d');
+    }
+    return layers.filter(Boolean) as string[];
+  }, [is3D]);
+
+  // --- NEW: useEffect for robust touch/click handling ---
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
 
-    const terrainSourceName = 'maptiler-terrain';
+    const handleTreeClick = (e: MapTouchEvent & { features?: maplibregl.MapGeoJSONFeature[] | undefined; }) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: interactiveLayers });
+      if (!features || features.length === 0) return;
 
+      let treeId: string | undefined;
+
+      if (is3D) {
+        const threeDFeature = features.find(f => f.layer.id === 'tree-canopies-3d' || f.layer.id === 'tree-trunks-3d');
+        if (threeDFeature && threeDFeature.properties?.id) {
+          treeId = threeDFeature.properties.id;
+        }
+      } else {
+        const treeFeature = features.find(f => f.layer.id === treeLayerStyle.id);
+        if (treeFeature && treeFeature.properties.Tree_ID) {
+          treeId = treeFeature.properties.Tree_ID;
+        }
+      }
+
+      if (treeId) {
+        onTreeSelect(treeId);
+      }
+    };
+
+    // Use 'touchstart' for mobile reliability and 'click' as a fallback for desktop.
+    // The library's own click handling might be fast enough on desktop to prevent issues.
+    map.on('touchstart', handleTreeClick);
+    map.on('click', handleTreeClick);
+
+    // Cleanup function to remove listeners
+    return () => {
+      map.off('touchstart', handleTreeClick);
+      map.off('click', handleTreeClick);
+    };
+
+  }, [mapRef, is3D, onTreeSelect, interactiveLayers]);
+
+
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+  
+    const terrainSourceName = 'maptiler-terrain';
+  
     const setup3DEnvironment = () => {
       if (is3D) {
         if (!map.getSource(terrainSourceName)) {
@@ -110,7 +160,7 @@ const MapView: React.FC<MapViewProps> = ({
           });
         }
         map.setTerrain({ source: terrainSourceName, exaggeration: 1.5 });
-
+  
         if (lightConfig) {
           map.setLight(lightConfig.directional);
         } else {
@@ -120,13 +170,13 @@ const MapView: React.FC<MapViewProps> = ({
         map.setTerrain(null);
       }
     };
-
+  
     if (map.isStyleLoaded()) {
       setup3DEnvironment();
     } else {
       map.once('styledata', setup3DEnvironment);
     }
-
+  
   }, [is3D, lightConfig, mapTilerKey, mapStyleUrl]);
 
   const fog = useMemo((): Fog | undefined => {
@@ -166,7 +216,7 @@ const MapView: React.FC<MapViewProps> = ({
       map.flyTo({ pitch: 0, zoom: map.getZoom() < 16 ? map.getZoom() : 16, duration: 2000, essential: true });
     }
   }, [is3D, onToggle3D, baseMap, changeBaseMap]);
-
+  
   const onDrawCreate = useCallback((evt: DrawEvent) => {
     const feature = evt.features[0];
     if (feature) {
@@ -199,24 +249,8 @@ const MapView: React.FC<MapViewProps> = ({
 
   const PUNE_TREES_TILESET_ID = '0197f37a-c205-7e6f-8c64-151bca4d9195';
   const vectorSourceUrl = `https://api.maptiler.com/tiles/${PUNE_TREES_TILESET_ID}/tiles.json?key=${mapTilerKey}`;
-
-  const handleMapClick = useCallback((event: MapLayerMouseEvent) => {
-    const features = event.features;
-    if (!features || features.length === 0) return;
-
-    if (is3D) {
-      const threeDFeature = features.find(f => f.layer.id === 'tree-canopies-3d' || f.layer.id === 'tree-trunks-3d');
-      if (threeDFeature && threeDFeature.properties?.id) {
-        onTreeSelect(threeDFeature.properties.id);
-      }
-    } else {
-      const treeFeature = features.find(f => f.layer.id === treeLayerStyle.id);
-      if (treeFeature) {
-        onTreeSelect(treeFeature.properties.Tree_ID);
-      }
-    }
-  }, [onTreeSelect, is3D]);
-
+  
+  // This handler is now for desktop hover effects only.
   const handleMouseMove = useCallback((event: MapLayerMouseEvent) => {
     if (is3D) return;
     const map = mapRef.current?.getMap();
@@ -226,14 +260,6 @@ const MapView: React.FC<MapViewProps> = ({
     map.setFilter('trees-point-highlight', ['==', 'Tree_ID', treeFeature ? treeFeature.properties.Tree_ID : '']);
   }, [is3D]);
 
-  const interactiveLayers = useMemo(() => {
-    const layers = [treeLayerStyle.id];
-    if (is3D) {
-      layers.push('tree-trunks-3d', 'tree-canopies-3d');
-    }
-    return layers.filter(Boolean) as string[];
-  }, [is3D]);
-
   return (
     <div className="map-container">
       <Map
@@ -241,11 +267,11 @@ const MapView: React.FC<MapViewProps> = ({
         initialViewState={{ longitude: 73.8567, latitude: 18.5204, zoom: 11.5 }}
         style={{ width: '100%', height: '100%' }}
         mapStyle={mapStyleUrl}
-        interactiveLayerIds={interactiveLayers}
-        onClick={handleMapClick}
-        onMouseMove={handleMouseMove}
+        interactiveLayerIds={interactiveLayers} // Still useful for mouse move
+        onMouseMove={handleMouseMove} // Keep for desktop hover
         onZoom={(e) => setZoom(e.viewState.zoom)}
         fog={fog}
+        // REMOVED: onClick={handleMapClick}
       >
         {!is3D && (
           <Source id="trees" type="vector" url={vectorSourceUrl}>
@@ -277,7 +303,6 @@ const MapView: React.FC<MapViewProps> = ({
       
       <ViewModeToggle is3D={is3D} onToggle={handleToggle3D} zoom={zoom} />
       
-      {/* Sidebar Toggle for Desktop */}
       <button
         className={`absolute top-1/2 -translate-y-1/2 z-20 bg-white p-2 shadow-xl hover:bg-gray-100 transition-all duration-300 ease-in-out border-t border-b border-gray-300 hidden md:flex ${sidebarOpen ? 'right-[var(--sidebar-width)] rounded-l-md' : 'right-0 rounded-r-md'}`}
         onClick={toggleSidebar}
@@ -287,7 +312,6 @@ const MapView: React.FC<MapViewProps> = ({
         {sidebarOpen ? <ChevronRight size={20} className="text-gray-700" /> : <ChevronLeft size={20} className="text-gray-700" />}
       </button>
 
-      {/* Sidebar Toggle for Mobile */}
       <button
         onClick={toggleSidebar}
         className="md:hidden absolute bottom-5 right-5 z-20 bg-primary-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center hover:bg-primary-700 active:bg-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"

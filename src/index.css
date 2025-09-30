@@ -45,6 +45,8 @@ h1, h2, h3, h4, h5, h6 {
   @apply font-semibold;
 }
 
+/* Base styles remain the same */
+
 .dashboard-layout {
   @apply flex flex-col h-full;
 }
@@ -61,25 +63,18 @@ h1, h2, h3, h4, h5, h6 {
   @apply bg-white shadow-xl flex flex-col absolute top-0 right-0 h-full z-30;
   @apply w-full md:w-[var(--sidebar-width)];
   transform: translateX(100%);
-  visibility: hidden;
-  transition: transform 0.3s ease-in-out, visibility 0s linear 0.3s;
+  visibility: hidden; /* FIX: Hidden by default to prevent event blocking */
+  transition: transform 0.3s ease-in-out, visibility 0s 0.3s; /* Delay hiding */
 }
 .sidebar-open {
   transform: translateX(0%);
-  visibility: visible;
-  transition: transform 0.3s ease-in-out;
-}
-
-/* NEW: Peek state for mobile sidebar */
-.sidebar-peek {
-  transform: translateX(85%);
-  visibility: visible;
+  visibility: visible; /* FIX: Make visible when open */
   transition: transform 0.3s ease-in-out;
 }
 
 .sidebar-content-area {
-  height: calc(100vh - var(--header-height) - var(--sidebar-tabs-height));
-  height: calc(100dvh - var(--header-height) - var(--sidebar-tabs-height));
+  height: calc(100vh - var(--header-height) - var(--sidebar-tabs-height)); /* Fallback */
+  height: calc(100dvh - var(--header-height) - var(--sidebar-tabs-height)); /* FIX: Use dynamic viewport height */
   overflow-y: auto;
   flex-grow: 1;
   scrollbar-width: thin;
@@ -90,14 +85,50 @@ h1, h2, h3, h4, h5, h6 {
 .sidebar-content-area::-webkit-scrollbar-track { background: transparent; }
 .sidebar-content-area::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 6px; }
 .sidebar-content-area::-webkit-scrollbar-thumb:hover { background: #a0aec0; }
-
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ... other utility and component styles remain unchanged ... */
 
 .shadow-top-lg {
   box-shadow: 0 -10px 15px -3px rgba(0, 0, 0, 0.1), 0 -4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  background-color: #f0f0f0;
+}
+
+.map-legend {
+  @apply bg-white bg-opacity-90 p-3 rounded-md shadow-md text-sm;
+}
+
+.btn {
+  @apply inline-flex items-center px-4 py-2 rounded-md font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+.btn-primary {
+  @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
+}
+.btn-outline {
+  @apply border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-primary-500;
+}
+.input {
+  @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500;
+}
+.card {
+  @apply bg-white rounded-lg shadow-md overflow-hidden;
+}
+.card-header {
+  @apply px-4 py-3 bg-gray-50 border-b border-gray-200;
+}
+.card-body {
+  @apply px-4 py-3;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+
+/* Chart Container */
 .chart-container {
   @apply absolute bottom-0 left-0 z-20 bg-white border-t-2 border-gray-300 shadow-top-lg;
   right: 0;
@@ -106,25 +137,3 @@ h1, h2, h3, h4, h5, h6 {
 .chart-container-sidebar-open {
   @apply md:right-[var(--sidebar-width)];
 }
-
-.collapsible-trigger {
-  @apply w-full flex justify-between items-center text-left;
-}
-.collapsible-content {
-  overflow: hidden;
-  transition: max-height 0.3s ease-in-out;
-}
-.collapsible-content-closed {
-  max-height: 0;
-}
-
-.btn { @apply inline-flex items-center px-4 py-2 rounded-md font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2; }
-.btn-primary { @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500; }
-.btn-outline { @apply border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-primary-500; }
-.input { @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500; }
-.card { @apply bg-white rounded-lg shadow-md overflow-hidden; }
-.card-header { @apply px-4 py-3 bg-gray-50 border-b border-gray-200; }
-.card-body { @apply px-4 py-3; }
-
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-.animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
