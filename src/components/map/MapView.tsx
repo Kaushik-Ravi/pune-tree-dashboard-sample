@@ -242,7 +242,12 @@ const MapView: React.FC<MapViewProps> = ({
   }, [is3D]);
   
   const interactiveLayers = useMemo(() => {
-    return [treeLayerStyle.id, 'tree-trunks-3d', 'tree-canopies-3d'];
+    const layerIds = [
+      treeLayerStyle.id, 
+      'tree-trunks-3d', 
+      'tree-canopies-3d'
+    ];
+    return layerIds.filter(id => typeof id === 'string');
   }, []);
 
   return (
