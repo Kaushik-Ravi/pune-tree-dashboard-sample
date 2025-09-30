@@ -1,4 +1,5 @@
 // src/components/common/InfoPopover.tsx
+// modified to fix popover overflow issue on mobile
 import React, { useState, useRef, useEffect } from 'react';
 import { Info, X } from 'lucide-react';
 
