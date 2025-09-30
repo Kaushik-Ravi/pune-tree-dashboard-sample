@@ -90,21 +90,25 @@ h1, h2, h3, h4, h5, h6 {
 /* --- DESKTOP SIDEBAR STYLES (md breakpoint and up) --- */
 @media (min-width: 768px) {
   .sidebar {
-    @apply absolute top-0 right-0 h-full w-[var(--sidebar-width)] rounded-none;
+    @apply absolute top-0 h-full w-[var(--sidebar-width)] rounded-none;
+    right: 0;
+    left: auto;
+    bottom: auto;
     transform: translateX(100%);
     visibility: hidden;
-    transition: transform 0.3s ease-in-out, visibility 0.3s;
+    transition: transform 0.3s ease-in-out, visibility 0s 0.3s;
   }
   .sidebar-open {
-    transform: translateX(0%);
+    transform: translateX(0);
     visibility: visible;
+    transition: transform 0.3s ease-in-out, visibility 0s;
   }
   .sidebar-collapsed {
     transform: translateX(100%);
     visibility: hidden;
+    transition: transform 0.3s ease-in-out, visibility 0s 0.3s;
   }
 }
-
 
 .sidebar-content-area {
   height: calc(100% - var(--header-height) - var(--sidebar-tabs-height));
@@ -145,15 +149,6 @@ h1, h2, h3, h4, h5, h6 {
 
 .map-legend {
   @apply bg-white bg-opacity-90 p-3 rounded-md shadow-md text-sm;
-}
-
-.toggle-button {
-  /* This is the desktop toggle button, hide on mobile */
-  @apply hidden md:flex items-center justify-center w-8 h-8 rounded-full bg-primary-600 text-white shadow-md;
-}
-
-.toggle-button:hover {
-  @apply bg-primary-700;
 }
 
 .btn {
