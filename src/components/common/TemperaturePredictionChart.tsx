@@ -23,7 +23,7 @@ interface TemperaturePredictionChartProps {
   showChart: boolean;
   onClose: () => void; 
   baselineLSTMax: number;
-  baselineLST80thPercentile: number; // Still needed for the *old* logic if we switch back, or if new logic might use it
+  baselineLST80thPercentile: number;
   baselineLST60thPercentile: number;
   speciesCoolingP90: number; 
   speciesCoolingP10: number; 
@@ -36,14 +36,13 @@ const TemperaturePredictionChart: React.FC<TemperaturePredictionChartProps> = ({
   showChart,
   onClose,
   baselineLSTMax,
-  baselineLST80thPercentile, // Keep for now, even if new logic doesn't directly use it
+  baselineLST80thPercentile,
   baselineLST60thPercentile,
   speciesCoolingP90,
   speciesCoolingP10,
   speciesName = "Selected Species"
 }) => {
   
-  // Baseline LST Data (random oscillation between 60th and Max) - NO CHANGE TO THIS LOGIC
   const baselineLSTData = useMemo(() => {
     if (!showChart) return [];
     const data = [];
@@ -58,7 +57,6 @@ const TemperaturePredictionChart: React.FC<TemperaturePredictionChartProps> = ({
     return data;
   }, [showChart, baselineLSTMax, baselineLST60thPercentile]);
 
-  // Generate Simulated Cooled Temperature Data - NEW INTERPOLATION LOGIC
   const simulatedCooledData = useMemo(() => {
     if (!showChart || baselineLSTData.length === 0) return [];
 
@@ -67,40 +65,23 @@ const TemperaturePredictionChart: React.FC<TemperaturePredictionChartProps> = ({
     return baselineLSTData.map(baseTemp => {
       let coolingEffectToApply = 0;
 
-      if (tempRangeBaseline <= 0) { // Avoid division by zero if max and 60th are same or inverted
-        // If no range, or inverted, apply an average or a specific percentile cooling.
-        // For simplicity, let's say P10 applies if baseline is at/below 60th, P90 if at/above max.
-        // This edge case should ideally not happen if LST_MAX > LST_60TH.
+      if (tempRangeBaseline <= 0) {
         if (baseTemp >= baselineLSTMax) {
             coolingEffectToApply = speciesCoolingP90;
         } else if (baseTemp <= baselineLST60thPercentile) {
             coolingEffectToApply = speciesCoolingP10;
-        } else { // Should not be reached if tempRangeBaseline is 0
+        } else {
             coolingEffectToApply = (speciesCoolingP90 + speciesCoolingP10) / 2;
         }
       } else {
-        // Determine how far 'baseTemp' is along the scale from 60th percentile to Max
-        // Normalize baseTemp to a 0-1 scale within the [60th_percentile, MaxLST] range
         let proportion = (baseTemp - baselineLST60thPercentile) / tempRangeBaseline;
-        
-        // Clamp proportion to be between 0 and 1
         proportion = Math.max(0, Math.min(1, proportion));
-
-        // Linearly interpolate the cooling effect:
-        // When proportion is 0 (baseTemp is at 60th percentile), cooling = P10_cooling
-        // When proportion is 1 (baseTemp is at MaxLST), cooling = P90_cooling
         coolingEffectToApply = speciesCoolingP10 + proportion * (speciesCoolingP90 - speciesCoolingP10);
       }
       
       let cooledTemp = baseTemp - coolingEffectToApply;
-
-      // Safety net: Ensure cooled temperature is not unrealistically low
-      // For instance, not lower than the minimum LST value minus the maximum possible cooling.
-      // Or ensure it doesn't drop by more than the max cooling effect from its baseline.
       const maxPossibleSingleCooling = Math.max(speciesCoolingP10, speciesCoolingP90);
-      // Ensure temp doesn't drop below a certain floor, e.g., 5 degrees below the min LST value,
-      // or ensure it does not go below (baselineLST60thPercentile - maxPossibleSingleCooling)
-      const realisticFloor = baselineLST60thPercentile - maxPossibleSingleCooling - 2; // Arbitrary floor
+      const realisticFloor = baselineLST60thPercentile - maxPossibleSingleCooling - 2;
       cooledTemp = Math.max(realisticFloor, cooledTemp); 
       
       return parseFloat(cooledTemp.toFixed(1));
@@ -108,12 +89,7 @@ const TemperaturePredictionChart: React.FC<TemperaturePredictionChartProps> = ({
   }, [showChart, baselineLSTData, baselineLSTMax, baselineLST60thPercentile, speciesCoolingP90, speciesCoolingP10]);
 
   if (!showChart) { return null; }
-
-  const chartData = { /* ... (same as before, using new simulatedCooledData) ... */ };
-  const chartOptions: ChartOptions<'line'> = { /* ... (same as before) ... */ };
   
-  // --- For absolute clarity, re-pasting the chartData and chartOptions that should remain ---
-  // --- from the last working version. The only change above is the simulatedCooledData logic. ---
   const actualChartData = {
     labels: Array.from({ length: LST_DATA_POINTS }, (_, i) => `P${i + 1}`),
     datasets: [
@@ -123,7 +99,7 @@ const TemperaturePredictionChart: React.FC<TemperaturePredictionChartProps> = ({
         tension: 0.4, fill: false, pointRadius: 2, pointHoverRadius: 4, yAxisID: 'yTemp',
       },
       {
-        label: `Cooled LST (${speciesName}) (°C)`, data: simulatedCooledData, // Uses the NEW logic
+        label: `Cooled LST (${speciesName}) (°C)`, data: simulatedCooledData,
         borderColor: 'rgba(59, 130, 246, 1)', backgroundColor: 'rgba(191, 219, 254, 0.4)',
         tension: 0.4, fill: true, pointRadius: 2, pointHoverRadius: 4, yAxisID: 'yTemp',
       }
@@ -136,7 +112,16 @@ const TemperaturePredictionChart: React.FC<TemperaturePredictionChartProps> = ({
     plugins: {
       legend: { position: 'top' as const, labels: { boxWidth: 12, padding:10, font: { size: 11 } } },
       title: { display: false, },
-      tooltip: { mode: 'index' as const, animation: {duration: 0}, intersect: false, bodySpacing: 4, itemSort: (a, b) => b.datasetIndex - a.datasetIndex, }
+      tooltip: { 
+        mode: 'index' as const, 
+        animation: {duration: 0}, 
+        intersect: false, 
+        bodySpacing: 4, 
+        itemSort: (a, b) => b.datasetIndex - a.datasetIndex,
+        titleFont: { size: 12 },
+        bodyFont: { size: 12 },
+        padding: 8,
+      }
     },
     scales: {
       yTemp: { 
@@ -151,7 +136,6 @@ const TemperaturePredictionChart: React.FC<TemperaturePredictionChartProps> = ({
       },
     },
   };
-
 
   return (
     <div className="p-3 bg-white rounded-t-lg">

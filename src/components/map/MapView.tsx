@@ -7,7 +7,7 @@ import Map, {
   MapRef,
   NavigationControl,
   MapLayerMouseEvent,
-  MapLayerTouchEvent, // MODIFIED: Import touch event type
+  MapLayerTouchEvent,
 } from 'react-map-gl/maplibre';
 import type { LayerProps } from 'react-map-gl/maplibre';
 import type { Fog } from 'maplibre-gl';
@@ -202,7 +202,7 @@ const MapView: React.FC<MapViewProps> = ({
   const PUNE_TREES_TILESET_ID = '0197f37a-c205-7e6f-8c64-151bca4d9195';
   const vectorSourceUrl = `https://api.maptiler.com/tiles/${PUNE_TREES_TILESET_ID}/tiles.json?key=${mapTilerKey}`;
 
-  const handleMapClick = useCallback((event: MapLayerMouseEvent | MapLayerTouchEvent) => { // MODIFIED: Union type
+  const handleMapClick = useCallback((event: MapLayerMouseEvent | MapLayerTouchEvent) => {
     event.preventDefault();
     const features = event.features;
     if (!features || features.length === 0) return;
@@ -237,7 +237,7 @@ const MapView: React.FC<MapViewProps> = ({
     isDraggingRef.current = false;
   }, []);
   
-  const handleTouchEnd = useCallback((event: MapLayerTouchEvent) => { // MODIFIED: Correct event type
+  const handleTouchEnd = useCallback((event: MapLayerTouchEvent) => {
     if (!isDraggingRef.current) {
       handleMapClick(event);
     }
@@ -297,8 +297,9 @@ const MapView: React.FC<MapViewProps> = ({
       
       <ViewModeToggle is3D={is3D} onToggle={handleToggle3D} zoom={zoom} />
       
+      {/* --- DESKTOP-ONLY SIDEBAR TOGGLE --- */}
       <button
-        className={`absolute top-1/2 -translate-y-1/2 z-20 bg-white p-2 shadow-xl hover:bg-gray-100 transition-all duration-300 ease-in-out border-t border-b border-gray-300 hidden md:flex ${sidebarOpen ? 'right-[var(--sidebar-width)] rounded-l-md' : 'right-0 rounded-r-md'}`}
+        className={`hidden md:flex absolute top-1/2 -translate-y-1/2 z-20 bg-white p-2 shadow-xl hover:bg-gray-100 transition-all duration-300 ease-in-out border-t border-b border-gray-300 ${sidebarOpen ? 'right-[var(--sidebar-width)] rounded-l-md' : 'right-0 rounded-r-md'}`}
         onClick={toggleSidebar}
         aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
         title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
@@ -306,6 +307,7 @@ const MapView: React.FC<MapViewProps> = ({
         {sidebarOpen ? <ChevronRight size={20} className="text-gray-700" /> : <ChevronLeft size={20} className="text-gray-700" />}
       </button>
 
+      {/* --- MOBILE-ONLY FAB TO OPEN BOTTOM SHEET --- */}
       <button
         onClick={toggleSidebar}
         className="md:hidden absolute bottom-5 right-5 z-20 bg-primary-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center hover:bg-primary-700 active:bg-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"

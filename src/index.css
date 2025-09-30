@@ -22,9 +22,9 @@
   --gray-700: #495057;
   --gray-800: #343a40;
   --gray-900: #212529;
-  --sidebar-width: 30rem; /* 320px if 1rem = 16px. Corresponds to w-80 */
-  --header-height: 57px; /* Approximate height of your Header.tsx */
-  --sidebar-tabs-height: 65px; /* Approximate height of the tab bar in Sidebar.tsx */
+  --sidebar-width: 30rem; /* 480px. Kept for desktop */
+  --header-height: 57px; 
+  --sidebar-tabs-height: 65px;
 }
 
 body {
@@ -39,26 +39,18 @@ body {
 }
 
 #root {
-  height: 100%; /* Ensure root also takes full height */
+  height: 100%;
 }
+
 h1, h2, h3, h4, h5, h6 {
   @apply font-semibold;
-}
-
-.leaflet-container {
-  height: 100%;
-  width: 100%;
-}
-
-.sidebar-tab-active {
-  @apply bg-primary-600 text-white;
 }
 
 .map-controls {
   @apply bg-white shadow-md rounded-md p-2 z-10;
 }
 
-/* Custom styling for the sidebar and map layout */
+/* Custom styling for the dashboard layout */
 .dashboard-layout {
   @apply flex flex-col h-full;
 }
@@ -71,27 +63,51 @@ h1, h2, h3, h4, h5, h6 {
   @apply absolute inset-0 z-0;
 }
 
+/* --- MOBILE-FIRST BOTTOM SHEET STYLES (default) --- */
 .sidebar {
-  @apply bg-white shadow-xl flex flex-col absolute top-0 right-0 h-full z-30;
-  @apply w-full md:w-[var(--sidebar-width)];
-  transform: translateX(100%);
-  visibility: hidden; /* Hidden by default */
-  transition: transform 0.3s ease-in-out, visibility 0.3s;
-}
-.sidebar-open {
-  transform: translateX(0%);
-  visibility: visible; /* Becomes visible when open */
+  @apply bg-white shadow-xl flex flex-col fixed bottom-0 left-0 right-0 z-30;
+  height: calc(100dvh - 80px); /* Peek height from top of screen */
+  max-height: 100dvh;
+  border-top-left-radius: 1.5rem; /* 24px */
+  border-top-right-radius: 1.5rem; /* 24px */
+  transform: translateY(100%);
+  visibility: hidden;
+  transition: transform 0.3s ease-in-out, visibility 0s 0.3s;
 }
 
-/* This class is no longer strictly needed but kept for clarity */
-.sidebar-collapsed {
-  transform: translateX(100%);
-  visibility: hidden;
+.sidebar-open {
+  transform: translateY(0);
+  visibility: visible;
+  transition: transform 0.3s ease-in-out, visibility 0s;
 }
+
+.sidebar-collapsed {
+  transform: translateY(100%);
+  visibility: hidden;
+  transition: transform 0.3s ease-in-out, visibility 0s 0.3s;
+}
+
+/* --- DESKTOP SIDEBAR STYLES (md breakpoint and up) --- */
+@media (min-width: 768px) {
+  .sidebar {
+    @apply absolute top-0 right-0 h-full w-[var(--sidebar-width)] rounded-none;
+    transform: translateX(100%);
+    visibility: hidden;
+    transition: transform 0.3s ease-in-out, visibility 0.3s;
+  }
+  .sidebar-open {
+    transform: translateX(0%);
+    visibility: visible;
+  }
+  .sidebar-collapsed {
+    transform: translateX(100%);
+    visibility: hidden;
+  }
+}
+
 
 .sidebar-content-area {
-  height: calc(100vh - var(--header-height) - var(--sidebar-tabs-height)); /* Fallback */
-  height: calc(100dvh - var(--header-height) - var(--sidebar-tabs-height)); /* Corrected height */
+  height: calc(100% - var(--header-height) - var(--sidebar-tabs-height));
   overflow-y: auto;
   flex-grow: 1;
   scrollbar-width: thin;
@@ -127,21 +143,13 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 -10px 15px -3px rgba(0, 0, 0, 0.1), 0 -4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
-.leaflet-container {
-  height: 100%;
-  width: 100%;
-  background-color: #f0f0f0;
-}
-
-.sidebar .overflow-y-auto {
-  flex-grow: 1;
-}
 .map-legend {
   @apply bg-white bg-opacity-90 p-3 rounded-md shadow-md text-sm;
 }
 
 .toggle-button {
-  @apply flex items-center justify-center w-8 h-8 rounded-full bg-primary-600 text-white shadow-md;
+  /* This is the desktop toggle button, hide on mobile */
+  @apply hidden md:flex items-center justify-center w-8 h-8 rounded-full bg-primary-600 text-white shadow-md;
 }
 
 .toggle-button:hover {
@@ -236,14 +244,6 @@ h1, h2, h3, h4, h5, h6 {
   @apply p-2;
 }
 
-.leaflet-bar {
-  @apply shadow-lg z-[1000];
-}
-.leaflet-control-geocoder.leaflet-bar {
-}
-
-.tree-popup { min-width: 200px; }
-
 .chart-container {
   @apply absolute bottom-0 left-0 z-20 bg-white border-t-2 border-gray-300 shadow-top-lg;
   right: 0;
@@ -251,5 +251,11 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .chart-container-sidebar-open {
-  @apply md:right-[var(--sidebar-width)];
+  right: 0; /* Full width on mobile by default */
+}
+
+@media (min-width: 768px) {
+  .chart-container-sidebar-open {
+    right: var(--sidebar-width); /* Adjust for desktop sidebar */
+  }
 }

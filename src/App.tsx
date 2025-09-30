@@ -8,7 +8,7 @@ import { ArchetypeData } from './store/TreeStore';
 import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl';
 
 function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false); // Start with sidebar closed on mobile
   const [selectedTreeId, setSelectedTreeId] = useState<string | null>(null);
   const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [baseMap, setBaseMap] = useState('light');
@@ -75,9 +75,19 @@ function App() {
           onToggle3D={handleToggle3D}
           lightConfig={lightConfig}
         />
+
+        {/* --- ADDED: Mobile overlay for dismissing the bottom sheet --- */}
+        {sidebarOpen && (
+          <div
+            onClick={toggleSidebar}
+            className="fixed inset-0 bg-black bg-opacity-30 z-20 md:hidden"
+            aria-hidden="true"
+          />
+        )}
+
         <Sidebar
           isOpen={sidebarOpen}
-          toggleSidebar={toggleSidebar} // Pass the toggle function
+          toggleSidebar={toggleSidebar}
           selectedTreeId={selectedTreeId}
           activeTabIndex={activeTabIndex}
           setActiveTabIndex={setActiveTabIndex}

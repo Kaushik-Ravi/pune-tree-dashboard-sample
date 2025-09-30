@@ -7,7 +7,7 @@ import {
   Layers as LayersIcon,
   ChevronLeft,
   ChevronRight,
-  X, // MODIFIED: Import the X icon
+  X,
 } from 'lucide-react';
 import CityOverview from './tabs/CityOverview';
 import TreeDetails from './tabs/TreeDetails';
@@ -18,7 +18,7 @@ import { LightConfig } from './tabs/LightAndShadowControl';
 
 interface SidebarProps {
   isOpen: boolean;
-  toggleSidebar: () => void; // MODIFIED: Explicitly add the toggle function prop
+  toggleSidebar: () => void;
   selectedTreeId: string | null;
   activeTabIndex: number;
   setActiveTabIndex: (index: number) => void;
@@ -36,7 +36,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
-  toggleSidebar, // MODIFIED: Destructure the toggle function
+  toggleSidebar,
   selectedTreeId,
   activeTabIndex,
   setActiveTabIndex,
@@ -93,10 +93,14 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <div className={`sidebar ${!isOpen ? 'sidebar-collapsed' : 'sidebar-open'}`}>
+    <div className={`sidebar ${isOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
+      {/* Mobile-only Grab Handle */}
+      <div className="md:hidden w-full flex justify-center pt-3 pb-2">
+        <div className="w-10 h-1.5 bg-gray-300 rounded-full"></div>
+      </div>
+
       <div className="flex justify-between items-center bg-gray-100 p-3 border-b border-gray-200 h-[var(--header-height)]">
         <h2 className="text-lg font-semibold text-gray-800">Dashboard</h2>
-        {/* MODIFIED: Added close button */}
         <button
           onClick={toggleSidebar}
           className="p-1 text-gray-500 rounded-full hover:bg-gray-200 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400"
@@ -105,9 +109,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           <X size={24} />
         </button>
       </div>
+      
       <div className="bg-gray-50 border-b border-gray-200 relative h-[var(--sidebar-tabs-height)] flex items-center">
-        <button onClick={() => scrollTabs('left')} className="absolute left-0 top-1/2 -translate-y-1/2 z-20 p-2 text-gray-500 hover:text-gray-800" aria-label="Scroll tabs left"><ChevronLeft size={20} /></button>
-        <div ref={tabContainerRef} className="flex overflow-x-auto hide-scrollbar mx-8 flex-nowrap h-full">
+        {/* Desktop-only scroll buttons */}
+        <button onClick={() => scrollTabs('left')} className="hidden md:block absolute left-0 top-1/2 -translate-y-1/2 z-20 p-2 text-gray-500 hover:text-gray-800" aria-label="Scroll tabs left"><ChevronLeft size={20} /></button>
+        
+        <div ref={tabContainerRef} className="flex overflow-x-auto hide-scrollbar mx-2 md:mx-8 flex-nowrap h-full">
           {tabs.map((tab, index) => (
             <button
               key={tab.id}
@@ -118,10 +125,14 @@ const Sidebar: React.FC<SidebarProps> = ({
             </button>
           ))}
         </div>
-        <button onClick={() => scrollTabs('right')} className="absolute right-0 top-1/2 -translate-y-1/2 z-20 p-2 text-gray-500 hover:text-gray-800" aria-label="Scroll tabs right"><ChevronRight size={20} /></button>
+
+        {/* Desktop-only scroll buttons */}
+        <button onClick={() => scrollTabs('right')} className="hidden md:block absolute right-0 top-1/2 -translate-y-1/2 z-20 p-2 text-gray-500 hover:text-gray-800" aria-label="Scroll tabs right"><ChevronRight size={20} /></button>
       </div>
+
       <div className="sidebar-content-area p-4">{renderTabContent()}</div>
     </div>
   );
 };
+
 export default Sidebar;
