@@ -8,7 +8,7 @@ import type { FeatureCollection, Point, Feature, Polygon } from 'geojson';
 
 const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
-// --- Helper: Create an empty FeatureCollection ---
+// Helper function to create a valid, empty FeatureCollection. This is crucial.
 const emptyFeatureCollection = (): FeatureCollection<Polygon> => ({
   type: 'FeatureCollection',
   features: [],
@@ -31,10 +31,10 @@ interface ThreeDTreesLayerProps {
 }
 
 const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTreeId, is3D }) => {
-  // FIX: Initialize with an empty FeatureCollection, not null.
+  // FIX: Initialize with a valid, empty FeatureCollection, not null.
   const [treeData, setTreeData] = useState<ThreeDGeoJSON>({ type: 'FeatureCollection', features: [] });
 
-  // --- Style objects are now INSIDE the component and wrapped in useMemo ---
+  // Style objects are correctly placed inside the component and memoized.
   const trunkLayerStyle: LayerProps = useMemo(() => ({
     id: 'tree-trunks-3d',
     type: 'fill-extrusion',
@@ -83,7 +83,6 @@ const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTre
 
 
   useEffect(() => {
-    // FIX: Only fetch data if we are in 3D mode AND have bounds.
     if (bounds && is3D) {
       const fetchTreeData = async () => {
         try {
@@ -96,13 +95,12 @@ const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTre
       };
       fetchTreeData();
     } else if (!is3D) {
-      // When switching to 2D, clear the data but don't set to null
+      // When switching to 2D, clear the data but keep a valid empty object.
       setTreeData({ type: 'FeatureCollection', features: [] });
     }
   }, [bounds, is3D]);
 
   const { trunkFeatures, canopyFeatures } = useMemo(() => {
-    // FIX: If there's no data, return empty collections, not null.
     if (!treeData || !treeData.features || treeData.features.length === 0) {
       return { trunkFeatures: emptyFeatureCollection(), canopyFeatures: emptyFeatureCollection() };
     }
@@ -148,19 +146,18 @@ const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTre
   }, [treeData]);
   
   const { highlightedTrunk, highlightedCanopy } = useMemo(() => {
+    // FIX: Instead of returning null, return an empty FeatureCollection.
     if (!selectedTreeId || !trunkFeatures || trunkFeatures.features.length === 0) {
-      return { highlightedTrunk: null, highlightedCanopy: null };
+      return { highlightedTrunk: emptyFeatureCollection(), highlightedCanopy: emptyFeatureCollection() };
     }
     const trunk = trunkFeatures.features.find(f => f.properties?.id === selectedTreeId);
     const canopySegments = canopyFeatures.features.filter(f => f.properties?.id === selectedTreeId);
     
     return {
-        highlightedTrunk: trunk ? { type: 'FeatureCollection', features: [trunk] } as FeatureCollection<Polygon> : null,
-        highlightedCanopy: canopySegments.length > 0 ? { type: 'FeatureCollection', features: canopySegments } as FeatureCollection<Polygon> : null
+        highlightedTrunk: trunk ? { type: 'FeatureCollection', features: [trunk] } as FeatureCollection<Polygon> : emptyFeatureCollection(),
+        highlightedCanopy: canopySegments.length > 0 ? { type: 'FeatureCollection', features: canopySegments } as FeatureCollection<Polygon> : emptyFeatureCollection()
     };
   }, [selectedTreeId, trunkFeatures, canopyFeatures]);
-
-  // FIX: The guard clause that caused unmounting has been removed.
 
   return (
     <>
@@ -171,16 +168,13 @@ const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTre
         <Layer {...canopyLayerStyle} />
       </Source>
       
-      {highlightedTrunk && (
-        <Source id="highlight-trunk-source" type="geojson" data={highlightedTrunk}>
-            <Layer {...highlightedTrunkLayerStyle} />
-        </Source>
-      )}
-      {highlightedCanopy && (
-        <Source id="highlight-canopy-source" type="geojson" data={highlightedCanopy}>
-            <Layer {...highlightedCanopyLayerStyle} />
-        </Source>
-      )}
+      {/* FIX: Removed conditional rendering. These sources are now ALWAYS on the map. */}
+      <Source id="highlight-trunk-source" type="geojson" data={highlightedTrunk}>
+          <Layer {...highlightedTrunkLayerStyle} />
+      </Source>
+      <Source id="highlight-canopy-source" type="geojson" data={highlightedCanopy}>
+          <Layer {...highlightedCanopyLayerStyle} />
+      </Source>
     </>
   );
 };
