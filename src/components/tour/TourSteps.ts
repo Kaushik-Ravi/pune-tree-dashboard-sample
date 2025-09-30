@@ -1,7 +1,6 @@
 // src/components/tour/TourSteps.ts
 import { Step } from 'react-joyride';
 
-// MODIFIED: Added 'export' to make the constant available for import.
 export const TOUR_STEPS: Step[] = [
   {
     target: 'body',
@@ -40,8 +39,8 @@ export const TOUR_STEPS: Step[] = [
     placement: 'right',
   },
   {
-    // Note: This targets the map drawing controls.
-    target: '.mapboxgl-ctrl-group',
+    // MODIFIED: Updated target to the new, stable ID for the draw controls.
+    target: '#draw-controls-container',
     content: 'Use these tools to draw a polygon on the map. You can analyze the tree count and CO₂ sequestration within any custom area you define.',
     title: 'Analyze Your Neighbourhood',
     placement: 'right',

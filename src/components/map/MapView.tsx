@@ -281,15 +281,18 @@ const MapView: React.FC<MapViewProps> = ({
         {is3D && <Layer {...buildings3DLayerStyle} />}
         {is3D && <ThreeDTreesLayer bounds={viewBounds} selectedTreeId={selectedTreeId} />}
 
-        <DrawControl
-          ref={drawControlRef as any}
-          position="top-left"
-          displayControlsDefault={false}
-          controls={{ polygon: true, trash: true }}
-          onCreate={onDrawCreate}
-          onUpdate={onDrawUpdate}
-          onDelete={onDrawDelete}
-        />
+        {/* MODIFIED: Wrapped DrawControl in a div with a stable ID for tour targeting */}
+        <div id="draw-controls-container">
+          <DrawControl
+            ref={drawControlRef as any}
+            position="top-left"
+            displayControlsDefault={false}
+            controls={{ polygon: true, trash: true }}
+            onCreate={onDrawCreate}
+            onUpdate={onDrawUpdate}
+            onDelete={onDrawDelete}
+          />
+        </div>
         <SimulatedTreesLayer />
         <ScaleControl unit="metric" position="bottom-left" />
         <NavigationControl position="top-left" showCompass={true} />

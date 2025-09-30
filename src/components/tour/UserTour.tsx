@@ -1,22 +1,34 @@
 // src/components/tour/UserTour.tsx
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Joyride, { CallBackProps, STATUS, Step, EVENTS, ACTIONS } from 'react-joyride';
+import React, { useState, useEffect, useCallback } from 'react';
+import Joyride, { CallBackProps, STATUS, Step, EVENTS, ACTIONS, FloaterProps } from 'react-joyride';
 import { TOUR_STEPS } from './TourSteps';
 import { useTreeStore } from '../../store/TreeStore';
 
 // Custom hook for managing tour completion state in localStorage
-const useTourStatus = (): [boolean, () => void] => {
+const useTourStatus = (): [boolean, () => void, boolean] => {
   const TOUR_COMPLETED_KEY = 'puneTreeDashboardTourCompleted';
+  const [isLoading, setIsLoading] = useState(true);
 
   const [isCompleted, setIsCompleted] = useState(() => {
-    // On mount, check localStorage. Default to 'true' if localStorage is unavailable to prevent tour loops.
     try {
       return window.localStorage.getItem(TOUR_COMPLETED_KEY) === 'true';
     } catch (error) {
       console.error("Could not access localStorage. Disabling tour.", error);
-      return true;
+      return true; // Default to completed if localStorage is unavailable
     }
   });
+
+  // Check storage only once on mount
+  useEffect(() => {
+    try {
+      const storedValue = window.localStorage.getItem(TOUR_COMPLETED_KEY);
+      setIsCompleted(storedValue === 'true');
+    } catch (error) {
+      setIsCompleted(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   const markAsCompleted = useCallback(() => {
     try {
@@ -27,23 +39,7 @@ const useTourStatus = (): [boolean, () => void] => {
     }
   }, []);
 
-  return [isCompleted, markAsCompleted];
-};
-
-// Custom hook to adapt tour step placement for mobile viewports
-const useResponsiveSteps = (steps: Step[]): Step[] => {
-    return useMemo(() => {
-        const isMobile = window.innerWidth < 768; // md breakpoint
-        if (!isMobile) {
-            return steps;
-        }
-        return steps.map(step => {
-            if (step.placement === 'left' || step.placement === 'right') {
-                return { ...step, placement: 'bottom' };
-            }
-            return step;
-        });
-    }, [steps]);
+  return [isCompleted, markAsCompleted, isLoading];
 };
 
 
@@ -53,103 +49,131 @@ interface UserTourProps {
 }
 
 const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }) => {
-  const [isTourCompleted, markTourAsCompleted] = useTourStatus();
+  const [isTourCompleted, markAsCompleted, isStatusLoading] = useTourStatus();
   const { cityStats } = useTreeStore(); // Subscribe to the data store
-  const responsiveSteps = useResponsiveSteps(TOUR_STEPS);
-
+  
   const [run, setRun] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  const [showLoader, setShowLoader] = useState(false);
 
-  // Data-Contingent Activation: Start the tour only after initial data is loaded.
+  // Data-Contingent Activation with Pre-Tour Loader
   useEffect(() => {
-    if (!isTourCompleted && cityStats) {
-      // Delay ensures the UI has settled after data load.
-      setTimeout(() => {
-        setRun(true);
-      }, 1500);
+    if (isStatusLoading) return; // Wait until we know if the tour was completed
+
+    if (!isTourCompleted) {
+      if (!cityStats) {
+        // If tour is needed but data isn't ready, show the loader.
+        setShowLoader(true);
+      } else {
+        // Data is ready, hide loader and start the tour.
+        setShowLoader(false);
+        setTimeout(() => {
+          setRun(true);
+        }, 500); // A brief delay for UI to settle
+      }
     }
-  }, [isTourCompleted, cityStats]);
+  }, [isTourCompleted, cityStats, isStatusLoading]);
 
   // State-Aware UI Control: Programmatically prepare the UI before each step.
   useEffect(() => {
     if (!run) return;
 
-    const step = responsiveSteps[stepIndex];
+    const step = TOUR_STEPS[stepIndex];
     if (!step) return;
 
     const target = typeof step.target === 'string' ? step.target : '';
 
-    // Open the sidebar for steps that target its elements
-    if (target.startsWith('.sidebar')) {
-      // Use a short timeout to allow the sidebar animation to begin before Joyride tries to find the element
-      setTimeout(() => setSidebarOpen(true), 100);
+    const shouldOpenSidebar = target.startsWith('.sidebar') || 
+                              target.includes('button:nth-of-type(4)') ||
+                              target.includes('button:nth-of-type(3)');
+
+    if (shouldOpenSidebar) {
+      setSidebarOpen(true);
     }
 
-    // Switch to the correct tab for specific steps
-    if (target.includes('button:nth-of-type(4)')) { // Map Layers tab
+    if (target.includes('button:nth-of-type(4)')) { 
       setActiveTabIndex(3);
-    } else if (target.includes('button:nth-of-type(3)')) { // Planting Advisor tab
+    } else if (target.includes('button:nth-of-type(3)')) {
       setActiveTabIndex(2);
-    } else if (stepIndex === 1 || stepIndex === 2) { // City Overview & Navigation tabs
+    } else if (stepIndex === 1 || stepIndex === 2) { 
       setActiveTabIndex(0);
     }
 
-  }, [stepIndex, run, setSidebarOpen, setActiveTabIndex, responsiveSteps]);
-
+  }, [stepIndex, run, setSidebarOpen, setActiveTabIndex]);
 
   const handleJoyrideCallback = (data: CallBackProps) => {
     const { status, type, action, index } = data;
     
-    // Handle tour completion or dismissal
     const finishedStatuses: string[] = [STATUS.FINISHED, STATUS.SKIPPED];
     if (finishedStatuses.includes(status)) {
       setRun(false);
-      markTourAsCompleted();
-      setSidebarOpen(false); // Ensure sidebar is closed at the end
-      setStepIndex(0); // Reset for potential future re-trigger
+      markAsCompleted();
+      setSidebarOpen(false);
+      setStepIndex(0);
       return;
     }
-
-    // Manually control step progression after user clicks Next/Back
-    if (type === EVENTS.STEP_AFTER) {
-      const newIndex = index + (action === ACTIONS.PREV ? -1 : 1);
-      setStepIndex(newIndex);
+    
+    if (type === EVENTS.STEP_AFTER || type === EVENTS.TARGET_NOT_FOUND) {
+      requestAnimationFrame(() => {
+        setStepIndex(index + (action === ACTIONS.PREV ? -1 : 1));
+      });
     }
   };
 
+  // MODIFIED: Removed invalid 'preventOverflow' prop. The library handles flipping by default.
+  // We only pass valid props, such as 'styles'.
+  const floaterProps: FloaterProps = {
+    styles: {
+      floater: {
+        filter: `drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1))`
+      },
+    },
+  };
+
   return (
-    <Joyride
-      run={run}
-      steps={responsiveSteps}
-      stepIndex={stepIndex}
-      callback={handleJoyrideCallback}
-      continuous
-      scrollToFirstStep
-      showProgress
-      showSkipButton
-      styles={{
-        options: {
-          zIndex: 10000,
-          primaryColor: '#2E7D32', // Matches the app's primary green
-        },
-        tooltip: {
-          borderRadius: '0.5rem',
-          fontSize: 15,
-        },
-        tooltipContainer: {
-          textAlign: 'left',
-        },
-        buttonNext: {
-            fontWeight: 600,
-        },
-        buttonBack: {
-            marginRight: 'auto',
-        }
-      }}
-      locale={{
-        last: 'End Tour',
-      }}
-    />
+    <>
+      {showLoader && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center z-[10001]">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white mb-4"></div>
+          <p className="text-white text-lg">Preparing your dashboard experience...</p>
+        </div>
+      )}
+      <Joyride
+        run={run}
+        steps={TOUR_STEPS}
+        stepIndex={stepIndex}
+        callback={handleJoyrideCallback}
+        continuous
+        scrollToFirstStep
+        showProgress
+        showSkipButton
+        floaterProps={floaterProps}
+        styles={{
+          options: {
+            zIndex: 10000,
+            primaryColor: '#2E7D32',
+          },
+          tooltip: {
+            borderRadius: '0.5rem',
+            fontSize: '1rem',
+            maxWidth: 'calc(100vw - 2rem)',
+            width: 380,
+          },
+          tooltipContainer: {
+            textAlign: 'left',
+          },
+          buttonNext: {
+              fontWeight: 600,
+          },
+          buttonBack: {
+              marginRight: 'auto',
+          }
+        }}
+        locale={{
+          last: 'End Tour',
+        }}
+      />
+    </>
   );
 };
 
