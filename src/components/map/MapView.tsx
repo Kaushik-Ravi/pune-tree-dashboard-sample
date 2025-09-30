@@ -7,10 +7,9 @@ import Map, {
   MapRef,
   NavigationControl,
   MapLayerMouseEvent,
-  ViewStateChangeEvent,
 } from 'react-map-gl/maplibre';
 import type { LayerProps } from 'react-map-gl/maplibre';
-import type { Fog } from 'maplibre-gl';
+import type { Fog } from 'maplibre-gl'; // --- FIX: Corrected import path for the Fog type ---
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTreeStore } from '../../store/TreeStore';
 import SimulatedTreesLayer from './SimulatedTreesLayer';
@@ -86,7 +85,7 @@ const MapView: React.FC<MapViewProps> = ({
   const { setSelectedArea } = useTreeStore();
   const drawControlRef = useRef<{ draw: MapboxDraw } | null>(null);
   const [zoom, setZoom] = useState(11.5);
-  const [mapBounds, setMapBounds] = useState<{ sw: [number, number]; ne: [number, number] } | null>(null);
+  const [viewBounds, setViewBounds] = useState(null);
   
   const mapTilerKey = import.meta.env.VITE_MAPTILER_KEY;
   const getMapStyle = (style: string) => {
@@ -142,43 +141,32 @@ const MapView: React.FC<MapViewProps> = ({
       'star-intensity': Math.max(0, 1 - lightConfig.ambientIntensity * 5)
     };
   }, [is3D, lightConfig]);
-  
-  const handleToggle3D = useCallback(() => {
+
+  const handleToggle3D = useCallback(async () => {
     const map = mapRef.current;
     if (!map) return;
 
     onToggle3D();
 
-    if (!is3D) { // Transitioning TO 3D
+    if (!is3D) {
       if (baseMap !== 'streets') {
         changeBaseMap('streets');
       }
+      const currentBounds = map.getBounds();
+      setViewBounds({
+          sw: [currentBounds.getWest(), currentBounds.getSouth()],
+          ne: [currentBounds.getEast(), currentBounds.getNorth()],
+      } as any);
+      
       setTimeout(() => {
         map.flyTo({ pitch: 60, zoom: 17.5, duration: 2000, essential: true });
-        const bounds = map.getBounds();
-        setMapBounds({
-          sw: [bounds.getWest(), bounds.getSouth()],
-          ne: [bounds.getEast(), bounds.getNorth()],
-        });
       }, 100);
-    } else { // Transitioning TO 2D
+    } else {
+      setViewBounds(null);
       map.flyTo({ pitch: 0, zoom: map.getZoom() < 16 ? map.getZoom() : 16, duration: 2000, essential: true });
     }
   }, [is3D, onToggle3D, baseMap, changeBaseMap]);
-
-  const handleMoveEnd = useCallback((e: ViewStateChangeEvent) => {
-    if (is3D && e.viewState.zoom >= 16) {
-      const map = mapRef.current;
-      if (map) {
-          const bounds = map.getBounds();
-          setMapBounds({
-            sw: [bounds.getWest(), bounds.getSouth()],
-            ne: [bounds.getEast(), bounds.getNorth()],
-          });
-      }
-    }
-  }, [is3D]);
-
+  
   const onDrawCreate = useCallback((evt: DrawEvent) => {
     const feature = evt.features[0];
     if (feature) {
@@ -230,18 +218,21 @@ const MapView: React.FC<MapViewProps> = ({
   }, [onTreeSelect, is3D]);
 
   const handleMouseMove = useCallback((event: MapLayerMouseEvent) => {
+    if (is3D) return;
     const map = mapRef.current?.getMap();
-    if (!map || is3D) return;
-    
+    if (!map) return;
     const treeFeature = event.features?.find(f => f.layer.id === treeLayerStyle.id);
     map.getCanvas().style.cursor = treeFeature ? 'pointer' : '';
     map.setFilter('trees-point-highlight', ['==', 'Tree_ID', treeFeature ? treeFeature.properties.Tree_ID : '']);
   }, [is3D]);
   
   const interactiveLayers = useMemo(() => {
-    const layerIds = [treeLayerStyle.id, 'tree-trunks-3d', 'tree-canopies-3d'];
-    return layerIds.filter((id): id is string => typeof id === 'string');
-  }, []);
+    const layers = [treeLayerStyle.id];
+    if (is3D) {
+      layers.push('tree-trunks-3d', 'tree-canopies-3d');
+    }
+    return layers.filter(Boolean) as string[];
+  }, [is3D]);
 
   return (
     <div className="map-container">
@@ -254,29 +245,21 @@ const MapView: React.FC<MapViewProps> = ({
         onClick={handleMapClick}
         onMouseMove={handleMouseMove}
         onZoom={(e) => setZoom(e.viewState.zoom)}
-        onMoveEnd={handleMoveEnd}
         fog={fog}
       >
         {!is3D && (
-            <Source id="trees" type="vector" url={vectorSourceUrl}>
-                <Layer {...treeLayerStyle} />
-                <Layer {...treeLayerHighlightStyle} />
-            </Source>
+          <Source id="trees" type="vector" url={vectorSourceUrl}>
+            <Layer {...treeLayerStyle} />
+            <Layer {...treeLayerHighlightStyle} />
+          </Source>
         )}
-
         {showLSTOverlay && (
           <Source id="lst-image-source" type="image" url={lstImageUrl} coordinates={lstImageBounds}>
             <Layer id="lst-image-layer" type="raster" source="lst-image-source" paint={{ 'raster-opacity': 0.65 }} />
           </Source>
         )}
-        
         {is3D && <Layer {...buildings3DLayerStyle} />}
-
-        {is3D && <ThreeDTreesLayer
-          bounds={mapBounds}
-          selectedTreeId={selectedTreeId}
-          is3D={is3D}
-        />}
+        {is3D && <ThreeDTreesLayer bounds={viewBounds} selectedTreeId={selectedTreeId} />}
 
         <DrawControl
           ref={drawControlRef as any}
