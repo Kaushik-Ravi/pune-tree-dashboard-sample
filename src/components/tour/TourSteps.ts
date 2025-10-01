@@ -44,25 +44,28 @@ export const DESKTOP_STEPS: ExtendedStep[] = [
     causesTransition: true, // This step opens the sidebar
   },
   {
-    target: '.absolute.top-\\[170px\\].left-\\[10px\\] button',
-    content: 'Switch between a 2D and an immersive 3D view of the city. In 3D, you can visualize tree heights and canopy structures. (Note: 3D mode is available at higher zoom levels).',
-    title: 'Toggle 3D View',
-    placement: 'right',
-    action: closeSidebar,
-    causesTransition: true, // This step closes the sidebar
+    target: '[data-tour-id="neighborhood-stats-card"]',
+    content: 'This card will show you statistics for any custom area you draw on the map. Let\'s see the tools for that next.',
+    title: 'Analyze a Custom Area',
+    placement: 'left',
+    action: ({ setSidebarOpen, setActiveTabIndex }) => {
+      setSidebarOpen(true);
+      setActiveTabIndex(0);
+    },
   },
   {
     target: '#draw-controls-container',
     content: 'Use these tools to draw a polygon on the map. The dashboard will then analyze the tree count and CO₂ sequestration specifically within that area.',
     title: 'Analyze Your Neighborhood',
     placement: 'right',
-    action: closeSidebar, // Already closed, but good for explicit state
+    action: closeSidebar,
+    causesTransition: true, // This step closes the sidebar
   },
   {
     target: '.sidebar > div:nth-of-type(3) > div > button:nth-of-type(3)',
     content: 'Get recommendations for the best tree species for cooling and simulate planting scenarios in your selected area.',
     title: 'Planting Advisor',
-    placement: 'bottom',
+    placement: 'left',
     action: ({ setSidebarOpen, setActiveTabIndex }) => {
       setSidebarOpen(true);
       setActiveTabIndex(2);
@@ -73,7 +76,7 @@ export const DESKTOP_STEPS: ExtendedStep[] = [
     target: '.sidebar > div:nth-of-type(3) > div > button:nth-of-type(4)',
     content: 'Here you can change the basemap style, toggle the Land Surface Temperature (LST) overlay, and control lighting and shadows in the 3D view.',
     title: 'Map Layers & Settings',
-    placement: 'bottom',
+    placement: 'left',
     action: ({ setSidebarOpen, setActiveTabIndex }) => {
       setSidebarOpen(true);
       setActiveTabIndex(3);
@@ -120,19 +123,22 @@ export const MOBILE_STEPS: ExtendedStep[] = [
         causesTransition: true, // This step opens the sidebar
       },
       {
-        target: '.absolute.top-\\[170px\\].left-\\[10px\\] button',
-        content: 'Switch between a 2D and an immersive 3D view of the city. (Note: 3D mode is available at higher zoom levels).',
-        title: 'Toggle 3D View',
-        placement: 'bottom',
-        action: closeSidebar,
-        causesTransition: true, // This step closes the sidebar
+        target: '[data-tour-id="neighborhood-stats-card"]',
+        content: 'This card will show you statistics for any custom area you draw on the map. Let\'s see the tools for that next.',
+        title: 'Analyze a Custom Area',
+        placement: 'top',
+        action: ({ setSidebarOpen, setActiveTabIndex }) => {
+          setSidebarOpen(true);
+          setActiveTabIndex(0);
+        },
       },
       {
         target: '#draw-controls-container',
         content: 'Use these tools to draw a polygon on the map to analyze the trees within that specific area.',
         title: 'Analyze Your Neighborhood',
         placement: 'bottom',
-        action: closeSidebar, // Already closed, but good for explicit state
+        action: closeSidebar,
+        causesTransition: true, // This step closes the sidebar
       },
       {
         target: '.sidebar > div:nth-of-type(3) > div > button:nth-of-type(3)',

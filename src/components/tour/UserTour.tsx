@@ -1,6 +1,6 @@
 // src/components/tour/UserTour.tsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Joyride, { CallBackProps, STATUS, Step, EVENTS, ACTIONS, FloaterProps } from 'react-joyride';
+import Joyride, { CallBackProps, STATUS, EVENTS, ACTIONS, FloaterProps } from 'react-joyride';
 import { DESKTOP_STEPS, MOBILE_STEPS, ExtendedStep } from './TourSteps';
 import { useTreeStore } from '../../store/TreeStore';
 
@@ -76,7 +76,9 @@ const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }
 
   // State-Driven Controller Logic: Prepares the UI *before* a step is rendered.
   useEffect(() => {
-    if (!run) return;
+    // This check is crucial. We only want to run the action when the tour is active
+    // and a new step is about to be rendered.
+    if (!run || !tourSteps[stepIndex]) return;
 
     const step = tourSteps[stepIndex] as ExtendedStep;
     if (step?.action) {
@@ -117,6 +119,7 @@ const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }
         } else {
           // Fallback in case the element isn't found (should not happen)
           setStepIndex(newIndex);
+          setRun(true);
         }
       } else {
         // For non-transitional steps, proceed immediately.

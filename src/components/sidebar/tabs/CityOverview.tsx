@@ -122,7 +122,7 @@ const CityOverview: React.FC = () => {
         </div>
       </div>
 
-      <div className="card">
+      <div className="card" data-tour-id="neighborhood-stats-card">
         <div className="card-header flex justify-between items-center">
           <h3 className="text-lg font-medium">Know Your Neighbourhood</h3>
           <InfoPopover titleContent="How to Use This Section">
