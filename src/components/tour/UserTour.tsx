@@ -76,13 +76,10 @@ const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }
 
   // State-Driven Controller Logic: Prepares the UI *before* a step is rendered.
   useEffect(() => {
-    // This check is crucial. We only want to run the action when the tour is active
-    // and a new step is about to be rendered.
     if (!run || !tourSteps[stepIndex]) return;
 
     const step = tourSteps[stepIndex] as ExtendedStep;
     if (step?.action) {
-      // Execute the pre-step action to set the application state correctly.
       step.action({ setSidebarOpen, setActiveTabIndex });
     }
   }, [stepIndex, run, setSidebarOpen, setActiveTabIndex, tourSteps]);
@@ -94,7 +91,7 @@ const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }
     if (finishedStatuses.includes(status)) {
       setRun(false);
       markAsCompleted();
-      setSidebarOpen(false); // Ensure sidebar is closed on exit
+      setSidebarOpen(false);
       setStepIndex(0);
       return;
     }
@@ -103,31 +100,30 @@ const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }
       const extendedStep = step as ExtendedStep;
       const newIndex = index + (action === ACTIONS.PREV ? -1 : 1);
       
-      // If the step we just completed causes a UI transition, wait for it to finish.
       if (action !== ACTIONS.CLOSE && extendedStep.causesTransition) {
-        setRun(false); // Pause the tour
+        setRun(false);
         
         const sidebarElement = document.querySelector('.sidebar');
         if (sidebarElement) {
           const handleTransitionEnd = () => {
             sidebarElement.removeEventListener('transitionend', handleTransitionEnd);
-            // After the animation is confirmed complete, advance and resume the tour.
             setStepIndex(newIndex);
             setRun(true);
           };
-          sidebarElement.addEventListener('transitionend', handleTransitionEnd);
+
+          // This two-stage process ensures the listener is attached after the transition has begun.
+          requestAnimationFrame(() => {
+            sidebarElement.addEventListener('transitionend', handleTransitionEnd);
+          });
         } else {
-          // Fallback in case the element isn't found (should not happen)
           setStepIndex(newIndex);
           setRun(true);
         }
       } else {
-        // For non-transitional steps, proceed immediately.
         setStepIndex(newIndex);
       }
 
     } else if (type === EVENTS.TARGET_NOT_FOUND) {
-      // If a target is not found, skip to the next step to prevent getting stuck.
       console.warn(`Joyride target not found for step ${index}. Advancing.`);
       setStepIndex(index + 1);
     }
@@ -160,7 +156,7 @@ const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }
         showSkipButton
         floaterProps={floaterProps}
         disableOverlayClose
-        disableScrollParentFix
+        disableScrollParentFix={false} // Correctly set to false to enable scrolling in parent containers
         styles={{
           options: {
             zIndex: 10000,

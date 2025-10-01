@@ -45,7 +45,7 @@ export const DESKTOP_STEPS: ExtendedStep[] = [
   },
   {
     target: '[data-tour-id="neighborhood-stats-card"]',
-    content: 'This card will show you statistics for any custom area you draw on the map. Let\'s see the tools for that next.',
+    content: 'This card is where you\'ll see analysis for a custom area. Next, we\'ll show you the tools to create that area.',
     title: 'Analyze a Custom Area',
     placement: 'left',
     action: ({ setSidebarOpen, setActiveTabIndex }) => {
@@ -60,6 +60,13 @@ export const DESKTOP_STEPS: ExtendedStep[] = [
     placement: 'right',
     action: closeSidebar,
     causesTransition: true, // This step closes the sidebar
+  },
+  {
+      target: '.absolute.top-\\[170px\\].left-\\[10px\\] button',
+      content: 'Switch between a 2D and an immersive 3D view of the city. In 3D, you can visualize tree heights and canopy structures. (Note: 3D mode is available at higher zoom levels).',
+      title: 'Toggle 3D View',
+      placement: 'right',
+      action: closeSidebar, 
   },
   {
     target: '.sidebar > div:nth-of-type(3) > div > button:nth-of-type(3)',
@@ -124,7 +131,7 @@ export const MOBILE_STEPS: ExtendedStep[] = [
       },
       {
         target: '[data-tour-id="neighborhood-stats-card"]',
-        content: 'This card will show you statistics for any custom area you draw on the map. Let\'s see the tools for that next.',
+        content: 'This card is where you\'ll see analysis for a custom area. Next, we\'ll show you the tools to create that area.',
         title: 'Analyze a Custom Area',
         placement: 'top',
         action: ({ setSidebarOpen, setActiveTabIndex }) => {
@@ -139,6 +146,13 @@ export const MOBILE_STEPS: ExtendedStep[] = [
         placement: 'bottom',
         action: closeSidebar,
         causesTransition: true, // This step closes the sidebar
+      },
+      {
+        target: '.absolute.top-\\[170px\\].left-\\[10px\\] button',
+        content: 'Switch between a 2D and an immersive 3D view of the city. (Note: 3D mode is available at higher zoom levels).',
+        title: 'Toggle 3D View',
+        placement: 'bottom',
+        action: closeSidebar,
       },
       {
         target: '.sidebar > div:nth-of-type(3) > div > button:nth-of-type(3)',
