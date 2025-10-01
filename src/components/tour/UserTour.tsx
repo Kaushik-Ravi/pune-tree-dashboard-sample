@@ -1,7 +1,7 @@
 // src/components/tour/UserTour.tsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Joyride, { CallBackProps, STATUS, Step, EVENTS, ACTIONS, FloaterProps } from 'react-joyride';
-import { TOUR_STEPS } from './TourSteps';
+import { DESKTOP_STEPS, MOBILE_STEPS, ExtendedStep } from './TourSteps';
 import { useTreeStore } from '../../store/TreeStore';
 
 // Custom hook for managing tour completion state in localStorage
@@ -41,27 +41,6 @@ const useTourStatus = (): [boolean, () => void, boolean] => {
   return [isCompleted, markAsCompleted, isLoading];
 };
 
-// MODIFIED: Re-architected responsive hook for intelligent placement
-const useResponsiveSteps = (steps: Step[]): Step[] => {
-    return useMemo(() => {
-        const isMobile = window.innerWidth < 768; // md breakpoint
-        if (!isMobile) {
-            return steps;
-        }
-        // On mobile, the sidebar is a bottom sheet. Tooltips for its elements must appear on top.
-        return steps.map(step => {
-            const target = typeof step.target === 'string' ? step.target : '';
-            if (target.startsWith('.sidebar')) {
-                return { ...step, placement: 'top' };
-            }
-            if (step.placement === 'left' || step.placement === 'right') {
-                return { ...step, placement: 'top' };
-            }
-            return step;
-        });
-    }, [steps]);
-};
-
 
 interface UserTourProps {
   setSidebarOpen: (isOpen: boolean) => void;
@@ -71,12 +50,18 @@ interface UserTourProps {
 const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }) => {
   const [isTourCompleted, markAsCompleted, isStatusLoading] = useTourStatus();
   const { cityStats } = useTreeStore();
-  const responsiveSteps = useResponsiveSteps(TOUR_STEPS);
+  
+  // MODIFIED: Dynamically select the correct tour steps based on viewport width
+  const tourSteps = useMemo(() => {
+      const isMobile = window.innerWidth < 768; // Tailwind's 'md' breakpoint
+      return isMobile ? MOBILE_STEPS : DESKTOP_STEPS;
+  }, []);
 
   const [run, setRun] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [showLoader, setShowLoader] = useState(false);
 
+  // Data-Contingent Activation: Show loader, then start the tour.
   useEffect(() => {
     if (isStatusLoading) return;
 
@@ -85,44 +70,26 @@ const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }
         setShowLoader(true);
       } else {
         setShowLoader(false);
-        setTimeout(() => {
-          setRun(true);
-        }, 500);
+        setTimeout(() => setRun(true), 500);
       }
     }
   }, [isTourCompleted, cityStats, isStatusLoading]);
 
-  // MODIFIED: Re-architected state controller logic
+  // MODIFIED: State-Driven Controller Logic
+  // This effect runs before a step is rendered to prepare the UI.
   useEffect(() => {
     if (!run) return;
 
-    const step = responsiveSteps[stepIndex];
-    if (!step) return;
-
-    const target = typeof step.target === 'string' ? step.target : '';
-
-    // Determine required UI state for the current step
-    const shouldSidebarBeOpen = target.startsWith('.sidebar');
-
-    // Dispatch UI state changes
-    setSidebarOpen(shouldSidebarBeOpen);
-
-    // Switch tabs only if the sidebar is supposed to be open
-    if (shouldSidebarBeOpen) {
-        if (target.includes('button:nth-of-type(4)')) {
-            setActiveTabIndex(3); // Map Layers
-        } else if (target.includes('button:nth-of-type(3)')) {
-            setActiveTabIndex(2); // Planting Advisor
-        } else {
-            setActiveTabIndex(0); // Default to City Overview for other sidebar steps
-        }
+    const step = tourSteps[stepIndex] as ExtendedStep;
+    if (step?.action) {
+      // Execute the pre-step action to set the application state correctly.
+      step.action({ setSidebarOpen, setActiveTabIndex });
     }
-
-  }, [stepIndex, run, setSidebarOpen, setActiveTabIndex, responsiveSteps]);
+  }, [stepIndex, run, setSidebarOpen, setActiveTabIndex, tourSteps]);
 
   const handleJoyrideCallback = (data: CallBackProps) => {
     const { status, type, action, index } = data;
-
+    
     const finishedStatuses: string[] = [STATUS.FINISHED, STATUS.SKIPPED];
     if (finishedStatuses.includes(status)) {
       setRun(false);
@@ -131,15 +98,13 @@ const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }
       setStepIndex(0);
       return;
     }
-
-    // MODIFIED: Added a delay for UI transitions before advancing the step.
-    // This resolves the race condition where the tour tries to find a target
-    // that is still animating into view.
+    
+    // Use a delay after a step to allow UI transitions to complete before advancing.
     if (type === EVENTS.STEP_AFTER) {
       setTimeout(() => {
         const newIndex = index + (action === ACTIONS.PREV ? -1 : 1);
         setStepIndex(newIndex);
-      }, 300); // 300ms matches the sidebar's CSS transition duration.
+      }, 300); // This duration must match the sidebar's CSS transition time.
     } else if (type === EVENTS.TARGET_NOT_FOUND) {
       // If a target is still not found, advance anyway to prevent getting stuck.
       setStepIndex(index + 1);
@@ -164,7 +129,7 @@ const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }
       )}
       <Joyride
         run={run}
-        steps={responsiveSteps}
+        steps={tourSteps}
         stepIndex={stepIndex}
         callback={handleJoyrideCallback}
         continuous
@@ -172,9 +137,8 @@ const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }
         showProgress
         showSkipButton
         floaterProps={floaterProps}
-        // Disable Joyride's internal step advancement; we control it manually in the callback.
-        disableScrollParentFix
         disableOverlayClose
+        disableScrollParentFix
         styles={{
           options: {
             zIndex: 10000,
