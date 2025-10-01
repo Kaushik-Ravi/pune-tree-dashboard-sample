@@ -51,7 +51,6 @@ const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }
   const [isTourCompleted, markAsCompleted, isStatusLoading] = useTourStatus();
   const { cityStats } = useTreeStore();
   
-  // MODIFIED: Dynamically select the correct tour steps based on viewport width
   const tourSteps = useMemo(() => {
       const isMobile = window.innerWidth < 768; // Tailwind's 'md' breakpoint
       return isMobile ? MOBILE_STEPS : DESKTOP_STEPS;
@@ -75,8 +74,7 @@ const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }
     }
   }, [isTourCompleted, cityStats, isStatusLoading]);
 
-  // MODIFIED: State-Driven Controller Logic
-  // This effect runs before a step is rendered to prepare the UI.
+  // State-Driven Controller Logic: Prepares the UI *before* a step is rendered.
   useEffect(() => {
     if (!run) return;
 
@@ -88,25 +86,46 @@ const UserTour: React.FC<UserTourProps> = ({ setSidebarOpen, setActiveTabIndex }
   }, [stepIndex, run, setSidebarOpen, setActiveTabIndex, tourSteps]);
 
   const handleJoyrideCallback = (data: CallBackProps) => {
-    const { status, type, action, index } = data;
+    const { status, type, action, index, step } = data;
     
     const finishedStatuses: string[] = [STATUS.FINISHED, STATUS.SKIPPED];
     if (finishedStatuses.includes(status)) {
       setRun(false);
       markAsCompleted();
-      setSidebarOpen(false);
+      setSidebarOpen(false); // Ensure sidebar is closed on exit
       setStepIndex(0);
       return;
     }
     
-    // Use a delay after a step to allow UI transitions to complete before advancing.
     if (type === EVENTS.STEP_AFTER) {
-      setTimeout(() => {
-        const newIndex = index + (action === ACTIONS.PREV ? -1 : 1);
+      const extendedStep = step as ExtendedStep;
+      const newIndex = index + (action === ACTIONS.PREV ? -1 : 1);
+      
+      // If the step we just completed causes a UI transition, wait for it to finish.
+      if (action !== ACTIONS.CLOSE && extendedStep.causesTransition) {
+        setRun(false); // Pause the tour
+        
+        const sidebarElement = document.querySelector('.sidebar');
+        if (sidebarElement) {
+          const handleTransitionEnd = () => {
+            sidebarElement.removeEventListener('transitionend', handleTransitionEnd);
+            // After the animation is confirmed complete, advance and resume the tour.
+            setStepIndex(newIndex);
+            setRun(true);
+          };
+          sidebarElement.addEventListener('transitionend', handleTransitionEnd);
+        } else {
+          // Fallback in case the element isn't found (should not happen)
+          setStepIndex(newIndex);
+        }
+      } else {
+        // For non-transitional steps, proceed immediately.
         setStepIndex(newIndex);
-      }, 300); // This duration must match the sidebar's CSS transition time.
+      }
+
     } else if (type === EVENTS.TARGET_NOT_FOUND) {
-      // If a target is still not found, advance anyway to prevent getting stuck.
+      // If a target is not found, skip to the next step to prevent getting stuck.
+      console.warn(`Joyride target not found for step ${index}. Advancing.`);
       setStepIndex(index + 1);
     }
   };
