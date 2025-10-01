@@ -45,7 +45,7 @@ export const DESKTOP_STEPS: ExtendedStep[] = [
   },
   {
     target: '[data-tour-id="neighborhood-stats-card"]',
-    content: 'This card is where you\'ll see analysis for a custom area. Next, we\'ll show you the tools to create that area.',
+    content: "This card is where you'll see analysis for a custom area. Next, we'll show you the tools to create that area.",
     title: 'Analyze a Custom Area',
     placement: 'left',
     action: ({ setSidebarOpen, setActiveTabIndex }) => {
@@ -131,7 +131,7 @@ export const MOBILE_STEPS: ExtendedStep[] = [
       },
       {
         target: '[data-tour-id="neighborhood-stats-card"]',
-        content: 'This card is where you\'ll see analysis for a custom area. Next, we\'ll show you the tools to create that area.',
+        content: "This card is where you'll see analysis for a custom area. Next, we'll show you the tools to create that area.",
         title: 'Analyze a Custom Area',
         placement: 'top',
         action: ({ setSidebarOpen, setActiveTabIndex }) => {
