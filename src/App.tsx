@@ -6,10 +6,10 @@ import Sidebar from './components/sidebar/Sidebar';
 import TemperaturePredictionChart from './components/common/TemperaturePredictionChart';
 import { ArchetypeData } from './store/TreeStore';
 import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl';
-import UserTour from './components/tour/UserTour';
+import Onboarding from './components/Onboarding';
 
 function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(false); // Start with sidebar closed on mobile
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedTreeId, setSelectedTreeId] = useState<string | null>(null);
   const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [baseMap, setBaseMap] = useState('light');
@@ -28,8 +28,8 @@ function App() {
 
   const LST_MIN_VALUE_FOR_LEGEND_AND_CHART = 22.5;
   const LST_MAX_VALUE_FOR_LEGEND_AND_CHART = 43.0;
-  const LST_80TH_PERCENTILE_APPROX = LST_MIN_VALUE_FOR_LEGEND_AND_CHART + 0.8 * (LST_MAX_VALUE_FOR_LEGEND_AND_CHART - LST_MAX_VALUE_FOR_LEGEND_AND_CHART);
-  const LST_60TH_PERCENTILE_APPROX = LST_MIN_VALUE_FOR_LEGEND_AND_CHART + 0.6 * (LST_MAX_VALUE_FOR_LEGEND_AND_CHART - LST_MAX_VALUE_FOR_LEGEND_AND_CHART);
+  const LST_80TH_PERCENTILE_APPROX = LST_MIN_VALUE_FOR_LEGEND_AND_CHART + 0.8 * (LST_MAX_VALUE_FOR_LEGEND_AND_CHART - LST_MIN_VALUE_FOR_LEGEND_AND_CHART);
+  const LST_60TH_PERCENTILE_APPROX = LST_MIN_VALUE_FOR_LEGEND_AND_CHART + 0.6 * (LST_MAX_VALUE_FOR_LEGEND_AND_CHART - LST_MIN_VALUE_FOR_LEGEND_AND_CHART);
 
   const [showTemperatureChart, setShowTemperatureChart] = useState(false);
   const [activeSpeciesCooling, setActiveSpeciesCooling] = useState<{ p90: number; p10: number; commonName: string } | null>(null);
@@ -62,7 +62,7 @@ function App() {
 
   return (
     <div className="dashboard-layout">
-      <UserTour 
+      <Onboarding 
         setSidebarOpen={setSidebarOpen}
         setActiveTabIndex={setActiveTabIndex}
       />
@@ -82,7 +82,6 @@ function App() {
           lightConfig={lightConfig}
         />
 
-        {/* --- ADDED: Mobile overlay for dismissing the bottom sheet --- */}
         {sidebarOpen && (
           <div
             onClick={toggleSidebar}
