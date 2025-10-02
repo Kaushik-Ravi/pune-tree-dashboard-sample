@@ -4,12 +4,11 @@ import Header from './components/Header';
 import MapView from './components/map/MapView';
 import Sidebar from './components/sidebar/Sidebar';
 import TemperaturePredictionChart from './components/common/TemperaturePredictionChart';
-import { ArchetypeData } from './store/TreeStore';
+import { ArchetypeData, useTreeStore } from './store/TreeStore';
 import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl';
 import TourGuide, { TourControlAction } from './components/tour/TourGuide';
 
 function App() {
-  // --- MODIFIED: Sidebar is now open by default on desktop screens ---
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
   const [selectedTreeId, setSelectedTreeId] = useState<string | null>(null);
   const [activeTabIndex, setActiveTabIndex] = useState(0);
@@ -20,33 +19,38 @@ function App() {
   const [lightConfig, setLightConfig] = useState<LightConfig | null>(null);
 
   // --- Tour State and Logic ---
+  const { cityStats } = useTreeStore();
   const [runTour, setRunTour] = useState(false);
+  const [tourStepIndex, setTourStepIndex] = useState(0);
 
   useEffect(() => {
     const hasCompletedTour = localStorage.getItem('hasCompletedTour');
-    if (!hasCompletedTour) {
+    if (!hasCompletedTour && cityStats) {
       setTimeout(() => {
         setRunTour(true);
-      }, 1500);
+      }, 500);
     }
-  }, []);
+  }, [cityStats]);
 
-  const handleTourControl = useCallback((action: TourControlAction) => {
+  const handleTourControl = useCallback((action: TourControlAction, payload?: any) => {
     switch (action) {
       case 'OPEN_SIDEBAR':
         setSidebarOpen(true);
         break;
+      case 'CLOSE_SIDEBAR':
+        setSidebarOpen(false);
+        break;
       case 'SWITCH_TAB_OVERVIEW':
-        setSidebarOpen(true);
         setActiveTabIndex(0);
         break;
       case 'SWITCH_TAB_PLANTING':
-        setSidebarOpen(true);
         setActiveTabIndex(2);
         break;
       case 'SWITCH_TAB_LAYERS':
-        setSidebarOpen(true);
         setActiveTabIndex(3);
+        break;
+      case 'GO_TO_STEP':
+        setTourStepIndex(payload as number);
         break;
       default:
         break;
@@ -82,6 +86,7 @@ function App() {
     setBaseMap(mapType);
   }, []);
 
+  // --- CORRECTED DEFINITION ---
   const handleToggleLSTOverlay = useCallback(() => setShowLSTOverlay(prev => !prev), []);
   
   const handleActiveSpeciesChangeForChart = useCallback((archetypeDetails: ArchetypeData | null) => {
@@ -98,7 +103,12 @@ function App() {
 
   return (
     <div className="dashboard-layout">
-      <TourGuide run={runTour} setRun={setRunTour} handleTourControl={handleTourControl} />
+      <TourGuide
+        run={runTour}
+        setRun={setRunTour}
+        stepIndex={tourStepIndex}
+        handleTourControl={handleTourControl}
+      />
 
       <Header />
       <div className="dashboard-content">
@@ -132,7 +142,7 @@ function App() {
           baseMap={baseMap}
           changeBaseMap={handleChangeBaseMap}
           showLSTOverlay={showLSTOverlay}
-          toggleLSTOverlay={handleToggleLSTOverlay}
+          toggleLSTOverlay={handleToggleLSTOverlay} // This prop now correctly receives the defined handler
           lstMinValue={LST_MIN_VALUE_FOR_LEGEND_AND_CHART}
           lstMaxValue={LST_MAX_VALUE_FOR_LEGEND_AND_CHART}
           setShowTemperatureChart={setShowTemperatureChart}

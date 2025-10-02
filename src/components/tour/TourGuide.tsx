@@ -1,96 +1,101 @@
 // src/components/tour/TourGuide.tsx
-import React, { useState, useEffect } from 'react';
-import Joyride, { CallBackProps, STATUS, Step, ACTIONS } from 'react-joyride';
+import React from 'react';
+import Joyride, { CallBackProps, STATUS, Step, ACTIONS, EVENTS } from 'react-joyride';
 import { TourSteps } from './tourSteps';
 
-// Define the actions our tour can request from the main App component.
 export type TourControlAction =
   | 'OPEN_SIDEBAR'
+  | 'CLOSE_SIDEBAR'
   | 'SWITCH_TAB_OVERVIEW'
   | 'SWITCH_TAB_PLANTING'
-  | 'SWITCH_TAB_LAYERS';
+  | 'SWITCH_TAB_LAYERS'
+  | 'GO_TO_STEP';
 
 interface TourGuideProps {
   run: boolean;
   setRun: (run: boolean) => void;
-  handleTourControl: (action: TourControlAction) => void;
+  stepIndex: number;
+  handleTourControl: (action: TourControlAction, payload?: any) => void;
 }
 
-const TourGuide: React.FC<TourGuideProps> = ({ run, setRun, handleTourControl }) => {
-  const [stepIndex, setStepIndex] = useState(0);
+const TourGuide: React.FC<TourGuideProps> = ({ run, setRun, stepIndex, handleTourControl }) => {
 
-  // Determine which set of steps to use based on screen width.
-  const [steps, setSteps] = useState<Step[]>([]);
+  const isMobile = window.innerWidth < 768;
 
-  useEffect(() => {
-    const isMobile = window.innerWidth < 768;
-
-    // Construct the step sequence dynamically.
-    const desktopSteps = [
-      TourSteps.welcome,
-      TourSteps.openDashboardDesktop,
-      TourSteps.dashboardTabs,
-      TourSteps.drawingTools,
-      TourSteps.knowYourNeighbourhood,
-      TourSteps.plantingAdvisor,
-      TourSteps.mapLayers,
-      TourSteps.threeDMode,
-      TourSteps.finish,
-    ];
-
-    const mobileSteps = [
-      TourSteps.welcome,
-      TourSteps.openDashboardMobile,
-      TourSteps.dashboardTabs,
-      TourSteps.drawingTools,
-      TourSteps.knowYourNeighbourhood,
-      TourSteps.plantingAdvisor,
-      TourSteps.mapLayers,
-      TourSteps.threeDMode,
-      TourSteps.finish,
-    ];
-
-    setSteps(isMobile ? mobileSteps : desktopSteps);
-  }, []);
-
+  // Dynamically construct the step sequence based on device type.
+  const steps: Step[] = isMobile
+    ? [
+        TourSteps.welcome,
+        TourSteps.openDashboardMobile,
+        TourSteps.dashboardTabs,
+        TourSteps.drawingTools,
+        TourSteps.knowYourNeighbourhood,
+        TourSteps.plantingAdvisor,
+        TourSteps.mapLayers,
+        TourSteps.threeDMode,
+        TourSteps.finish,
+      ]
+    : [
+        TourSteps.welcome,
+        // Desktop doesn't need the 'open sidebar' step as we'll open it programmatically.
+        TourSteps.dashboardTabs,
+        TourSteps.drawingTools,
+        TourSteps.knowYourNeighbourhood,
+        TourSteps.plantingAdvisor,
+        TourSteps.mapLayers,
+        TourSteps.threeDMode,
+        TourSteps.finish,
+      ];
 
   const handleJoyrideCallback = (data: CallBackProps) => {
-    const { status, action, index, step, type } = data;
+    const { status, action, index, type, step } = data;
     const finishedStatuses: string[] = [STATUS.FINISHED, STATUS.SKIPPED];
 
     if (finishedStatuses.includes(status)) {
       setRun(false);
-      setStepIndex(0);
+      handleTourControl('GO_TO_STEP', 0); // Reset step index in parent
       localStorage.setItem('hasCompletedTour', 'true');
+      handleTourControl('CLOSE_SIDEBAR'); // Close sidebar on finish
       return;
     }
 
-    // This is the orchestration logic. When a step is about to be displayed,
-    // we fire the corresponding control action to prepare the UI.
-    if (type === 'step:before') {
-      // For mobile, open the sidebar when we first introduce it.
-      if (step.target === '[data-tour-id="sidebar-toggle-mobile"]') {
-        // No action needed here, we just point to the button.
-      }
-      // For both mobile and desktop, ensure sidebar is open for tab steps.
-      else if (
-        step.target === '[data-tour-id="sidebar-tabs"]' ||
-        step.target === '[data-tour-id="know-your-neighbourhood"]'
-      ) {
-        handleTourControl('OPEN_SIDEBAR');
-        handleTourControl('SWITCH_TAB_OVERVIEW');
-      } else if (step.target === '[data-tour-id="tab-planting-advisor"]') {
-        handleTourControl('OPEN_SIDEBAR');
-        handleTourControl('SWITCH_TAB_PLANTING');
-      } else if (step.target === '[data-tour-id="tab-map-layers"]') {
-        handleTourControl('OPEN_SIDEBAR');
-        handleTourControl('SWITCH_TAB_LAYERS');
-      }
-    }
+    // This is the core orchestration logic.
+    if (action === ACTIONS.NEXT && type === EVENTS.STEP_AFTER) {
+        const nextStepIndex = index + 1;
+        const nextStepKey = Object.keys(TourSteps).find(key => TourSteps[key] === steps[nextStepIndex]);
 
-
-    if (action === ACTIONS.NEXT || action === ACTIONS.PREV) {
-      setStepIndex(index + (action === ACTIONS.NEXT ? 1 : -1));
+        // Command the App component to prepare the UI for the *next* step.
+        switch(nextStepKey) {
+            case 'openDashboardDesktop':
+            case 'dashboardTabs':
+            case 'knowYourNeighbourhood':
+                handleTourControl('OPEN_SIDEBAR');
+                handleTourControl('SWITCH_TAB_OVERVIEW');
+                // Give sidebar time to animate open before moving to the step
+                setTimeout(() => handleTourControl('GO_TO_STEP', nextStepIndex), 300);
+                break;
+            case 'plantingAdvisor':
+                handleTourControl('OPEN_SIDEBAR');
+                handleTourControl('SWITCH_TAB_PLANTING');
+                setTimeout(() => handleTourControl('GO_TO_STEP', nextStepIndex), 300);
+                break;
+            case 'mapLayers':
+                handleTourControl('OPEN_SIDEBAR');
+                handleTourControl('SWITCH_TAB_LAYERS');
+                setTimeout(() => handleTourControl('GO_TO_STEP', nextStepIndex), 300);
+                break;
+            case 'drawingTools':
+                 handleTourControl('CLOSE_SIDEBAR');
+                 setTimeout(() => handleTourControl('GO_TO_STEP', nextStepIndex), 300);
+                 break;
+            default:
+                // If no special action is needed, just advance the step.
+                handleTourControl('GO_TO_STEP', nextStepIndex);
+                break;
+        }
+    } else if (action === ACTIONS.PREV && type === EVENTS.STEP_AFTER) {
+        const prevStepIndex = index - 1;
+        handleTourControl('GO_TO_STEP', prevStepIndex);
     } else if (action === ACTIONS.CLOSE) {
        setRun(false);
        localStorage.setItem('hasCompletedTour', 'true');
@@ -104,11 +109,15 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, setRun, handleTourControl })
       stepIndex={stepIndex}
       callback={handleJoyrideCallback}
       continuous
+      // We are controlling the flow manually now, so the 'Next' button
+      // will trigger our callback but not automatically advance the state.
+      disableOverlayClose={true}
+      disableCloseOnEsc={true}
       showProgress
       showSkipButton
       styles={{
         options: {
-          zIndex: 10000, // Ensure tour is on top of everything
+          zIndex: 10000,
         },
       }}
     />
