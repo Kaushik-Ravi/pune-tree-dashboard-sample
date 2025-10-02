@@ -21,14 +21,14 @@ const CityOverview: React.FC = () => {
     wardTreeCountData,
     selectedArea,
     setSelectedArea,
-    getStatsForPolygon, // New function from the store
+    getStatsForPolygon,
   } = useTreeStore();
 
   const [selectedChartView, setSelectedChartView] = useState<ChartViewType>('co2'); 
   const [showNeighbourhoodStats, setShowNeighbourhoodStats] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [neighbourhoodTreeCount, setNeighbourhoodTreeCount] = useState(0);
-  const [neighbourhoodCO2, setNeighbourhoodCO2] = useState(0); // This will be in TONS now
+  const [neighbourhoodCO2, setNeighbourhoodCO2] = useState(0);
 
   useEffect(() => {
     const calculateStats = async () => {
@@ -122,7 +122,8 @@ const CityOverview: React.FC = () => {
         </div>
       </div>
 
-      <div className="card" data-tour-id="neighborhood-stats-card">
+      {/* ADDED data-tour-id */}
+      <div className="card" data-tour-id="know-your-neighbourhood">
         <div className="card-header flex justify-between items-center">
           <h3 className="text-lg font-medium">Know Your Neighbourhood</h3>
           <InfoPopover titleContent="How to Use This Section">

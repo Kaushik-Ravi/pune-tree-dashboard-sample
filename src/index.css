@@ -254,3 +254,87 @@ h1, h2, h3, h4, h5, h6 {
     right: var(--sidebar-width); /* Adjust for desktop sidebar */
   }
 }
+
+
+/* --- START: React Joyride Custom Styles --- */
+/* This section contains the new styles for the guided tour. */
+
+/* Main tooltip body */
+.__floater, .__floater__body {
+  @apply bg-white rounded-lg shadow-2xl border border-gray-200;
+  max-width: 380px;
+}
+
+/* Tooltip content area */
+.__floater__body div[role="dialog"] {
+  @apply p-5 text-gray-800;
+}
+
+/* Header of the tooltip */
+.__floater__header {
+  @apply p-5 border-b border-gray-200;
+}
+.__floater__header h4 {
+  @apply text-lg font-bold text-primary-700 m-0;
+}
+
+/* Close button (X) */
+.__floater__close-btn {
+  @apply text-gray-400 fill-current;
+  transition: color 0.2s;
+}
+.__floater__close-btn:hover {
+  @apply text-gray-700;
+}
+
+/* Main content text */
+.__floater__body div[role="dialog"] > div:first-of-type {
+  @apply text-base;
+}
+
+/* Footer containing buttons */
+.__floater__footer {
+  @apply flex justify-between items-center p-4 border-t border-gray-200 mt-2;
+}
+
+/* General button styles for the tour */
+.react-joyride__tooltip button {
+  @apply px-4 py-2 rounded-md font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+
+/* "Back" button */
+.react-joyride__tooltip button[data-action="back"] {
+  @apply bg-transparent text-gray-600 hover:bg-gray-100 focus:ring-gray-400;
+}
+
+/* "Next" and "Last" button */
+.react-joyride__tooltip button[data-action="next"],
+.react-joyride__tooltip button[data-action="last"] {
+  @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
+}
+
+/* "Skip" link/button */
+.react-joyride__tooltip button[data-action="skip"] {
+  @apply bg-transparent text-sm font-medium text-gray-500 hover:text-gray-800 p-0 shadow-none;
+}
+
+/* Dot indicators for steps */
+.__floater__dots span {
+  @apply bg-gray-300;
+}
+.__floater__dots span.active {
+  @apply bg-primary-500;
+}
+
+/* Beacon pulse animation */
+.react-joyride__beacon span:first-child {
+  /* This is the inner dot */
+  background-color: var(--primary-color);
+}
+.react-joyride__beacon span:last-child {
+  /* This is the outer pulsing ring */
+  background-color: var(--primary-color);
+  border: 2px solid var(--primary-color);
+}
+
+/* --- END: React Joyride Custom Styles --- */

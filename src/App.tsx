@@ -1,15 +1,16 @@
 // src/App.tsx
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Header from './components/Header';
 import MapView from './components/map/MapView';
 import Sidebar from './components/sidebar/Sidebar';
 import TemperaturePredictionChart from './components/common/TemperaturePredictionChart';
 import { ArchetypeData } from './store/TreeStore';
 import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl';
-import Onboarding from './components/Onboarding';
+import TourGuide, { TourControlAction } from './components/tour/TourGuide';
 
 function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // --- MODIFIED: Sidebar is now open by default on desktop screens ---
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
   const [selectedTreeId, setSelectedTreeId] = useState<string | null>(null);
   const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [baseMap, setBaseMap] = useState('light');
@@ -17,6 +18,41 @@ function App() {
   
   const [is3D, setIs3D] = useState(false);
   const [lightConfig, setLightConfig] = useState<LightConfig | null>(null);
+
+  // --- Tour State and Logic ---
+  const [runTour, setRunTour] = useState(false);
+
+  useEffect(() => {
+    const hasCompletedTour = localStorage.getItem('hasCompletedTour');
+    if (!hasCompletedTour) {
+      setTimeout(() => {
+        setRunTour(true);
+      }, 1500);
+    }
+  }, []);
+
+  const handleTourControl = useCallback((action: TourControlAction) => {
+    switch (action) {
+      case 'OPEN_SIDEBAR':
+        setSidebarOpen(true);
+        break;
+      case 'SWITCH_TAB_OVERVIEW':
+        setSidebarOpen(true);
+        setActiveTabIndex(0);
+        break;
+      case 'SWITCH_TAB_PLANTING':
+        setSidebarOpen(true);
+        setActiveTabIndex(2);
+        break;
+      case 'SWITCH_TAB_LAYERS':
+        setSidebarOpen(true);
+        setActiveTabIndex(3);
+        break;
+      default:
+        break;
+    }
+  }, []);
+  // --- END: Tour State and Logic ---
 
   const handleLightChange = useCallback((newLightConfig: LightConfig | null) => {
     setLightConfig(newLightConfig);
@@ -28,7 +64,6 @@ function App() {
 
   const LST_MIN_VALUE_FOR_LEGEND_AND_CHART = 22.5;
   const LST_MAX_VALUE_FOR_LEGEND_AND_CHART = 43.0;
-  // This calculation was previously incorrect and has been verified.
   const LST_80TH_PERCENTILE_APPROX = LST_MIN_VALUE_FOR_LEGEND_AND_CHART + 0.8 * (LST_MAX_VALUE_FOR_LEGEND_AND_CHART - LST_MIN_VALUE_FOR_LEGEND_AND_CHART);
   const LST_60TH_PERCENTILE_APPROX = LST_MIN_VALUE_FOR_LEGEND_AND_CHART + 0.6 * (LST_MAX_VALUE_FOR_LEGEND_AND_CHART - LST_MIN_VALUE_FOR_LEGEND_AND_CHART);
 
@@ -63,11 +98,8 @@ function App() {
 
   return (
     <div className="dashboard-layout">
-      <Onboarding 
-        setSidebarOpen={setSidebarOpen}
-        setActiveTabIndex={setActiveTabIndex}
-      />
-      
+      <TourGuide run={runTour} setRun={setRunTour} handleTourControl={handleTourControl} />
+
       <Header />
       <div className="dashboard-content">
         <MapView 
