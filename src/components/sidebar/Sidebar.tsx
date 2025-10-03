@@ -1,5 +1,5 @@
 // src/components/sidebar/Sidebar.tsx
-import React, { useRef } from 'react';
+import React, { forwardRef } from 'react';
 import {
   BarChartBig,
   Trees as TreeIcon,
@@ -34,7 +34,7 @@ interface SidebarProps {
   is3D: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({
+const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
   isOpen,
   toggleSidebar,
   selectedTreeId,
@@ -50,15 +50,15 @@ const Sidebar: React.FC<SidebarProps> = ({
   onActiveSpeciesChangeForChart,
   onLightChange,
   is3D
-}) => {
+}, ref) => {
   const tabs = [
     { id: 'city-overview', label: 'City Overview', icon: <BarChartBig size={18} /> },
     { id: 'tree-details', label: 'Tree Details', icon: <TreeIcon size={18} /> },
-    { id: 'planting-advisor', label: 'Planting Advisor', icon: <SeedlingIcon size={18} />, tourId: 'tab-planting-advisor' }, // ADDED tourId
-    { id: 'map-layers', label: 'Map Layers', icon: <LayersIcon size={18} />, tourId: 'tab-map-layers' } // ADDED tourId
+    { id: 'planting-advisor', label: 'Planting Advisor', icon: <SeedlingIcon size={18} />, tourId: 'tab-planting-advisor' },
+    { id: 'map-layers', label: 'Map Layers', icon: <LayersIcon size={18} />, tourId: 'tab-map-layers' }
   ];
 
-  const tabContainerRef = useRef<HTMLDivElement>(null);
+  const tabContainerRef = React.useRef<HTMLDivElement>(null);
 
   const scrollTabs = (direction: 'left' | 'right') => {
     if (tabContainerRef.current) {
@@ -93,7 +93,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <div className={`sidebar ${isOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
+    <div ref={ref} className={`sidebar ${isOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
       {/* Mobile-only Grab Handle */}
       <div className="md:hidden w-full flex justify-center pt-3 pb-2">
         <div className="w-10 h-1.5 bg-gray-300 rounded-full"></div>
@@ -110,7 +110,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
       
-      {/* ADDED data-tour-id */}
       <div data-tour-id="sidebar-tabs" className="bg-gray-50 border-b border-gray-200 relative h-[var(--sidebar-tabs-height)] flex items-center">
         {/* Desktop-only scroll buttons */}
         <button onClick={() => scrollTabs('left')} className="hidden md:block absolute left-0 top-1/2 -translate-y-1/2 z-20 p-2 text-gray-500 hover:text-gray-800" aria-label="Scroll tabs left"><ChevronLeft size={20} /></button>
@@ -119,7 +118,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           {tabs.map((tab, index) => (
             <button
               key={tab.id}
-              data-tour-id={tab.tourId} // ADDED data-tour-id attribute here
+              data-tour-id={tab.tourId}
               className={`flex-shrink-0 px-4 flex items-center space-x-2 whitespace-nowrap transition-colors focus:outline-none h-full ${ activeTabIndex === index ? 'bg-white text-primary-600 border-b-2 border-primary-600 font-medium' : 'text-gray-600 hover:bg-gray-100 hover:text-primary-500'}`}
               onClick={() => setActiveTabIndex(index)}
             >
@@ -135,6 +134,6 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div className="sidebar-content-area p-4">{renderTabContent()}</div>
     </div>
   );
-};
+});
 
 export default Sidebar;

@@ -18,7 +18,7 @@ interface TourGuideProps {
 const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl }) => {
   const isMobile = window.innerWidth < 768;
 
-  // The step array is determined once. No complex logic needed here.
+  // The step array is determined based on the device, ensuring the correct flow.
   const steps: Step[] = isMobile
     ? [
         TourSteps.welcome,
@@ -33,6 +33,7 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
       ]
     : [
         TourSteps.welcome,
+        TourSteps.openDashboardDesktop,
         TourSteps.dashboardTabs,
         TourSteps.drawingTools,
         TourSteps.knowYourNeighbourhood,

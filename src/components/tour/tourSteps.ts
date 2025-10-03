@@ -18,16 +18,16 @@ export const TourSteps: { [key: string]: Step } = {
     disableBeacon: true,
     styles: tourStyles,
   },
-  openDashboardMobile: {
-    target: '[data-tour-id="sidebar-toggle-mobile"]',
-    content: 'On mobile, tap this button anytime to open the main dashboard panel.',
-    placement: 'top-start',
-    styles: tourStyles,
-  },
   openDashboardDesktop: {
     target: '[data-tour-id="sidebar-toggle-desktop"]',
-    content: 'On desktop, click this handle to open and close the main dashboard panel.',
+    content: 'Click "Next" to open the main dashboard panel and see what you can do.',
     placement: 'left',
+    styles: tourStyles,
+  },
+  openDashboardMobile: {
+    target: '[data-tour-id="sidebar-toggle-mobile"]',
+    content: 'Tap "Next" to open the main dashboard panel and see what you can do.',
+    placement: 'top-start',
     styles: tourStyles,
   },
   dashboardTabs: {
@@ -35,10 +35,8 @@ export const TourSteps: { [key: string]: Step } = {
     content: 'The dashboard is organized into four main tabs: City Overview, Tree Details, Planting Advisor, and Map Layers.',
     placement: 'top',
     styles: tourStyles,
-    // --- FIX FOR MOBILE TOOLTIP PLACEMENT ---
-    // This forces the tooltip to re-align itself after the sidebar's slide-up animation.
     floaterProps: {
-      disableAnimation: true, // We handle animation with our own delay
+      disableAnimation: true,
     },
   },
   drawingTools: {

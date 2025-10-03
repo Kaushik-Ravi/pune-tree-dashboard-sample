@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import MapView from './components/map/MapView';
 import Sidebar from './components/sidebar/Sidebar';
@@ -7,6 +7,7 @@ import TemperaturePredictionChart from './components/common/TemperaturePredictio
 import { ArchetypeData, useTreeStore } from './store/TreeStore';
 import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl';
 import TourGuide, { TourControlAction } from './components/tour/TourGuide';
+import { TourSteps } from './components/tour/tourSteps'; // CORRECTED: Added this import
 
 const LoadingOverlay: React.FC = () => (
   <div className="fixed inset-0 bg-white bg-opacity-90 z-[20000] flex flex-col items-center justify-center">
@@ -16,7 +17,7 @@ const LoadingOverlay: React.FC = () => (
 );
 
 function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedTreeId, setSelectedTreeId] = useState<string | null>(null);
   const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [baseMap, setBaseMap] = useState('light');
@@ -25,68 +26,55 @@ function App() {
   const [is3D, setIs3D] = useState(false);
   const [lightConfig, setLightConfig] = useState<LightConfig | null>(null);
 
-  // --- START: Final & Corrected Tour Logic ---
   const { cityStats } = useTreeStore();
   const [isLoading, setIsLoading] = useState(true);
   const [runTour, setRunTour] = useState(false);
   const [tourStepIndex, setTourStepIndex] = useState(0);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const tourAdvancementRef = useRef<{ nextStep: number | null }>({ nextStep: null });
 
-  // This effect correctly handles the initial loading state and tour start.
   useEffect(() => {
     const hasCompletedTour = localStorage.getItem('hasCompletedTour');
     if (cityStats) {
       setIsLoading(false);
       if (!hasCompletedTour) {
-        // We ensure the sidebar is correctly set for the first step on desktop.
-        if (window.innerWidth >= 768) {
-          setSidebarOpen(true);
-        }
         setRunTour(true);
       }
     }
   }, [cityStats]);
 
   const handleTourControl = useCallback((action: TourControlAction, payload?: any) => {
-    // This function is the definitive orchestrator.
-    const TRANSITION_DELAY = 350; // A guaranteed delay > CSS transition (300ms)
+    const nextStepIndex = tourStepIndex + 1;
+    const nextStepKey = payload;
+    let sidebarActionRequired: 'open' | 'close' | 'none' = 'none';
 
     switch (action) {
       case 'NEXT_STEP': {
-        const nextStepIndex = tourStepIndex + 1;
-        let requiresDelay = false;
-
-        // Stage 1: Perform UI state changes required for the NEXT step.
-        const nextStepKey = payload;
-        if (nextStepKey === 'dashboardTabs' || nextStepKey === 'knowYourNeighbourhood') {
-          if (!sidebarOpen) {
-            setSidebarOpen(true);
-            requiresDelay = true;
-          }
-          setActiveTabIndex(0);
-        } else if (nextStepKey === 'plantingAdvisor') {
-          if (!sidebarOpen) {
-            setSidebarOpen(true);
-            requiresDelay = true;
-          }
-          setActiveTabIndex(2);
-        } else if (nextStepKey === 'mapLayers') {
-          if (!sidebarOpen) {
-            setSidebarOpen(true);
-            requiresDelay = true;
-          }
-          setActiveTabIndex(3);
-        } else if (nextStepKey === 'drawingTools' || nextStepKey === 'threeDMode') {
-          if (sidebarOpen) {
-            setSidebarOpen(false);
-            requiresDelay = true;
-          }
+        if (
+          (nextStepKey === 'dashboardTabs' ||
+           nextStepKey === 'knowYourNeighbourhood' ||
+           nextStepKey === 'plantingAdvisor' ||
+           nextStepKey === 'mapLayers') && !sidebarOpen
+        ) {
+          sidebarActionRequired = 'open';
+        } else if (
+          (nextStepKey === 'drawingTools' || nextStepKey === 'threeDMode') && sidebarOpen
+        ) {
+          sidebarActionRequired = 'close';
         }
         
-        // Stage 2: Advance the tour step, respecting any required animation delay.
-        if (requiresDelay) {
-          setTimeout(() => setTourStepIndex(nextStepIndex), TRANSITION_DELAY);
+        if (sidebarActionRequired !== 'none') {
+          tourAdvancementRef.current.nextStep = nextStepIndex;
+          setSidebarOpen(sidebarActionRequired === 'open');
         } else {
           setTourStepIndex(nextStepIndex);
+        }
+
+        // Set active tab immediately if sidebar is already in the correct state
+        if (sidebarActionRequired === 'none' || (sidebarActionRequired === 'open' && sidebarOpen) || (sidebarActionRequired === 'close' && !sidebarOpen)) {
+            if (nextStepKey === 'plantingAdvisor') setActiveTabIndex(2);
+            else if (nextStepKey === 'mapLayers') setActiveTabIndex(3);
+            else if (nextStepKey === 'knowYourNeighbourhood') setActiveTabIndex(0);
         }
         break;
       }
@@ -98,14 +86,49 @@ function App() {
         setTourStepIndex(0);
         setRunTour(false);
         localStorage.setItem('hasCompletedTour', 'true');
-        if (window.innerWidth < 768) setSidebarOpen(false);
+        setSidebarOpen(false);
         break;
       }
       default:
         break;
     }
   }, [tourStepIndex, sidebarOpen]);
-  // --- END: Final & Corrected Tour Logic ---
+
+  useEffect(() => {
+    const sidebarElement = sidebarRef.current;
+    if (!sidebarElement) return;
+
+    const handleTransitionEnd = () => {
+      if (tourAdvancementRef.current.nextStep !== null) {
+        const nextStepKey = (Object.entries(TourSteps).find(([, step]) => 
+            step === (window.innerWidth < 768 ? TourSteps.openDashboardMobile : TourSteps.openDashboardDesktop)
+        ) || [])[0];
+
+        // Set active tab after transition, right before showing the step
+        const stepToAdvanceTo = tourAdvancementRef.current.nextStep;
+        if (stepToAdvanceTo !== null) {
+            const steps = window.innerWidth < 768
+                ? [TourSteps.welcome, TourSteps.openDashboardMobile, TourSteps.dashboardTabs, TourSteps.drawingTools, TourSteps.knowYourNeighbourhood, TourSteps.plantingAdvisor, TourSteps.mapLayers, TourSteps.threeDMode, TourSteps.finish]
+                : [TourSteps.welcome, TourSteps.openDashboardDesktop, TourSteps.dashboardTabs, TourSteps.drawingTools, TourSteps.knowYourNeighbourhood, TourSteps.plantingAdvisor, TourSteps.mapLayers, TourSteps.threeDMode, TourSteps.finish];
+            
+            const nextStepDetails = steps[stepToAdvanceTo];
+            const nextStepTarget = nextStepDetails.target;
+
+            if (nextStepTarget === '[data-tour-id="tab-planting-advisor"]') setActiveTabIndex(2);
+            else if (nextStepTarget === '[data-tour-id="tab-map-layers"]') setActiveTabIndex(3);
+            else if (nextStepTarget === '[data-tour-id="know-your-neighbourhood"]') setActiveTabIndex(0);
+        }
+
+        setTourStepIndex(tourAdvancementRef.current.nextStep);
+        tourAdvancementRef.current.nextStep = null;
+      }
+    };
+
+    sidebarElement.addEventListener('transitionend', handleTransitionEnd);
+    return () => {
+      sidebarElement.removeEventListener('transitionend', handleTransitionEnd);
+    };
+  }, []);
 
   const handleLightChange = useCallback((newLightConfig: LightConfig | null) => {
     setLightConfig(newLightConfig);
@@ -182,6 +205,7 @@ function App() {
         )}
 
         <Sidebar
+          ref={sidebarRef}
           isOpen={sidebarOpen}
           toggleSidebar={toggleSidebar}
           selectedTreeId={selectedTreeId}
@@ -190,7 +214,7 @@ function App() {
           baseMap={baseMap}
           changeBaseMap={handleChangeBaseMap}
           showLSTOverlay={showLSTOverlay}
-          toggleLSTOverlay={handleToggleLSTOverlay}
+          toggleLSTOverlay={handleToggleLSTOverlay} 
           lstMinValue={LST_MIN_VALUE_FOR_LEGEND_AND_CHART}
           lstMaxValue={LST_MAX_VALUE_FOR_LEGEND_AND_CHART}
           setShowTemperatureChart={setShowTemperatureChart}

@@ -295,14 +295,13 @@ const MapView: React.FC<MapViewProps> = ({
         <NavigationControl position="top-left" showCompass={true} />
       </Map>
       
-      {/* ADDED data-tour-id */}
       <div data-tour-id="view-mode-toggle">
         <ViewModeToggle is3D={is3D} onToggle={handleToggle3D} zoom={zoom} />
       </div>
       
       {/* --- DESKTOP-ONLY SIDEBAR TOGGLE --- */}
       <button
-        data-tour-id="sidebar-toggle-desktop" // ADDED
+        data-tour-id="sidebar-toggle-desktop"
         className={`hidden md:flex absolute top-1/2 -translate-y-1/2 z-20 bg-white p-2 shadow-xl hover:bg-gray-100 transition-all duration-300 ease-in-out border-t border-b border-gray-300 ${sidebarOpen ? 'right-[var(--sidebar-width)] rounded-l-md' : 'right-0 rounded-r-md'}`}
         onClick={toggleSidebar}
         aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
@@ -313,7 +312,7 @@ const MapView: React.FC<MapViewProps> = ({
 
       {/* --- MOBILE-ONLY FAB TO OPEN BOTTOM SHEET --- */}
       <button
-        data-tour-id="sidebar-toggle-mobile" // ADDED
+        data-tour-id="sidebar-toggle-mobile"
         onClick={toggleSidebar}
         className="md:hidden absolute bottom-5 right-5 z-20 bg-primary-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center hover:bg-primary-700 active:bg-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
         aria-label="Open dashboard"
