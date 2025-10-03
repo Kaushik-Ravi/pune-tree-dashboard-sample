@@ -8,6 +8,14 @@ import { ArchetypeData, useTreeStore } from './store/TreeStore';
 import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl';
 import TourGuide, { TourControlAction } from './components/tour/TourGuide';
 
+// The Loading Overlay remains a clean, single-purpose component.
+const LoadingOverlay: React.FC = () => (
+  <div className="fixed inset-0 bg-white bg-opacity-90 z-[20000] flex flex-col items-center justify-center">
+    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-primary-600"></div>
+    <p className="mt-4 text-lg text-gray-700 font-medium">Preparing Your Dashboard...</p>
+  </div>
+);
+
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
   const [selectedTreeId, setSelectedTreeId] = useState<string | null>(null);
@@ -18,45 +26,75 @@ function App() {
   const [is3D, setIs3D] = useState(false);
   const [lightConfig, setLightConfig] = useState<LightConfig | null>(null);
 
-  // --- Tour State and Logic ---
+  // --- START: Finalized Tour & Loading Logic ---
   const { cityStats } = useTreeStore();
+  const [isLoading, setIsLoading] = useState(true);
   const [runTour, setRunTour] = useState(false);
   const [tourStepIndex, setTourStepIndex] = useState(0);
 
   useEffect(() => {
     const hasCompletedTour = localStorage.getItem('hasCompletedTour');
-    if (!hasCompletedTour && cityStats) {
-      setTimeout(() => {
+    // Gate the entire tour logic behind the data loading state.
+    if (cityStats) {
+      setIsLoading(false);
+      if (!hasCompletedTour) {
+        // No timer needed here. The tour will start as soon as the app is ready.
+        // We ensure the sidebar is correctly set for the first step on desktop.
+        if (window.innerWidth >= 768) {
+          setSidebarOpen(true);
+        }
         setRunTour(true);
-      }, 500);
+      }
     }
   }, [cityStats]);
 
   const handleTourControl = useCallback((action: TourControlAction, payload?: any) => {
+    // This is the central command hub. It directly manipulates App state.
     switch (action) {
-      case 'OPEN_SIDEBAR':
-        setSidebarOpen(true);
+      case 'NEXT_STEP': {
+        const nextStepIndex = tourStepIndex + 1;
+        
+        // Prepare UI for the *upcoming* step based on its unique key.
+        // This logic is now deterministic and executes before the step index is updated.
+        if (payload === 'dashboardTabs' || payload === 'knowYourNeighbourhood') {
+          setSidebarOpen(true);
+          setActiveTabIndex(0);
+        } else if (payload === 'plantingAdvisor') {
+          setSidebarOpen(true);
+          setActiveTabIndex(2);
+        } else if (payload === 'mapLayers') {
+          setSidebarOpen(true);
+          setActiveTabIndex(3);
+        } else if (payload === 'drawingTools' || payload === 'threeDMode') {
+          setSidebarOpen(false);
+        }
+        
+        // Now, advance the tour. React ensures the UI updates and this state change
+        // are processed, so the next render is correct.
+        setTourStepIndex(nextStepIndex);
         break;
-      case 'CLOSE_SIDEBAR':
-        setSidebarOpen(false);
+      }
+      case 'PREV_STEP': {
+        // Logic for "Back" can also be made state-aware if needed, but for now, just moving back is fine.
+        setTourStepIndex(tourStepIndex - 1);
         break;
-      case 'SWITCH_TAB_OVERVIEW':
-        setActiveTabIndex(0);
+      }
+      case 'RESTART': {
+        // Reset all tour-related state to its initial condition.
+        setTourStepIndex(0);
+        setRunTour(false);
+        localStorage.setItem('hasCompletedTour', 'true');
+        // Close the sidebar on mobile if the tour is skipped/finished.
+        if (window.innerWidth < 768) {
+            setSidebarOpen(false);
+        }
         break;
-      case 'SWITCH_TAB_PLANTING':
-        setActiveTabIndex(2);
-        break;
-      case 'SWITCH_TAB_LAYERS':
-        setActiveTabIndex(3);
-        break;
-      case 'GO_TO_STEP':
-        setTourStepIndex(payload as number);
-        break;
+      }
       default:
         break;
     }
-  }, []);
-  // --- END: Tour State and Logic ---
+  }, [tourStepIndex]);
+  // --- END: Finalized Tour & Loading Logic ---
 
   const handleLightChange = useCallback((newLightConfig: LightConfig | null) => {
     setLightConfig(newLightConfig);
@@ -85,8 +123,7 @@ function App() {
   const handleChangeBaseMap = useCallback((mapType: string) => {
     setBaseMap(mapType);
   }, []);
-
-  // --- CORRECTED DEFINITION ---
+  
   const handleToggleLSTOverlay = useCallback(() => setShowLSTOverlay(prev => !prev), []);
   
   const handleActiveSpeciesChangeForChart = useCallback((archetypeDetails: ArchetypeData | null) => {
@@ -103,9 +140,9 @@ function App() {
 
   return (
     <div className="dashboard-layout">
+      {isLoading && <LoadingOverlay />}
       <TourGuide
         run={runTour}
-        setRun={setRunTour}
         stepIndex={tourStepIndex}
         handleTourControl={handleTourControl}
       />
@@ -142,7 +179,7 @@ function App() {
           baseMap={baseMap}
           changeBaseMap={handleChangeBaseMap}
           showLSTOverlay={showLSTOverlay}
-          toggleLSTOverlay={handleToggleLSTOverlay} // This prop now correctly receives the defined handler
+          toggleLSTOverlay={handleToggleLSTOverlay}
           lstMinValue={LST_MIN_VALUE_FOR_LEGEND_AND_CHART}
           lstMaxValue={LST_MAX_VALUE_FOR_LEGEND_AND_CHART}
           setShowTemperatureChart={setShowTemperatureChart}
