@@ -1,13 +1,10 @@
 // src/components/tour/TourGuide.tsx
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import Joyride, { CallBackProps, STATUS, Step, ACTIONS, EVENTS } from 'react-joyride';
 import { TourSteps } from './tourSteps';
+import { waitForTourTarget } from './waitForTourTarget';
 
-// Refined, simpler set of actions sent from the tour to the App
-export type TourControlAction =
-  | 'NEXT_STEP'
-  | 'PREV_STEP'
-  | 'RESTART'; // Covers skip, close, and finish
+export type TourControlAction = 'NEXT_STEP' | 'PREV_STEP' | 'RESTART';
 
 interface TourGuideProps {
   run: boolean;
@@ -17,8 +14,6 @@ interface TourGuideProps {
 
 const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl }) => {
   const isMobile = window.innerWidth < 768;
-
-  // The step array is determined based on the device, ensuring the correct flow.
   const steps: Step[] = isMobile
     ? [
         TourSteps.welcome,
@@ -43,20 +38,41 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
         TourSteps.finish,
       ];
 
+  const advancingStep = useRef(false);
+
+  // This effect ensures the tour waits for the target to be ready before proceeding.
+  useEffect(() => {
+    const selector = steps[stepIndex]?.target;
+    if (run && typeof selector === 'string') {
+      advancingStep.current = true;
+      waitForTourTarget(selector)
+        .catch((err) => {
+          console.error("Tour target failed to mount:", err.message);
+          // Optional: handle error, e.g., by skipping the step or stopping the tour.
+        })
+        .finally(() => {
+          advancingStep.current = false;
+        });
+    } else {
+        advancingStep.current = false;
+    }
+  }, [run, stepIndex, steps]);
+
   const handleJoyrideCallback = (data: CallBackProps) => {
-    const { status, action, index, type } = data;
+    const { status, action, type, index } = data;
     const finishedStatuses: string[] = [STATUS.FINISHED, STATUS.SKIPPED];
 
-    // On any completion or close action, tell the parent to reset everything.
     if (finishedStatuses.includes(status) || action === ACTIONS.CLOSE) {
       handleTourControl('RESTART');
       return;
     }
-
-    // This component's only job is to report user intent back to the parent.
+    
+    // Only process STEP_AFTER events, and only when not already waiting for a target.
     if (type === EVENTS.STEP_AFTER) {
+      if (advancingStep.current) return; // Prevent double-advancement
+
       if (action === ACTIONS.NEXT) {
-        // Find the key of the *next* step to help the parent orchestrate the UI.
+        // Pass the key of the *next* step to the orchestrator
         const nextStepKey = Object.keys(TourSteps).find(key => TourSteps[key] === steps[index + 1]);
         handleTourControl('NEXT_STEP', nextStepKey);
       } else if (action === ACTIONS.PREV) {
@@ -75,16 +91,10 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
       scrollToFirstStep
       showProgress
       showSkipButton
-      // These props are crucial for ensuring manual control.
-      disableOverlayClose={true}
-      disableCloseOnEsc={true}
-      // This prevents Joyride from automatically advancing. We are in full control.
-      disableScrolling={true} 
-      styles={{
-        options: {
-          zIndex: 10000,
-        },
-      }}
+      disableOverlayClose
+      disableCloseOnEsc
+      disableScrolling
+      styles={{ options: { zIndex: 10000 } }}
     />
   );
 };

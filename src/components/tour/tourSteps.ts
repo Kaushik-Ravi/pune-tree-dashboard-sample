@@ -40,7 +40,7 @@ export const TourSteps: { [key: string]: Step } = {
     },
   },
   drawingTools: {
-    target: '.maplibregl-ctrl-group button[title="Draw a polygon"]',
+    target: '[data-tour-id="draw-polygon"]', // CORRECTED: Using robust data-tour-id
     content: 'These tools let you draw a custom area on the map to analyze specific neighborhoods or plan plantings.',
     placement: 'right',
     styles: tourStyles,
