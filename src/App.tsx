@@ -8,7 +8,6 @@ import { ArchetypeData, useTreeStore } from './store/TreeStore';
 import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl';
 import TourGuide, { TourControlAction } from './components/tour/TourGuide';
 
-// The Loading Overlay remains a clean, single-purpose component.
 const LoadingOverlay: React.FC = () => (
   <div className="fixed inset-0 bg-white bg-opacity-90 z-[20000] flex flex-col items-center justify-center">
     <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-primary-600"></div>
@@ -26,19 +25,18 @@ function App() {
   const [is3D, setIs3D] = useState(false);
   const [lightConfig, setLightConfig] = useState<LightConfig | null>(null);
 
-  // --- START: Finalized Tour & Loading Logic ---
+  // --- START: Final & Corrected Tour Logic ---
   const { cityStats } = useTreeStore();
   const [isLoading, setIsLoading] = useState(true);
   const [runTour, setRunTour] = useState(false);
   const [tourStepIndex, setTourStepIndex] = useState(0);
 
+  // This effect correctly handles the initial loading state and tour start.
   useEffect(() => {
     const hasCompletedTour = localStorage.getItem('hasCompletedTour');
-    // Gate the entire tour logic behind the data loading state.
     if (cityStats) {
       setIsLoading(false);
       if (!hasCompletedTour) {
-        // No timer needed here. The tour will start as soon as the app is ready.
         // We ensure the sidebar is correctly set for the first step on desktop.
         if (window.innerWidth >= 768) {
           setSidebarOpen(true);
@@ -49,52 +47,65 @@ function App() {
   }, [cityStats]);
 
   const handleTourControl = useCallback((action: TourControlAction, payload?: any) => {
-    // This is the central command hub. It directly manipulates App state.
+    // This function is the definitive orchestrator.
+    const TRANSITION_DELAY = 350; // A guaranteed delay > CSS transition (300ms)
+
     switch (action) {
       case 'NEXT_STEP': {
         const nextStepIndex = tourStepIndex + 1;
-        
-        // Prepare UI for the *upcoming* step based on its unique key.
-        // This logic is now deterministic and executes before the step index is updated.
-        if (payload === 'dashboardTabs' || payload === 'knowYourNeighbourhood') {
-          setSidebarOpen(true);
+        let requiresDelay = false;
+
+        // Stage 1: Perform UI state changes required for the NEXT step.
+        const nextStepKey = payload;
+        if (nextStepKey === 'dashboardTabs' || nextStepKey === 'knowYourNeighbourhood') {
+          if (!sidebarOpen) {
+            setSidebarOpen(true);
+            requiresDelay = true;
+          }
           setActiveTabIndex(0);
-        } else if (payload === 'plantingAdvisor') {
-          setSidebarOpen(true);
+        } else if (nextStepKey === 'plantingAdvisor') {
+          if (!sidebarOpen) {
+            setSidebarOpen(true);
+            requiresDelay = true;
+          }
           setActiveTabIndex(2);
-        } else if (payload === 'mapLayers') {
-          setSidebarOpen(true);
+        } else if (nextStepKey === 'mapLayers') {
+          if (!sidebarOpen) {
+            setSidebarOpen(true);
+            requiresDelay = true;
+          }
           setActiveTabIndex(3);
-        } else if (payload === 'drawingTools' || payload === 'threeDMode') {
-          setSidebarOpen(false);
+        } else if (nextStepKey === 'drawingTools' || nextStepKey === 'threeDMode') {
+          if (sidebarOpen) {
+            setSidebarOpen(false);
+            requiresDelay = true;
+          }
         }
         
-        // Now, advance the tour. React ensures the UI updates and this state change
-        // are processed, so the next render is correct.
-        setTourStepIndex(nextStepIndex);
+        // Stage 2: Advance the tour step, respecting any required animation delay.
+        if (requiresDelay) {
+          setTimeout(() => setTourStepIndex(nextStepIndex), TRANSITION_DELAY);
+        } else {
+          setTourStepIndex(nextStepIndex);
+        }
         break;
       }
       case 'PREV_STEP': {
-        // Logic for "Back" can also be made state-aware if needed, but for now, just moving back is fine.
         setTourStepIndex(tourStepIndex - 1);
         break;
       }
       case 'RESTART': {
-        // Reset all tour-related state to its initial condition.
         setTourStepIndex(0);
         setRunTour(false);
         localStorage.setItem('hasCompletedTour', 'true');
-        // Close the sidebar on mobile if the tour is skipped/finished.
-        if (window.innerWidth < 768) {
-            setSidebarOpen(false);
-        }
+        if (window.innerWidth < 768) setSidebarOpen(false);
         break;
       }
       default:
         break;
     }
-  }, [tourStepIndex]);
-  // --- END: Finalized Tour & Loading Logic ---
+  }, [tourStepIndex, sidebarOpen]);
+  // --- END: Final & Corrected Tour Logic ---
 
   const handleLightChange = useCallback((newLightConfig: LightConfig | null) => {
     setLightConfig(newLightConfig);
