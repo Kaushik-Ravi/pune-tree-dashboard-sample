@@ -68,8 +68,11 @@ export const useSunPosition = ({
     
     // Convert spherical coordinates to Three.js Cartesian position
     // We want the light to come FROM the sun position
-    // Distance from origin (arbitrary, shadows don't depend on distance for directional light)
-    const distance = 1000;
+    // 
+    // CRITICAL: Scene is in Mercator coordinate space (0-1 range for entire world)
+    // Distance must be in Mercator units to match scene scale
+    // Our scene spans ~0.01 Mercator units (~400km), so light should be ~0.05 away
+    const distance = 0.05; // 0.05 Mercator units (~2000km realistic sun distance in scene space)
     
     // Three.js coordinate system:
     // X: East-West (positive = east)

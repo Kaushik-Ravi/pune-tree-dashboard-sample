@@ -190,8 +190,10 @@ export class LightingManager {
       this.directionalLight.castShadow = config.castShadow;
     }
     
-    // Update shadow camera to point at origin
-    this.directionalLight.target.position.set(0, 0, 0);
+    // CRITICAL: Update shadow camera to point at scene center in Mercator space
+    // Pune is at approximately [0.705, 0, -0.448] in Mercator coordinates
+    // Point the light target at this location for proper shadow coverage
+    this.directionalLight.target.position.set(0.705, 0, -0.448);
     this.directionalLight.target.updateMatrixWorld();
     
     console.log('☀️ [LightingManager] Sun updated', {
