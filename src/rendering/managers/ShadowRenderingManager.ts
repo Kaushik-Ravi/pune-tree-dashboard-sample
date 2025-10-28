@@ -19,6 +19,7 @@
 
 import * as THREE from 'three';
 import type { Map as MapLibreMap } from 'maplibre-gl';
+import { MercatorCoordinate } from 'maplibre-gl';
 
 import type { 
   RenderConfig, 
@@ -465,18 +466,23 @@ export class ShadowRenderingManager {
       const height = feature.properties.Height_m || feature.properties.height_m || 10;
       const species = feature.properties.botanical_name || feature.properties.common_name || 'default';
       
-      // Convert geo coordinates to world position
+      // Convert geo coordinates to Mercator world position
+      const mercator = MercatorCoordinate.fromLngLat([lng, lat], 0);
       const worldPos = geoToWorld(lng, lat, 0);
+      
+      // CRITICAL: Get the scale factor to convert meters to Mercator units at this latitude
+      // This scale factor tells us how many Mercator units = 1 meter at this location
+      const mercatorScale = mercator.meterInMercatorCoordinateUnits();
       
       // Log first few trees for debugging
       if (index < 3) {
-        console.log(`🌳 Tree ${index}: [${lng.toFixed(4)}, ${lat.toFixed(4)}] → World: [${worldPos.x.toFixed(4)}, ${worldPos.y.toFixed(4)}, ${worldPos.z.toFixed(4)}], height: ${height}m`);
+        console.log(`🌳 Tree ${index}: [${lng.toFixed(4)}, ${lat.toFixed(4)}] → World: [${worldPos.x.toFixed(8)}, ${worldPos.y.toFixed(8)}, ${worldPos.z.toFixed(8)}], height: ${height}m, scale: ${mercatorScale.toExponential(3)}`);
       }
       
       return {
         id: feature.properties.id?.toString() || `tree-${index}`,
         position: worldPos,
-        height: height,
+        height: height * mercatorScale,  // Scale height from meters to Mercator units
         species: species,
         visible: true
       };
@@ -503,12 +509,17 @@ export class ShadowRenderingManager {
 
     console.log(`🏢 [ShadowRenderingManager] Adding ${buildingData.length} buildings using BuildingPipeline`);
     
-    // Transform data to BuildingData format with CORRECTED coordinate transformation
+    // Transform data to BuildingData format with Mercator scaling
     const transformedBuildings = buildingData.map((building, index) => {
-      // Convert vertices from geo to world coordinates
+      // Get the scale factor for the first vertex (all vertices should be roughly the same location)
+      const firstV = building.vertices?.[0];
+      const mercator = firstV ? MercatorCoordinate.fromLngLat([firstV.lng, firstV.lat], 0) : null;
+      const mercatorScale = mercator ? mercator.meterInMercatorCoordinateUnits() : 1e-6; // fallback
+      
+      // Convert vertices from geo to Mercator world coordinates
       const worldVertices = building.vertices?.map((v: any) => {
         const worldPos = geoToWorld(v.lng, v.lat, 0);
-        // Use the unified X,Y,Z from geoToWorld (X east, Y altitude in meters, Z north)
+        // Use the unified X,Y,Z from geoToWorld (X east, Y altitude, Z north)
         return new THREE.Vector3(worldPos.x, worldPos.y, worldPos.z);
       }) || [];
       
@@ -518,14 +529,16 @@ export class ShadowRenderingManager {
           id: building.id,
           vertices: worldVertices.length,
           height: building.height,
+          heightScaled: (building.height * mercatorScale).toExponential(3),
           firstVertex: worldVertices[0],
+          scale: mercatorScale.toExponential(3)
         });
       }
       
       return {
         id: building.id || `building-${index}`,
         vertices: worldVertices,
-        height: building.height || 15,
+        height: (building.height || 15) * mercatorScale,  // Scale height from meters to Mercator units
         type: building.type || 'default',
         feature: null as any,
       };

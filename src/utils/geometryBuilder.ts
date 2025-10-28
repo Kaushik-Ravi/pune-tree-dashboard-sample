@@ -23,17 +23,19 @@ export const geoToWorld = (
 ): THREE.Vector3 => {
   const mercator = MercatorCoordinate.fromLngLat([longitude, latitude], altitude);
   
-  // MapLibre custom layers expect coordinates in Mercator space (0-1 range)
-  // The mercator object already contains altitude in the correct units
-  // mercator.x, mercator.y are in [0,1] normalized Mercator coordinates
-  // mercator.z is altitude already in Mercator units (not meters)
-  // Convert mercator units to meters at this latitude
-  const metersPerUnit = mercator.meterInMercatorCoordinateUnits();
-
+  // MapLibre custom layers use Mercator coordinates (0-1 normalized range)
+  // For Three.js positioning:
+  // - Use mercator.x, mercator.y, mercator.z DIRECTLY as position coordinates
+  // - They are already in the correct space for the projection matrix
+  // - Altitude (mercator.z) is already in Mercator units (conformal with X/Y)
+  // 
+  // The scale transformation happens in the projection matrix, not here!
+  // See: https://maplibre.org/maplibre-gl-js/docs/examples/add-a-3d-model-with-shadow-using-threejs/
+  
   const result = new THREE.Vector3(
-    mercator.x * metersPerUnit,           // X in meters (east)
-    mercator.z * metersPerUnit,           // Y in meters (altitude)
-    -mercator.y * metersPerUnit           // Z in meters (north), negated to match Three.js orientation
+    mercator.x,    // X: Longitude in Mercator space (0-1)
+    mercator.z,    // Y: Altitude in Mercator space (conformal)
+    -mercator.y    // Z: Latitude in Mercator space (0-1), negated for Three.js right-hand coords
   );
   
   return result;
@@ -235,11 +237,11 @@ export const createGroundPlane = (
   plane.receiveShadow = receiveShadow;
   plane.rotation.x = -Math.PI / 2; // Horizontal
   
-  // Center the plane
+  // Center the plane in Mercator space
   const centerX = (swPos.x + nePos.x) / 2;
   const centerZ = (swPos.z + nePos.z) / 2;
-  const centerY = (swPos.y + nePos.y) / 2; // Use average altitude for proper placement
-  plane.position.set(centerX, centerY - 0.001, centerZ); // Slightly below ground to avoid z-fighting
+  const centerY = (swPos.y + nePos.y) / 2;
+  plane.position.set(centerX, centerY - 0.000001, centerZ); // Slightly below ground in Mercator units
   
   plane.userData = {
     type: 'ground'
