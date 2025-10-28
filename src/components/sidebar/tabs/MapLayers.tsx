@@ -11,8 +11,10 @@ interface MapLayersProps {
   toggleLSTOverlay: () => void;
   lstMinValue: number;
   lstMaxValue: number;
-  onLightChange: (config: LightConfig | null) => void; // --- MODIFIED ---
+  onLightChange: (config: LightConfig | null) => void;
   is3D: boolean;
+  shadowsEnabled: boolean;
+  onShadowsToggle: (enabled: boolean) => void;
 }
 
 const MapLayers: React.FC<MapLayersProps> = ({
@@ -24,12 +26,31 @@ const MapLayers: React.FC<MapLayersProps> = ({
   lstMaxValue,
   onLightChange,
   is3D,
+  shadowsEnabled,
+  onShadowsToggle,
 }) => {
   const lstLegendGradient = 'linear-gradient(to right, #0D1282, #00A9FF, #00E0C7, #90F1AC, #FFF80A, #FFB344, #FF4A4A, #D72323)';
 
   return (
     <div className="space-y-6">
       <LightAndShadowControl onLightChange={onLightChange} is3D={is3D} />
+
+      {is3D && (
+        <div className="card">
+          <div className="card-header"><h3 className="font-medium">Shadow Settings</h3></div>
+          <div className="card-body">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div><div className="font-medium">Enable Shadows</div><div className="text-xs text-gray-500">Show realistic shadows from trees & buildings</div></div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" className="sr-only peer" checked={shadowsEnabled} onChange={(e) => onShadowsToggle(e.target.checked)} />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="card-header"><h3 className="font-medium flex items-center"><LayersIcon size={18} className="mr-2 text-gray-500" />Basemap Options</h3></div>

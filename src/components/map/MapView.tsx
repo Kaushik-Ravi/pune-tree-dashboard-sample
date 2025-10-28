@@ -10,7 +10,6 @@ import Map, {
   MapLayerTouchEvent,
 } from 'react-map-gl/maplibre';
 import type { LayerProps } from 'react-map-gl/maplibre';
-import type { Fog } from 'maplibre-gl';
 import { ChevronLeft, ChevronRight, LayoutDashboard } from 'lucide-react';
 import { useTreeStore } from '../../store/TreeStore';
 import SimulatedTreesLayer from './SimulatedTreesLayer';
@@ -68,6 +67,7 @@ interface MapViewProps {
   is3D: boolean;
   onToggle3D: () => void;
   lightConfig: LightConfig | null;
+  shadowsEnabled: boolean;
 }
 
 const MapView: React.FC<MapViewProps> = ({
@@ -81,6 +81,7 @@ const MapView: React.FC<MapViewProps> = ({
   is3D,
   onToggle3D,
   lightConfig,
+  shadowsEnabled,
 }) => {
   const mapRef = useRef<MapRef | null>(null);
   const { setSelectedArea } = useTreeStore();
@@ -88,6 +89,8 @@ const MapView: React.FC<MapViewProps> = ({
   const [zoom, setZoom] = useState(11.5);
   const [viewBounds, setViewBounds] = useState(null);
   const isDraggingRef = useRef(false);
+  const [isLoading3DTrees, setIsLoading3DTrees] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
 
   const mapTilerKey = import.meta.env.VITE_MAPTILER_KEY;
   const getMapStyle = (style: string) => {
@@ -104,13 +107,19 @@ const MapView: React.FC<MapViewProps> = ({
 
     const setup3DEnvironment = () => {
       if (is3D) {
-        if (!map.getSource(terrainSourceName)) {
-          map.addSource(terrainSourceName, {
-            type: 'raster-dem',
-            url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${mapTilerKey}`,
-            tileSize: 256,
-          });
+        // Remove existing terrain source if it exists to prevent conflicts
+        if (map.getSource(terrainSourceName)) {
+          map.setTerrain(null);
+          map.removeSource(terrainSourceName);
         }
+        
+        // Add fresh terrain source
+        map.addSource(terrainSourceName, {
+          type: 'raster-dem',
+          url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${mapTilerKey}`,
+          tileSize: 256,
+        });
+        
         map.setTerrain({ source: terrainSourceName, exaggeration: 1.5 });
 
         if (lightConfig) {
@@ -118,8 +127,28 @@ const MapView: React.FC<MapViewProps> = ({
         } else {
           map.setLight({ anchor: 'viewport', position: [1.5, 180, 60], intensity: 0.5 });
         }
+        
+        // Apply fog configuration
+        if (lightConfig) {
+          const fogConfig = {
+            'color': 'rgb(186, 210, 235)',
+            'high-color': 'rgb(36, 92, 223)',
+            'horizon-blend': 0.05,
+            'space-color': 'rgb(11, 11, 25)',
+            'star-intensity': Math.max(0, 1 - lightConfig.ambientIntensity * 5)
+          };
+          (map as any).setFog(fogConfig);
+        }
       } else {
+        // Proper cleanup when disabling 3D
         map.setTerrain(null);
+        if (map.getSource(terrainSourceName)) {
+          map.removeSource(terrainSourceName);
+        }
+        // Reset light to default
+        map.setLight({ anchor: 'viewport', position: [1.5, 180, 60], intensity: 0.5 });
+        // Remove fog
+        (map as any).setFog(null);
       }
     };
 
@@ -129,20 +158,7 @@ const MapView: React.FC<MapViewProps> = ({
       map.once('styledata', setup3DEnvironment);
     }
 
-  }, [is3D, lightConfig, mapTilerKey, mapStyleUrl]);
-
-  const fog = useMemo((): Fog | undefined => {
-    if (!is3D || !lightConfig) {
-      return undefined;
-    }
-    return {
-      'color': 'rgb(186, 210, 235)',
-      'high-color': 'rgb(36, 92, 223)',
-      'horizon-blend': 0.05,
-      'space-color': 'rgb(11, 11, 25)',
-      'star-intensity': Math.max(0, 1 - lightConfig.ambientIntensity * 5)
-    };
-  }, [is3D, lightConfig]);
+  }, [is3D, lightConfig, mapTilerKey]);
 
   const handleToggle3D = useCallback(async () => {
     const map = mapRef.current;
@@ -154,6 +170,10 @@ const MapView: React.FC<MapViewProps> = ({
       if (baseMap !== 'streets') {
         changeBaseMap('streets');
       }
+      
+      // Show delightful loading message
+      setLoadingMessage('🌳 Creating your 3D forest...');
+      
       const currentBounds = map.getBounds();
       setViewBounds({
           sw: [currentBounds.getWest(), currentBounds.getSouth()],
@@ -161,13 +181,51 @@ const MapView: React.FC<MapViewProps> = ({
       } as any);
       
       setTimeout(() => {
-        map.flyTo({ pitch: 60, zoom: 17.5, duration: 2000, essential: true });
+        map.flyTo({ pitch: 60, zoom: 17.5, duration: 1500, essential: true });
+        setTimeout(() => setLoadingMessage(''), 2000);
       }, 100);
     } else {
       setViewBounds(null);
-      map.flyTo({ pitch: 0, zoom: map.getZoom() < 16 ? map.getZoom() : 16, duration: 2000, essential: true });
+      setLoadingMessage('');
+      map.flyTo({ pitch: 0, zoom: map.getZoom() < 16 ? map.getZoom() : 16, duration: 1500, essential: true });
     }
   }, [is3D, onToggle3D, baseMap, changeBaseMap]);
+  
+  // Update bounds dynamically when map moves in 3D mode
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !is3D) return;
+
+    const updateBounds = () => {
+      const currentBounds = map.getBounds();
+      setViewBounds({
+        sw: [currentBounds.getWest(), currentBounds.getSouth()],
+        ne: [currentBounds.getEast(), currentBounds.getNorth()],
+      } as any);
+    };
+
+    // Update bounds when map finishes moving
+    map.on('moveend', updateBounds);
+    
+    return () => {
+      map.off('moveend', updateBounds);
+    };
+  }, [is3D]);
+  
+  const handleLoading3DChange = useCallback((loading: boolean) => {
+    setIsLoading3DTrees(loading);
+    if (loading) {
+      const messages = [
+        '🌲 Planting your digital forest...',
+        '🏙️ Building your 3D city...',
+        '✨ Rendering nature in 3D...',
+        '🌍 Creating your urban canopy...',
+      ];
+      setLoadingMessage(messages[Math.floor(Math.random() * messages.length)]);
+    } else {
+      setTimeout(() => setLoadingMessage(''), 500);
+    }
+  }, []);
 
   const onDrawCreate = useCallback((evt: DrawEvent) => {
     const feature = evt.features[0];
@@ -259,10 +317,9 @@ const MapView: React.FC<MapViewProps> = ({
         style={{ width: '100%', height: '100%' }}
         mapStyle={mapStyleUrl}
         interactiveLayerIds={interactiveLayers}
-        onClick={handleMapClick}
+        onClick={handleMapClick}  
         onMouseMove={handleMouseMove}
         onZoom={(e) => setZoom(e.viewState.zoom)}
-        fog={fog}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onTouchEnd={handleTouchEnd}
@@ -279,7 +336,15 @@ const MapView: React.FC<MapViewProps> = ({
           </Source>
         )}
         {is3D && <Layer {...buildings3DLayerStyle} />}
-        {is3D && <ThreeDTreesLayer bounds={viewBounds} selectedTreeId={selectedTreeId} />}
+        {is3D && (
+          <ThreeDTreesLayer 
+            bounds={viewBounds} 
+            selectedTreeId={selectedTreeId}
+            shadowsEnabled={shadowsEnabled}
+            zoom={zoom}
+            onLoadingChange={handleLoading3DChange}
+          />
+        )}
 
         <DrawControl
           ref={drawControlRef as any}
@@ -298,6 +363,14 @@ const MapView: React.FC<MapViewProps> = ({
       <div data-tour-id="view-mode-toggle">
         <ViewModeToggle is3D={is3D} onToggle={handleToggle3D} zoom={zoom} />
       </div>
+      
+      {/* Loading indicator for 3D trees */}
+      {(isLoading3DTrees || loadingMessage) && (
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-30 bg-primary-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center space-x-2 animate-fade-in">
+          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+          <span className="font-medium">{loadingMessage}</span>
+        </div>
+      )}
       
       {/* --- DESKTOP-ONLY SIDEBAR TOGGLE --- */}
       <button

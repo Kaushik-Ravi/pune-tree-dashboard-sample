@@ -21,9 +21,13 @@ type ThreeDGeoJSON = FeatureCollection<Point, ThreeDTreeFeatureProperties>;
 interface ThreeDTreesLayerProps {
   bounds: { sw: [number, number]; ne: [number, number] } | null;
   selectedTreeId: string | null;
+  shadowsEnabled?: boolean;
+  treeShadowColor?: string;
+  buildingShadowColor?: string;
+  zoom: number;
+  onLoadingChange?: (loading: boolean) => void;
 }
 
-// --- FIX: Removed invalid 'fill-extrusion-cast-shadows' property from all styles ---
 const trunkLayerStyle: LayerProps = {
   id: 'tree-trunks-3d',
   type: 'fill-extrusion',
@@ -67,25 +71,82 @@ const highlightedCanopyLayerStyle: LayerProps = {
 };
 
 
-const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTreeId }) => {
+const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ 
+  bounds, 
+  selectedTreeId,
+  shadowsEnabled = true,
+  zoom,
+  onLoadingChange
+}) => {
   const [treeData, setTreeData] = useState<ThreeDGeoJSON | null>(null);
+  
+  // Calculate max trees based on zoom level - more trees at higher zoom
+  const maxTreesForZoom = (zoomLevel: number): number => {
+    if (zoomLevel >= 18) return 8000;
+    if (zoomLevel >= 17) return 5000;
+    if (zoomLevel >= 16) return 3000;
+    if (zoomLevel >= 15) return 1500;
+    return 800;
+  };
+
+  // Dynamic layer styles that incorporate shadow settings
+  const dynamicTrunkStyle: LayerProps = useMemo(() => ({
+    ...trunkLayerStyle,
+    paint: {
+      ...trunkLayerStyle.paint,
+      ...(shadowsEnabled && { 'fill-extrusion-ambient-occlusion-intensity': 0.5 } as any),
+    }
+  }), [shadowsEnabled]);
+
+  const dynamicCanopyStyle: LayerProps = useMemo(() => ({
+    ...canopyLayerStyle,
+    paint: {
+      ...canopyLayerStyle.paint,
+      ...(shadowsEnabled && { 'fill-extrusion-ambient-occlusion-intensity': 0.5 } as any),
+    }
+  }), [shadowsEnabled]);
 
   useEffect(() => {
-    if (bounds) {
+    if (bounds && zoom >= 14) {
+      let isCancelled = false;
+      
       const fetchTreeData = async () => {
+        onLoadingChange?.(true);
+        
         try {
-          const response = await axios.post(`${API_BASE_URL}/api/trees-in-bounds`, { bounds });
-          setTreeData(response.data);
+          const maxTrees = maxTreesForZoom(zoom);
+          const response = await axios.post(`${API_BASE_URL}/api/trees-in-bounds`, { 
+            bounds,
+            limit: maxTrees
+          });
+          
+          if (!isCancelled) {
+            setTreeData(response.data);
+          }
         } catch (error) {
           console.error('Failed to fetch 3D tree data:', error);
-          setTreeData(null);
+          if (!isCancelled) {
+            setTreeData(null);
+          }
+        } finally {
+          if (!isCancelled) {
+            onLoadingChange?.(false);
+          }
         }
       };
-      fetchTreeData();
+      
+      // Debounce fetching to avoid too many requests
+      const timeoutId = setTimeout(fetchTreeData, 300);
+      
+      return () => {
+        isCancelled = true;
+        clearTimeout(timeoutId);
+      };
     } else {
       setTreeData(null);
+      onLoadingChange?.(false);
     }
-  }, [bounds]);
+  }, [bounds, zoom, onLoadingChange]);
 
   const { trunkFeatures, canopyFeatures } = useMemo(() => {
     if (!treeData || !treeData.features) {
@@ -152,19 +213,19 @@ const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({ bounds, selectedTre
   return (
     <>
       <Source id="tree-trunks-3d-source" type="geojson" data={trunkFeatures}>
-        <Layer {...trunkLayerStyle} />
+        <Layer {...dynamicTrunkStyle} />
       </Source>
       <Source id="tree-canopies-3d-source" type="geojson" data={canopyFeatures}>
-        <Layer {...canopyLayerStyle} />
+        <Layer {...dynamicCanopyStyle} />
       </Source>
       
       {highlightedTrunk && (
-        <Source id="highlight-trunk-source" type="geojson" data={highlightedTrunk}>
+        <Source id="highlight-trunk-source" type="geojson" data={highlightedTrunk as any}>
             <Layer {...highlightedTrunkLayerStyle} />
         </Source>
       )}
       {highlightedCanopy && (
-        <Source id="highlight-canopy-source" type="geojson" data={highlightedCanopy}>
+        <Source id="highlight-canopy-source" type="geojson" data={highlightedCanopy as any}>
             <Layer {...highlightedCanopyLayerStyle} />
         </Source>
       )}

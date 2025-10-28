@@ -1,23 +1,23 @@
 // src/components/sidebar/tabs/PlantingAdvisor.tsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { TreeDeciduous, Info, Thermometer, Scaling, Bot, MapPin, PlayCircle, XCircle, CheckCircle } from 'lucide-react';
-import { useTreeStore, TreeSpeciesData, ArchetypeData, DrawnGeoJson } from '../../../store/TreeStore';
+import { TreeDeciduous, Thermometer, Scaling, Bot, MapPin, PlayCircle, XCircle, CheckCircle } from 'lucide-react';
+import { useTreeStore, TreeSpeciesData, ArchetypeData } from '../../../store/TreeStore';
 import * as turf from '@turf/turf';
-import InfoPopover from '../../common/InfoPopover';
+import type { Feature, Polygon, MultiPolygon } from 'geojson';
 
 // The generateTreeCentersJS helper function remains unchanged and is included here for completeness.
 const generateTreeCentersJS = (
-  polygonFeature: turf.Feature<turf.Polygon | turf.MultiPolygon>,
+  polygonFeature: Feature<Polygon | MultiPolygon>,
   canopyDiameterMeters: number,
   boundaryBufferMeters: number,
   treeSpacingBufferMeters: number
-): turf.helpers.Position[] => {
+): [number, number][] => {
   if (!polygonFeature || !polygonFeature.geometry) return [];
   const canopyRadiusMeters = canopyDiameterMeters / 2.0;
   const effectiveRadiusMeters = canopyRadiusMeters + treeSpacingBufferMeters;
   const totalInsetMeters = boundaryBufferMeters + effectiveRadiusMeters;
   if (canopyDiameterMeters <= 0 || effectiveRadiusMeters <=0) return [];
-  let plantingZone: turf.Feature<turf.Polygon | turf.MultiPolygon> | null = null;
+  let plantingZone: Feature<Polygon | MultiPolygon> | null | undefined = null;
   try {
     plantingZone = turf.buffer(polygonFeature, -Math.abs(totalInsetMeters), { units: 'meters' });
   } catch (error) { return []; }
@@ -26,7 +26,7 @@ const generateTreeCentersJS = (
   const dyMeters = Math.sqrt(3) * effectiveRadiusMeters;
   if (dxMeters <= 1e-6 || dyMeters <= 1e-6) return [];
   const plantingZoneBounds = turf.bbox(plantingZone);
-  const treeCenters: turf.helpers.Position[] = [];
+  const treeCenters: [number, number][] = [];
   const avgLat = (plantingZoneBounds[1] + plantingZoneBounds[3]) / 2;
   const metersPerDegreeLat = 111132.954 - 559.822 * Math.cos(2 * avgLat * (Math.PI/180)) + 1.175 * Math.cos(4 * avgLat * (Math.PI/180));
   const metersPerDegreeLon = (Math.PI/180) * 6378137 * Math.cos(avgLat * Math.PI/180);
@@ -119,7 +119,7 @@ const PlantingAdvisor: React.FC<PlantingAdvisorProps> = ({ setShowTemperatureCha
     if (!isAreaDefinedForPlanting || !selectedArea?.geojsonData) return alert("Please draw an area on the map.");
     if (!selectedArchetype) return alert("Please select a tree species and an archetype.");
     
-    const polygonFeature = selectedArea.geojsonData as turf.Feature<turf.Polygon | turf.MultiPolygon>;
+    const polygonFeature = selectedArea.geojsonData as Feature<Polygon | MultiPolygon>;
     const centers = generateTreeCentersJS(polygonFeature, canopyDiameterInput, boundaryBufferInput, treeSpacingBufferInput);
     
     setSimulatedPlantingPoints(centers); 
@@ -134,10 +134,6 @@ const PlantingAdvisor: React.FC<PlantingAdvisorProps> = ({ setShowTemperatureCha
     setSimulationCount(0); 
     setShowTemperatureChart(false); 
   };
-  
-  // Info popover content remains the same
-  const plantingSimulationInfo = (<>...</>);
-  const p90p10Info = (<>...</>);
 
   return (
     <div className="space-y-6">

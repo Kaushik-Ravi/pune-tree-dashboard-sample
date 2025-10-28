@@ -25,6 +25,7 @@ function App() {
   
   const [is3D, setIs3D] = useState(false);
   const [lightConfig, setLightConfig] = useState<LightConfig | null>(null);
+  const [shadowsEnabled, setShadowsEnabled] = useState(true);
 
   const { cityStats } = useTreeStore();
   const [isLoading, setIsLoading] = useState(true);
@@ -194,6 +195,7 @@ function App() {
           is3D={is3D}
           onToggle3D={handleToggle3D}
           lightConfig={lightConfig}
+          shadowsEnabled={shadowsEnabled}
         />
 
         {sidebarOpen && (
@@ -221,6 +223,8 @@ function App() {
           onActiveSpeciesChangeForChart={handleActiveSpeciesChangeForChart}
           onLightChange={handleLightChange}
           is3D={is3D}
+          shadowsEnabled={shadowsEnabled}
+          onShadowsToggle={setShadowsEnabled}
         />
       </div>
       {showTemperatureChart && activeSpeciesCooling && (

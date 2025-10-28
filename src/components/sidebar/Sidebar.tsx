@@ -32,6 +32,8 @@ interface SidebarProps {
   onActiveSpeciesChangeForChart: (speciesDetails: ArchetypeData | null) => void;
   onLightChange: (config: LightConfig | null) => void;
   is3D: boolean;
+  shadowsEnabled: boolean;
+  onShadowsToggle: (enabled: boolean) => void;
 }
 
 const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
@@ -49,7 +51,9 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
   setShowTemperatureChart,
   onActiveSpeciesChangeForChart,
   onLightChange,
-  is3D
+  is3D,
+  shadowsEnabled,
+  onShadowsToggle,
 }, ref) => {
   const tabs = [
     { id: 'city-overview', label: 'City Overview', icon: <BarChartBig size={18} /> },
@@ -86,6 +90,8 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
           lstMaxValue={lstMaxValue}
           onLightChange={onLightChange}
           is3D={is3D}
+          shadowsEnabled={shadowsEnabled}
+          onShadowsToggle={onShadowsToggle}
         />
       );
       default: return <CityOverview />;
