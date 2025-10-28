@@ -164,7 +164,7 @@ export class ShadowRenderingManager {
       this.buildingPipeline = new BuildingPipeline(this.scene, this.camera);
       console.log('✅ [ShadowRenderingManager] BuildingPipeline initialized');
       
-      this.treeRenderPipeline = new TreeRenderPipeline(this.scene, this.camera);
+      this.treeRenderPipeline = new TreeRenderPipeline(this.scene, this.camera, this.sceneManager);
       console.log('✅ [ShadowRenderingManager] TreeRenderPipeline initialized (instanced rendering)');
       
       console.log('✅ [ShadowRenderingManager] All pipelines initialized');

@@ -19,6 +19,7 @@
 
 import * as THREE from 'three';
 import { TreeData, LODLevel, InstancedTreeGroup } from '../types/SceneObject';
+import type { SceneGraphManager } from '../managers/SceneGraphManager';
 
 /**
  * LOD configuration - distances in meters
@@ -108,13 +109,15 @@ export class TreeRenderPipeline {
   private instancedGroups: Map<string, InstancedTreeGroup>;
   private trees: TreeData[] = [];
   private scene: THREE.Scene;
+  private sceneManager: SceneGraphManager | null = null;
   
   // Performance tracking
   private visibleCount = 0;
   private totalDrawCalls = 0;
 
-  constructor(scene: THREE.Scene, _camera: THREE.Camera) {
+  constructor(scene: THREE.Scene, _camera: THREE.Camera, sceneManager?: SceneGraphManager) {
     this.scene = scene;
+    this.sceneManager = sceneManager || null;
     this.geometryCache = {
       trunks: new Map(),
       canopies: new Map(),
@@ -291,9 +294,14 @@ export class TreeRenderPipeline {
           config
         );
 
-        // Add to scene
-        this.scene.add(trunkMesh);
-        this.scene.add(canopyMesh);
+        // Add to scene via SceneGraphManager if available, otherwise directly to scene
+        if (this.sceneManager) {
+          this.sceneManager.addToGroup('trees', trunkMesh);
+          this.sceneManager.addToGroup('trees', canopyMesh);
+        } else {
+          this.scene.add(trunkMesh);
+          this.scene.add(canopyMesh);
+        }
 
         // Store reference (we'll store trunk mesh as primary reference)
         group.lodGroups[lodLevel].mesh = trunkMesh;
