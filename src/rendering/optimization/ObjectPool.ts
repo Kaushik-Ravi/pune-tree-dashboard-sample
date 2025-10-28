@@ -82,8 +82,8 @@ export interface PoolStats {
 export class ObjectPool<T> {
   private factory: () => T;
   private reset: (obj: T) => void;
-  private pool: T[] = [];
-  private inUse: Set<T> = new Set();
+  protected pool: T[] = [];
+  protected inUse: Set<T> = new Set();
   private config: Required<PoolConfig<T>>;
   
   // Statistics

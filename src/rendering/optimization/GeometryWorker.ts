@@ -368,7 +368,7 @@ export class GeometryWorkerManager {
 /**
  * Helper function to convert worker data to Three.js geometry
  */
-export function createGeometryFromWorkerData(data: any, type: 'trunk' | 'canopy'): THREE.BufferGeometry {
+export function createGeometryFromWorkerData(data: any, _type: 'trunk' | 'canopy'): THREE.BufferGeometry {
   const geometry = new THREE.BufferGeometry();
   
   const vertices = new Float32Array(data.vertices);

@@ -113,33 +113,28 @@ export enum QualityPreset {
 const QUALITY_PRESETS: Record<QualityPreset, Partial<RenderConfig>> = {
   [QualityPreset.ULTRA]: {
     shadowQuality: 'ultra',
-    maxVisibleTrees: 10000,
+    maxTrees: 10000,
     enableFrustumCulling: true,
-    enableDistanceCulling: true,
   },
   [QualityPreset.HIGH]: {
     shadowQuality: 'high',
-    maxVisibleTrees: 5000,
+    maxTrees: 5000,
     enableFrustumCulling: true,
-    enableDistanceCulling: true,
   },
   [QualityPreset.MEDIUM]: {
     shadowQuality: 'medium',
-    maxVisibleTrees: 3000,
+    maxTrees: 3000,
     enableFrustumCulling: true,
-    enableDistanceCulling: true,
   },
   [QualityPreset.LOW]: {
     shadowQuality: 'low',
-    maxVisibleTrees: 1500,
+    maxTrees: 1500,
     enableFrustumCulling: true,
-    enableDistanceCulling: true,
   },
   [QualityPreset.POTATO]: {
     shadowQuality: 'low',
-    maxVisibleTrees: 500,
+    maxTrees: 500,
     enableFrustumCulling: true,
-    enableDistanceCulling: true,
   },
 };
 
@@ -305,7 +300,11 @@ export class AdaptiveLODManager {
           this.currentLODDistances.low * 0.8
         );
         
-        config.lodDistances = { ...this.currentLODDistances };
+        config.lodDistances = [
+          this.currentLODDistances.high,
+          this.currentLODDistances.medium,
+          this.currentLODDistances.low
+        ];
         action.after.lodDistances = { ...this.currentLODDistances };
         
         console.log(`[AdaptiveLOD] Reduced LOD distances:`, this.currentLODDistances);
@@ -326,7 +325,11 @@ export class AdaptiveLODManager {
           this.currentLODDistances.low * 1.1
         );
         
-        config.lodDistances = { ...this.currentLODDistances };
+        config.lodDistances = [
+          this.currentLODDistances.high,
+          this.currentLODDistances.medium,
+          this.currentLODDistances.low
+        ];
         action.after.lodDistances = { ...this.currentLODDistances };
         
         console.log(`[AdaptiveLOD] Increased LOD distances:`, this.currentLODDistances);
