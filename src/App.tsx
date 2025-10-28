@@ -30,7 +30,9 @@ function App() {
   const [shadowQuality, setShadowQuality] = useState<ShadowQuality>('high');
   const [showTreeShadows, setShowTreeShadows] = useState(true);
   const [showBuildingShadows, setShowBuildingShadows] = useState(true);
-  const [renderMode, setRenderMode] = useState<'basic' | 'realistic'>('basic'); // Toggle between rendering modes
+
+  // Automatically switch to realistic mode when shadows are enabled
+  const renderMode = shadowsEnabled ? 'realistic' : 'basic';
 
   const { cityStats } = useTreeStore();
   const [isLoading, setIsLoading] = useState(true);

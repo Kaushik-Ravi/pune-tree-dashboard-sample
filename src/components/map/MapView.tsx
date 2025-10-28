@@ -369,10 +369,10 @@ const MapView: React.FC<MapViewProps> = ({
         )}
         
         {/* Realistic 3D mode - beautiful, accurate sun-based shadows */}
-        {is3D && renderMode === 'realistic' && shadowsEnabled && lightConfig && (
+        {is3D && renderMode === 'realistic' && shadowsEnabled && (
           <ThreeJSShadowLayer
             bounds={viewBounds}
-            sunDate={new Date()} // TODO: Get actual date/time from LightAndShadowControl
+            sunDate={new Date()} // Uses current date/time for sun position
             shadowQuality={shadowQuality}
             showBuildingShadows={showBuildingShadows}
             showTreeShadows={showTreeShadows}
