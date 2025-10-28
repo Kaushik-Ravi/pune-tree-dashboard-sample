@@ -171,14 +171,12 @@ export class ShadowRenderingManager {
       
       // Mark as initialized
       this.isInitialized = true;
-      // Expose manager for debugging in development
+      // Expose manager for debugging (ALWAYS expose for shadow debugging)
       try {
-        if ((import.meta as any).DEV) {
-          (window as any).__shadowRenderingManager = this;
-          console.log('🔎 [ShadowRenderingManager] Exposed as window.__shadowRenderingManager for debugging');
-        }
+        (window as any).__shadowRenderingManager = this;
+        console.log('🔎 [ShadowRenderingManager] Exposed as window.__shadowRenderingManager for debugging');
       } catch (e) {
-        // non-critical if exposure fails
+        console.warn('⚠️ Could not expose shadow manager to window:', e);
       }
       this.emitTyped('initialized', undefined);
       
