@@ -76,6 +76,8 @@ export class TerrainPipeline {
       color: GROUND_MATERIAL_CONFIG.color,
       roughness: GROUND_MATERIAL_CONFIG.roughness,
       metalness: GROUND_MATERIAL_CONFIG.metalness,
+      emissive: 0x000000,
+      emissiveIntensity: 0.0,
     });
     
     // Create initial ground plane

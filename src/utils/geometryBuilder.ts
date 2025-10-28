@@ -24,12 +24,13 @@ export const geoToWorld = (
   const mercator = MercatorCoordinate.fromLngLat([longitude, latitude], altitude);
   
   // MapLibre custom layers expect coordinates in Mercator space (0-1 range)
-  // We convert altitude from meters to Mercator units for proper vertical scaling
-  const scale = mercator.meterInMercatorCoordinateUnits();
+  // The mercator object already contains altitude in the correct units
+  // mercator.x, mercator.y are in [0,1] normalized Mercator coordinates
+  // mercator.z is altitude already in Mercator units (not meters)
   
   const result = new THREE.Vector3(
     mercator.x,              // Longitude in Mercator space (0-1)
-    altitude * scale,        // Altitude in Mercator units (scaled from meters)
+    mercator.z,              // Altitude in Mercator units (directly from mercator.z)
     -mercator.y              // Latitude in Mercator space (0-1), negated for Three.js Z-axis
   );
   
@@ -79,7 +80,9 @@ export const createTreeGeometry = (
   const trunkMaterial = new THREE.MeshStandardMaterial({
     color: trunkColor,
     roughness: 0.9,
-    metalness: 0.1
+    metalness: 0.1,
+    emissive: 0x000000,
+    emissiveIntensity: 0.0,
   });
   
   const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
@@ -98,7 +101,9 @@ export const createTreeGeometry = (
   const canopyMaterial = new THREE.MeshStandardMaterial({
     color: canopyColor,
     roughness: 0.8,
-    metalness: 0.0
+    metalness: 0.0,
+    emissive: 0x000000,
+    emissiveIntensity: 0.0,
   });
   
   const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
@@ -167,7 +172,9 @@ export const createBuildingGeometry = (
   const material = new THREE.MeshStandardMaterial({
     color: color,
     roughness: 0.7,
-    metalness: 0.3
+    metalness: 0.3,
+    emissive: 0x000000,
+    emissiveIntensity: 0.0,
   });
   
   const building = new THREE.Mesh(geometry, material);
@@ -218,6 +225,8 @@ export const createGroundPlane = (
     roughness: 0.95,
     metalness: 0.0,
     side: THREE.DoubleSide, // Render both sides for safety
+    emissive: 0x000000,
+    emissiveIntensity: 0.0,
   });
   
   const plane = new THREE.Mesh(geometry, material);

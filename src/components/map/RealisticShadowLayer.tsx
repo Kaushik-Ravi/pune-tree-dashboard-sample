@@ -157,11 +157,36 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
     try {
       console.log('🏢 [RealisticShadowLayer] Fetching buildings from vector tiles...');
       
-      // Query rendered building features from MapLibre
-      const features = mapInstance.queryRenderedFeatures(undefined, {
-        layers: ['3d-buildings'], // Must match layer ID from MapView
-        filter: ['has', 'height'] // Only buildings with height data
-      });
+      // Dynamically detect building layers from the map style
+      const style = mapInstance.getStyle();
+      const buildingLayers = style?.layers?.filter((layer: any) => {
+        // Look for fill-extrusion layers (3D buildings) or layers with "building" in the name
+        return layer.type === 'fill-extrusion' || 
+               (layer.id && /building/i.test(layer.id));
+      }).map((layer: any) => layer.id) || [];
+      
+      console.log('🏢 [RealisticShadowLayer] Detected building layers:', buildingLayers);
+      
+      // Try to query features from detected layers
+      let features: any[] = [];
+      
+      if (buildingLayers.length > 0) {
+        // Query with detected layer IDs
+        features = mapInstance.queryRenderedFeatures(undefined, {
+          layers: buildingLayers,
+          filter: ['has', 'height'] // Only buildings with height data
+        });
+      } else {
+        // Fallback: query all features and filter by height property
+        console.log('🏢 [RealisticShadowLayer] No building layers found, querying all features');
+        const allFeatures = mapInstance.queryRenderedFeatures(undefined, {
+          filter: ['has', 'height']
+        });
+        features = allFeatures.filter((f: any) => 
+          f.geometry?.type === 'Polygon' && 
+          (f.properties?.height || f.properties?.render_height)
+        );
+      }
       
       if (features.length === 0) {
         console.warn('⚠️ [RealisticShadowLayer] No buildings found. Is 3D mode enabled?');

@@ -212,6 +212,9 @@ export class ShadowRenderingManager {
       // IMPORTANT: Set camera matrix mode to manual to prevent Three.js from overwriting
       this.camera.projectionMatrixInverse.copy(projectionMatrix).invert();
       
+      // Update camera world matrix for accurate frustum culling and shadow casting
+      this.camera.updateMatrixWorld(true);
+      
       // Extract camera position for pipeline updates
       const cameraPosition = new THREE.Vector3();
       cameraPosition.setFromMatrixPosition(this.camera.matrixWorld);

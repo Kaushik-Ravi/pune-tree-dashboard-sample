@@ -41,6 +41,8 @@ const MATERIAL_CONFIGS: Record<BuildingMaterialType, BuildingMaterialConfig> = {
     color: 0xd4a574,
     roughness: 0.9,
     metalness: 0.1,
+    emissive: 0x000000,
+    emissiveIntensity: 0.0,
   },
   [BuildingMaterialType.COMMERCIAL]: {
     color: 0xa0a0a0,
@@ -53,16 +55,22 @@ const MATERIAL_CONFIGS: Record<BuildingMaterialType, BuildingMaterialConfig> = {
     color: 0x808080,
     roughness: 0.8,
     metalness: 0.3,
+    emissive: 0x000000,
+    emissiveIntensity: 0.0,
   },
   [BuildingMaterialType.PUBLIC]: {
     color: 0xc8b088,
     roughness: 0.6,
     metalness: 0.2,
+    emissive: 0x000000,
+    emissiveIntensity: 0.0,
   },
   [BuildingMaterialType.DEFAULT]: {
     color: 0xcccccc,
     roughness: 0.7,
     metalness: 0.2,
+    emissive: 0x000000,
+    emissiveIntensity: 0.0,
   },
 };
 

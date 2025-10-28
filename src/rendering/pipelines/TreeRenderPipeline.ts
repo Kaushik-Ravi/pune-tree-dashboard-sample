@@ -448,6 +448,8 @@ export class TreeRenderPipeline {
         transparent: shadowOnly,
         opacity: shadowOnly ? 0.05 : 1.0, // Nearly invisible if shadow-only
         side: THREE.DoubleSide,
+        emissive: 0x000000,
+        emissiveIntensity: 0.0,
       });
       this.materialCache.set(materialKey, material);
     }
