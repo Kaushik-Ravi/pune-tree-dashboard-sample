@@ -44,6 +44,34 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
   const layerIdRef = useRef<string>('threejs-shadow-layer');
   const [treeData, setTreeData] = useState<Feature<Point>[]>([]);
   const [isLayerAdded, setIsLayerAdded] = useState(false);
+  
+  // Use refs to hold latest values for the render function
+  const sunPositionRef = useRef(sunPosition);
+  const shadowQualityRef = useRef(shadowQuality);
+  const showTreeShadowsRef = useRef(showTreeShadows);
+  const showBuildingShadowsRef = useRef(showBuildingShadows);
+  const boundsRef = useRef(bounds);
+  
+  // Update refs when props change
+  useEffect(() => {
+    sunPositionRef.current = sunPosition;
+  }, [sunPosition]);
+  
+  useEffect(() => {
+    shadowQualityRef.current = shadowQuality;
+  }, [shadowQuality]);
+  
+  useEffect(() => {
+    showTreeShadowsRef.current = showTreeShadows;
+  }, [showTreeShadows]);
+  
+  useEffect(() => {
+    showBuildingShadowsRef.current = showBuildingShadows;
+  }, [showBuildingShadows]);
+  
+  useEffect(() => {
+    boundsRef.current = bounds;
+  }, [bounds]);
 
   // Calculate sun position based on Pune coordinates and selected time
   const sunPosition = useSunPosition({
@@ -61,14 +89,10 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
       try {
         onLoadingChange?.(true);
         
+        // Use the SAME format as ThreeDTreesLayer - API expects { bounds, limit }
         const response = await axios.post(`${API_BASE_URL}/api/trees-in-bounds`, {
-          bounds: {
-            swLng: bounds.sw[0],
-            swLat: bounds.sw[1],
-            neLng: bounds.ne[0],
-            neLat: bounds.ne[1]
-          },
-          limit: 5000 // Limit for performance
+          bounds,  // Already in correct format: { sw: [lng, lat], ne: [lng, lat] }
+          limit: 5000
         });
 
         setTreeData(response.data.features || []);
@@ -175,15 +199,16 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
         const l = new THREE.Matrix4().fromArray(m);
         this.camera.projectionMatrix = l;
 
-        // Update sun position
+        // Update sun position using latest ref values
         if (this.directionalLight) {
-          this.directionalLight.position.set(...sunPosition.position);
-          this.directionalLight.intensity = sunPosition.intensity;
+          const latestSunPos = sunPositionRef.current;
+          this.directionalLight.position.set(...latestSunPos.position);
+          this.directionalLight.intensity = latestSunPos.intensity;
         }
 
-        // Update shadow visibility based on props
+        // Update shadow visibility based on latest ref values
         if (this.directionalLight) {
-          this.directionalLight.castShadow = showTreeShadows || showBuildingShadows;
+          this.directionalLight.castShadow = showTreeShadowsRef.current || showBuildingShadowsRef.current;
         }
 
         // Render the scene
@@ -228,14 +253,14 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
       console.error('Error adding Three.js layer:', error);
     }
 
-    // Cleanup on unmount
+    // Cleanup ONLY on unmount
     return () => {
       if (mapInstance.getLayer(layerIdRef.current)) {
         mapInstance.removeLayer(layerIdRef.current);
         setIsLayerAdded(false);
       }
     };
-  }, [map, isLayerAdded, sunPosition, shadowQuality, showBuildingShadows, showTreeShadows, bounds, onPerformanceUpdate]);
+  }, [map]); // CRITICAL FIX: Only depend on map, not changing props!
 
     // Add trees to the scene when data changes
   useEffect(() => {
