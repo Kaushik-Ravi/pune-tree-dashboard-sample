@@ -17,7 +17,9 @@ import DrawControl, { DrawEvent, DrawActionEvent } from './DrawControl';
 import MapboxDraw from 'maplibre-gl-draw';
 import ViewModeToggle from './ViewModeToggle';
 import ThreeDTreesLayer from './ThreeDTreesLayer';
+import ThreeJSShadowLayer from './ThreeJSShadowLayer';
 import { LightConfig } from '../sidebar/tabs/LightAndShadowControl';
+import { ShadowQuality } from '../sidebar/tabs/MapLayers';
 
 const treeLayerStyle: LayerProps = {
   id: 'trees-point',
@@ -68,6 +70,10 @@ interface MapViewProps {
   onToggle3D: () => void;
   lightConfig: LightConfig | null;
   shadowsEnabled: boolean;
+  shadowQuality?: ShadowQuality;
+  showTreeShadows?: boolean;
+  showBuildingShadows?: boolean;
+  renderMode?: 'basic' | 'realistic';
 }
 
 const MapView: React.FC<MapViewProps> = ({
@@ -82,6 +88,10 @@ const MapView: React.FC<MapViewProps> = ({
   onToggle3D,
   lightConfig,
   shadowsEnabled,
+  shadowQuality = 'high',
+  showTreeShadows = true,
+  showBuildingShadows = true,
+  renderMode = 'basic', // Default to basic mode
 }) => {
   const mapRef = useRef<MapRef | null>(null);
   const { setSelectedArea } = useTreeStore();
@@ -346,12 +356,26 @@ const MapView: React.FC<MapViewProps> = ({
           </Source>
         )}
         {is3D && <Layer {...buildings3DLayerStyle} />}
-        {is3D && (
+        
+        {/* Basic 3D mode - fast, no realistic shadows */}
+        {is3D && renderMode === 'basic' && (
           <ThreeDTreesLayer 
             bounds={viewBounds} 
             selectedTreeId={selectedTreeId}
             shadowsEnabled={shadowsEnabled}
             zoom={zoom}
+            onLoadingChange={handleLoading3DChange}
+          />
+        )}
+        
+        {/* Realistic 3D mode - beautiful, accurate sun-based shadows */}
+        {is3D && renderMode === 'realistic' && shadowsEnabled && lightConfig && (
+          <ThreeJSShadowLayer
+            bounds={viewBounds}
+            sunDate={new Date()} // TODO: Get actual date/time from LightAndShadowControl
+            shadowQuality={shadowQuality}
+            showBuildingShadows={showBuildingShadows}
+            showTreeShadows={showTreeShadows}
             onLoadingChange={handleLoading3DChange}
           />
         )}

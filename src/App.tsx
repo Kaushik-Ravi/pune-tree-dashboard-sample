@@ -201,6 +201,10 @@ function App() {
           onToggle3D={handleToggle3D}
           lightConfig={lightConfig}
           shadowsEnabled={shadowsEnabled}
+          shadowQuality={shadowQuality}
+          showTreeShadows={showTreeShadows}
+          showBuildingShadows={showBuildingShadows}
+          renderMode={renderMode}
         />
 
         {sidebarOpen && (
