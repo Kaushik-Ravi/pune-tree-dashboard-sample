@@ -152,7 +152,7 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
       ultra: 4096
     };
     
-    console.log(`🎨 [ThreeJSShadowLayer] Creating custom layer with quality: ${shadowQuality} (${shadowMapSizes[shadowQuality]}px)`);
+    console.log(`🎨 [ThreeJSShadowLayer] Creating custom layer with quality: ${shadowQualityRef.current} (${shadowMapSizes[shadowQualityRef.current]}px)`);
 
     // Create custom Three.js layer
     const customLayer: ThreeJSCustomLayer = {
@@ -180,7 +180,7 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
         this.directionalLight.castShadow = true;
 
         // Configure shadow properties
-        const shadowMapSize = shadowMapSizes[shadowQuality];
+        const shadowMapSize = shadowMapSizes[shadowQualityRef.current];
         this.directionalLight.shadow.mapSize.width = shadowMapSize;
         this.directionalLight.shadow.mapSize.height = shadowMapSize;
         this.directionalLight.shadow.camera.near = 0.5;
@@ -268,6 +268,19 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
         // Update shadow visibility based on latest ref values
         if (this.directionalLight) {
           this.directionalLight.castShadow = showTreeShadowsRef.current || showBuildingShadowsRef.current;
+          
+          // Update shadow map quality if changed
+          const currentQuality = shadowQualityRef.current;
+          const shadowMapSizes = { low: 512, medium: 1024, high: 2048, ultra: 4096 };
+          const newSize = shadowMapSizes[currentQuality];
+          
+          if (this.directionalLight.shadow.mapSize.width !== newSize) {
+            this.directionalLight.shadow.mapSize.width = newSize;
+            this.directionalLight.shadow.mapSize.height = newSize;
+            this.directionalLight.shadow.map?.dispose();
+            this.directionalLight.shadow.map = null;
+            console.log(`🔄 [ThreeJSShadowLayer] Shadow quality updated to ${currentQuality} (${newSize}px)`);
+          }
         }
 
         // Log scene contents periodically (every 60 frames = ~1 second)
@@ -328,9 +341,10 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
       if (mapInstance.getLayer(layerIdRef.current)) {
         mapInstance.removeLayer(layerIdRef.current);
         setIsLayerAdded(false);
+        console.log('🧹 [ThreeJSShadowLayer] Layer removed from map');
       }
     };
-  }, [map, shadowQuality]); // IMPORTANT: Include shadowQuality to update layer when quality changes
+  }, [map]); // CRITICAL FIX: Only depend on map, NOT shadowQuality
 
   // Add trees to the scene when data changes
   useEffect(() => {
@@ -354,87 +368,93 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
       return;
     }
 
-    const mapInstance = map.getMap();
-    if (!mapInstance) {
-      console.warn('⚠️ [ThreeJSShadowLayer] No MapLibre instance');
-      return;
-    }
-    
-    const layer = mapInstance.getLayer(layerIdRef.current) as unknown as ThreeJSCustomLayer;
-    if (!layer) {
-      console.error('❌ [ThreeJSShadowLayer] Layer not found on map:', layerIdRef.current);
-      return;
-    }
-    
-    if (!layer.scene) {
-      console.error('❌ [ThreeJSShadowLayer] Layer has no scene');
-      return;
-    }
-    
-    if (!layer.treeObjects) {
-      console.warn('⚠️ [ThreeJSShadowLayer] Layer has no treeObjects array, initializing');
-      layer.treeObjects = [];
-    }
-
-    console.log(`🌳 [ThreeJSShadowLayer] Adding ${treeData.length} trees to scene...`);
-
-    // Clear existing trees
-    const oldTreeCount = layer.treeObjects.length;
-    layer.treeObjects.forEach((obj: THREE.Group) => {
-      layer.scene!.remove(obj);
-    });
-    layer.treeObjects = [];
-    console.log(`🗑️ [ThreeJSShadowLayer] Cleared ${oldTreeCount} old trees`);
-
-    // Add new trees
-    let successCount = 0;
-    let errorCount = 0;
-    
-    treeData.forEach((feature, index) => {
-      try {
-        const props = feature.properties;
-        if (!props) {
-          console.warn(`⚠️ [ThreeJSShadowLayer] Tree ${index} has no properties`);
-          return;
-        }
-
-        const treeGeometry = createTreeGeometry(feature, {
-          heightM: props.height_m || 10,
-          girthCm: props.girth_cm || 50,
-          canopyDiaM: props.canopy_dia_m || 5
-        });
-
-        layer.scene!.add(treeGeometry);
-        layer.treeObjects!.push(treeGeometry);
-        successCount++;
-        
-        // Log first few trees for debugging
-        if (index < 3) {
-          console.log(`  Tree ${index}:`, {
-            coords: feature.geometry.coordinates,
-            height: props.height_m,
-            girth: props.girth_cm,
-            canopy: props.canopy_dia_m,
-            position: treeGeometry.position,
-            children: treeGeometry.children.length
-          });
-        }
-      } catch (error) {
-        console.error(`❌ [ThreeJSShadowLayer] Error creating tree ${index}:`, error);
-        errorCount++;
+    // Small delay to ensure layer is fully added to map
+    const timeoutId = setTimeout(() => {
+      const mapInstance = map.getMap();
+      if (!mapInstance) {
+        console.warn('⚠️ [ThreeJSShadowLayer] No MapLibre instance');
+        return;
       }
-    });
+      
+      const layer = mapInstance.getLayer(layerIdRef.current) as unknown as ThreeJSCustomLayer;
+      if (!layer) {
+        console.error('❌ [ThreeJSShadowLayer] Layer not found on map:', layerIdRef.current);
+        console.error('  Available layers:', mapInstance.getStyle().layers?.map((l: any) => l.id));
+        return;
+      }
+    
+      if (!layer.scene) {
+        console.error('❌ [ThreeJSShadowLayer] Layer has no scene');
+        return;
+      }
+      
+      if (!layer.treeObjects) {
+        console.warn('⚠️ [ThreeJSShadowLayer] Layer has no treeObjects array, initializing');
+        layer.treeObjects = [];
+      }
 
-    console.log(`✅ [ThreeJSShadowLayer] Tree addition complete:`, {
-      success: successCount,
-      errors: errorCount,
-      total: treeData.length,
-      sceneChildren: layer.scene.children.length
-    });
+      console.log(`🌳 [ThreeJSShadowLayer] Adding ${treeData.length} trees to scene...`);
 
-    // Trigger map repaint
-    mapInstance.triggerRepaint();
-    console.log('🔄 [ThreeJSShadowLayer] Map repaint triggered');
+      // Clear existing trees
+      const oldTreeCount = layer.treeObjects.length;
+      layer.treeObjects.forEach((obj: THREE.Group) => {
+        layer.scene!.remove(obj);
+      });
+      layer.treeObjects = [];
+      console.log(`🗑️ [ThreeJSShadowLayer] Cleared ${oldTreeCount} old trees`);
+
+      // Add new trees
+      let successCount = 0;
+      let errorCount = 0;
+      
+      treeData.forEach((feature, index) => {
+        try {
+          const props = feature.properties;
+          if (!props) {
+            console.warn(`⚠️ [ThreeJSShadowLayer] Tree ${index} has no properties`);
+            return;
+          }
+
+          const treeGeometry = createTreeGeometry(feature, {
+            heightM: props.height_m || 10,
+            girthCm: props.girth_cm || 50,
+            canopyDiaM: props.canopy_dia_m || 5
+          });
+
+          layer.scene!.add(treeGeometry);
+          layer.treeObjects!.push(treeGeometry);
+          successCount++;
+          
+          // Log first few trees for debugging
+          if (index < 3) {
+            console.log(`  Tree ${index}:`, {
+              coords: feature.geometry.coordinates,
+              height: props.height_m,
+              girth: props.girth_cm,
+              canopy: props.canopy_dia_m,
+              position: treeGeometry.position,
+              children: treeGeometry.children.length
+            });
+          }
+        } catch (error) {
+          console.error(`❌ [ThreeJSShadowLayer] Error creating tree ${index}:`, error);
+          errorCount++;
+        }
+      });
+
+      console.log(`✅ [ThreeJSShadowLayer] Tree addition complete:`, {
+        success: successCount,
+        errors: errorCount,
+        total: treeData.length,
+        sceneChildren: layer.scene.children.length
+      });
+
+      // Trigger map repaint
+      mapInstance.triggerRepaint();
+      console.log('🔄 [ThreeJSShadowLayer] Map repaint triggered');
+    }, 100); // 100ms delay to ensure layer is ready
+
+    return () => clearTimeout(timeoutId);
   }, [map, isLayerAdded, treeData]);
 
   // This component doesn't render anything directly (custom layer handles rendering)
