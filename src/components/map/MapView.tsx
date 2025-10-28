@@ -128,16 +128,20 @@ const MapView: React.FC<MapViewProps> = ({
           map.setLight({ anchor: 'viewport', position: [1.5, 180, 60], intensity: 0.5 });
         }
         
-        // Apply fog configuration
-        if (lightConfig) {
-          const fogConfig = {
-            'color': 'rgb(186, 210, 235)',
-            'high-color': 'rgb(36, 92, 223)',
-            'horizon-blend': 0.05,
-            'space-color': 'rgb(11, 11, 25)',
-            'star-intensity': Math.max(0, 1 - lightConfig.ambientIntensity * 5)
-          };
-          (map as any).setFog(fogConfig);
+        // Apply fog configuration only if setFog method exists
+        if (lightConfig && typeof (map as any).setFog === 'function') {
+          try {
+            const fogConfig = {
+              'color': 'rgb(186, 210, 235)',
+              'high-color': 'rgb(36, 92, 223)',
+              'horizon-blend': 0.05,
+              'space-color': 'rgb(11, 11, 25)',
+              'star-intensity': Math.max(0, 1 - lightConfig.ambientIntensity * 5)
+            };
+            (map as any).setFog(fogConfig);
+          } catch (error) {
+            console.warn('Fog not supported in this MapLibre GL version:', error);
+          }
         }
       } else {
         // Proper cleanup when disabling 3D
@@ -147,8 +151,14 @@ const MapView: React.FC<MapViewProps> = ({
         }
         // Reset light to default
         map.setLight({ anchor: 'viewport', position: [1.5, 180, 60], intensity: 0.5 });
-        // Remove fog
-        (map as any).setFog(null);
+        // Remove fog safely
+        if (typeof (map as any).setFog === 'function') {
+          try {
+            (map as any).setFog(null);
+          } catch (error) {
+            console.warn('Could not remove fog:', error);
+          }
+        }
       }
     };
 
