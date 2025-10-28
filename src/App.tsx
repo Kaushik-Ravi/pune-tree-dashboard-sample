@@ -6,6 +6,7 @@ import Sidebar from './components/sidebar/Sidebar';
 import TemperaturePredictionChart from './components/common/TemperaturePredictionChart';
 import { ArchetypeData, useTreeStore } from './store/TreeStore';
 import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl';
+import { ShadowQuality } from './components/sidebar/tabs/MapLayers';
 import TourGuide, { TourControlAction } from './components/tour/TourGuide';
 import { TourSteps } from './components/tour/tourSteps'; // CORRECTED: Added this import
 
@@ -26,6 +27,10 @@ function App() {
   const [is3D, setIs3D] = useState(false);
   const [lightConfig, setLightConfig] = useState<LightConfig | null>(null);
   const [shadowsEnabled, setShadowsEnabled] = useState(true);
+  const [shadowQuality, setShadowQuality] = useState<ShadowQuality>('high');
+  const [showTreeShadows, setShowTreeShadows] = useState(true);
+  const [showBuildingShadows, setShowBuildingShadows] = useState(true);
+  const [renderMode, setRenderMode] = useState<'basic' | 'realistic'>('basic'); // Toggle between rendering modes
 
   const { cityStats } = useTreeStore();
   const [isLoading, setIsLoading] = useState(true);
@@ -225,6 +230,12 @@ function App() {
           is3D={is3D}
           shadowsEnabled={shadowsEnabled}
           onShadowsToggle={setShadowsEnabled}
+          shadowQuality={shadowQuality}
+          onShadowQualityChange={setShadowQuality}
+          showTreeShadows={showTreeShadows}
+          onTreeShadowsToggle={setShowTreeShadows}
+          showBuildingShadows={showBuildingShadows}
+          onBuildingShadowsToggle={setShowBuildingShadows}
         />
       </div>
       {showTemperatureChart && activeSpeciesCooling && (

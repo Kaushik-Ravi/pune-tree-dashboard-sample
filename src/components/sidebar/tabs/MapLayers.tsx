@@ -1,8 +1,10 @@
 // src/components/sidebar/tabs/MapLayers.tsx
-import React from 'react';
-import { Layers as LayersIcon, Thermometer } from 'lucide-react';
+import React, { useState } from 'react';
+import { Layers as LayersIcon, Thermometer, Zap } from 'lucide-react';
 import { LightConfig } from './LightAndShadowControl'; // --- MODIFIED ---
 import LightAndShadowControl from './LightAndShadowControl';
+
+export type ShadowQuality = 'low' | 'medium' | 'high' | 'ultra';
 
 interface MapLayersProps {
   baseMap: string;
@@ -15,6 +17,12 @@ interface MapLayersProps {
   is3D: boolean;
   shadowsEnabled: boolean;
   onShadowsToggle: (enabled: boolean) => void;
+  shadowQuality?: ShadowQuality;
+  onShadowQualityChange?: (quality: ShadowQuality) => void;
+  showTreeShadows?: boolean;
+  onTreeShadowsToggle?: (enabled: boolean) => void;
+  showBuildingShadows?: boolean;
+  onBuildingShadowsToggle?: (enabled: boolean) => void;
 }
 
 const MapLayers: React.FC<MapLayersProps> = ({
@@ -28,8 +36,23 @@ const MapLayers: React.FC<MapLayersProps> = ({
   is3D,
   shadowsEnabled,
   onShadowsToggle,
+  shadowQuality = 'high',
+  onShadowQualityChange,
+  showTreeShadows = true,
+  onTreeShadowsToggle,
+  showBuildingShadows = true,
+  onBuildingShadowsToggle,
 }) => {
+  const [showAdvancedShadows, setShowAdvancedShadows] = useState(false);
+  
   const lstLegendGradient = 'linear-gradient(to right, #0D1282, #00A9FF, #00E0C7, #90F1AC, #FFF80A, #FFB344, #FF4A4A, #D72323)';
+
+  const qualityDescriptions = {
+    low: '512px - Best Performance',
+    medium: '1024px - Balanced',
+    high: '2048px - High Quality',
+    ultra: '4096px - Maximum Detail'
+  };
 
   return (
     <div className="space-y-6">
@@ -37,17 +60,117 @@ const MapLayers: React.FC<MapLayersProps> = ({
 
       {is3D && (
         <div className="card">
-          <div className="card-header"><h3 className="font-medium">Shadow Settings</h3></div>
-          <div className="card-body">
+          <div className="card-header">
+            <h3 className="font-medium flex items-center justify-between">
+              <span>Shadow Settings</span>
+              <button 
+                onClick={() => setShowAdvancedShadows(!showAdvancedShadows)}
+                className="text-xs text-primary-600 hover:text-primary-700"
+              >
+                {showAdvancedShadows ? 'Simple' : 'Advanced'}
+              </button>
+            </h3>
+          </div>
+          <div className="card-body space-y-4">
+            {/* Master Shadow Toggle */}
             <div className="flex items-center justify-between">
               <div className="flex items-center">
-                <div><div className="font-medium">Enable Shadows</div><div className="text-xs text-gray-500">Show realistic shadows from trees & buildings</div></div>
+                <div>
+                  <div className="font-medium">Enable Realistic Shadows</div>
+                  <div className="text-xs text-gray-500">Real-time sun-based shadows</div>
+                </div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" checked={shadowsEnabled} onChange={(e) => onShadowsToggle(e.target.checked)} />
+                <input 
+                  type="checkbox" 
+                  className="sr-only peer" 
+                  checked={shadowsEnabled} 
+                  onChange={(e) => onShadowsToggle(e.target.checked)} 
+                />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
               </label>
             </div>
+
+            {shadowsEnabled && (
+              <>
+                {/* Shadow Quality Selector */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700 flex items-center">
+                    <Zap size={14} className="mr-1 text-yellow-500" />
+                    Shadow Quality
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['low', 'medium', 'high', 'ultra'] as ShadowQuality[]).map((quality) => (
+                      <button
+                        key={quality}
+                        onClick={() => onShadowQualityChange?.(quality)}
+                        className={`p-2 rounded-md text-xs font-medium transition-all ${
+                          shadowQuality === quality
+                            ? 'bg-primary-600 text-white ring-2 ring-primary-300'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {quality.charAt(0).toUpperCase() + quality.slice(1)}
+                        {shadowQuality === quality && (
+                          <div className="text-[10px] mt-0.5 opacity-90">
+                            {qualityDescriptions[quality].split(' - ')[1]}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {qualityDescriptions[shadowQuality]}
+                  </p>
+                </div>
+
+                {/* Advanced Settings */}
+                {showAdvancedShadows && (
+                  <div className="space-y-3 pt-3 border-t border-gray-200">
+                    {/* Tree Shadows Toggle */}
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm">
+                        <div className="font-medium">Tree Shadows</div>
+                        <div className="text-xs text-gray-500">Shadows from tree canopies</div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer" 
+                          checked={showTreeShadows} 
+                          onChange={(e) => onTreeShadowsToggle?.(e.target.checked)} 
+                        />
+                        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
+                      </label>
+                    </div>
+
+                    {/* Building Shadows Toggle */}
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm">
+                        <div className="font-medium">Building Shadows</div>
+                        <div className="text-xs text-gray-500">Shadows from buildings</div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer" 
+                          checked={showBuildingShadows} 
+                          onChange={(e) => onBuildingShadowsToggle?.(e.target.checked)} 
+                        />
+                        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Info Tip */}
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                  <p className="text-xs text-blue-800">
+                    <strong>💡 Tip:</strong> Shadows update in real-time based on the time you select in Light & Shadow control above. Try moving the time slider to see shadows change!
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

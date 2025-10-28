@@ -12,7 +12,7 @@ import {
 import CityOverview from './tabs/CityOverview';
 import TreeDetails from './tabs/TreeDetails';
 import PlantingAdvisor from './tabs/PlantingAdvisor';
-import MapLayers from './tabs/MapLayers';
+import MapLayers, { ShadowQuality } from './tabs/MapLayers';
 import { ArchetypeData } from '../../store/TreeStore';
 import { LightConfig } from './tabs/LightAndShadowControl';
 
@@ -34,6 +34,12 @@ interface SidebarProps {
   is3D: boolean;
   shadowsEnabled: boolean;
   onShadowsToggle: (enabled: boolean) => void;
+  shadowQuality?: ShadowQuality;
+  onShadowQualityChange?: (quality: ShadowQuality) => void;
+  showTreeShadows?: boolean;
+  onTreeShadowsToggle?: (enabled: boolean) => void;
+  showBuildingShadows?: boolean;
+  onBuildingShadowsToggle?: (enabled: boolean) => void;
 }
 
 const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
@@ -54,6 +60,12 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
   is3D,
   shadowsEnabled,
   onShadowsToggle,
+  shadowQuality,
+  onShadowQualityChange,
+  showTreeShadows,
+  onTreeShadowsToggle,
+  showBuildingShadows,
+  onBuildingShadowsToggle,
 }, ref) => {
   const tabs = [
     { id: 'city-overview', label: 'City Overview', icon: <BarChartBig size={18} /> },
@@ -92,6 +104,12 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
           is3D={is3D}
           shadowsEnabled={shadowsEnabled}
           onShadowsToggle={onShadowsToggle}
+          shadowQuality={shadowQuality}
+          onShadowQualityChange={onShadowQualityChange}
+          showTreeShadows={showTreeShadows}
+          onTreeShadowsToggle={onTreeShadowsToggle}
+          showBuildingShadows={showBuildingShadows}
+          onBuildingShadowsToggle={onBuildingShadowsToggle}
         />
       );
       default: return <CityOverview />;
