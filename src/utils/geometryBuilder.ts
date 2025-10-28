@@ -202,6 +202,16 @@ export const createBuildingGeometry = (
   // Rotate to match MapLibre orientation
   building.rotation.x = -Math.PI / 2;
   building.position.y = baseHeight;
+  
+  building.userData = {
+    type: 'building',
+    height,
+    baseHeight
+  };
+  
+  return building;
+};
+
 /**
  * Creates ground plane to receive shadows
  * Size is dynamically calculated based on viewport bounds
@@ -249,16 +259,6 @@ export const createGroundPlane = (
     rotation: plane.rotation.x,
     segments: '64x64'
   });
-  
-  plane.userData = {
-    type: 'ground'
-  };
-  
-  return plane;
-};// Center the plane
-  const centerX = (swPos.x + nePos.x) / 2;
-  const centerZ = (swPos.z + nePos.z) / 2;
-  plane.position.set(centerX, 0, centerZ);
   
   plane.userData = {
     type: 'ground'

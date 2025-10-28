@@ -162,6 +162,7 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
       
       onAdd: function(map: MapLibreMap, gl: WebGL2RenderingContext) {
         console.log('🎨 [ThreeJSShadowLayer] onAdd() called - initializing Three.js scene');
+        
         // Initialize Three.js camera (will sync with MapLibre camera)
         this.camera = new THREE.PerspectiveCamera();
 
@@ -180,6 +181,24 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
 
         // Configure shadow properties
         const shadowMapSize = shadowMapSizes[shadowQuality];
+        this.directionalLight.shadow.mapSize.width = shadowMapSize;
+        this.directionalLight.shadow.mapSize.height = shadowMapSize;
+        this.directionalLight.shadow.camera.near = 0.5;
+        this.directionalLight.shadow.camera.far = 5000;
+        
+        // Shadow camera frustum (adjust based on viewport)
+        const d = 500;
+        this.directionalLight.shadow.camera.left = -d;
+        this.directionalLight.shadow.camera.right = d;
+        this.directionalLight.shadow.camera.top = d;
+        this.directionalLight.shadow.camera.bottom = -d;
+        
+        // Shadow darkness/bias
+        this.directionalLight.shadow.bias = -0.001;
+        this.directionalLight.shadow.normalBias = 0.02;
+        
+        this.scene.add(this.directionalLight);
+
         // Add ground plane to receive shadows
         if (bounds) {
           console.log('🟩 [ThreeJSShadowLayer] Creating ground plane with bounds:', bounds);
@@ -187,8 +206,10 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
             color: '#f0f0f0',
             receiveShadow: true
           });
-          this.scene.add(this.groundPlane);
-          console.log('✅ [ThreeJSShadowLayer] Ground plane added to scene');
+          if (this.groundPlane) {
+            this.scene.add(this.groundPlane);
+            console.log('✅ [ThreeJSShadowLayer] Ground plane added to scene');
+          }
         } else {
           console.warn('⚠️ [ThreeJSShadowLayer] No bounds available for ground plane');
         }
@@ -218,14 +239,12 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
         console.log('  - Lights:', { ambient: !!this.ambientLight, directional: !!this.directionalLight });
         console.log('  - Ground plane:', !!this.groundPlane);
         console.log('  - Renderer:', !!this.renderer);
-        }
+      },
 
-        // Initialize WebGL renderer with shadow mapping enabled
-        this.renderer = new THREE.WebGLRenderer({
-          canvas: map.getCanvas(),
-          context: gl,
-          antialias: true,
-      render: function(_gl, projectionMatrix) {
+      render: function(_gl: WebGLRenderingContext | WebGL2RenderingContext, args: any) {
+        // Extract projection matrix from args
+        const projectionMatrix = args as number[];
+        
         if (!this.camera || !this.scene || !this.renderer) {
           console.warn('⚠️ [ThreeJSShadowLayer] render() called but missing:', {
             camera: !!this.camera,
@@ -236,8 +255,7 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
         }
 
         // Sync Three.js camera with MapLibre camera
-        const m = projectionMatrix as any;
-        const l = new THREE.Matrix4().fromArray(m);
+        const l = new THREE.Matrix4().fromArray(projectionMatrix);
         this.camera.projectionMatrix = l;
 
         // Update sun position using latest ref values
@@ -273,19 +291,6 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
           const drawCalls = this.renderer.info.render.calls;
           onPerformanceUpdate(fps, drawCalls);
         }
-      },  this.directionalLight.castShadow = showTreeShadowsRef.current || showBuildingShadowsRef.current;
-        }
-
-        // Render the scene
-        this.renderer.resetState();
-        this.renderer.render(this.scene, this.camera);
-
-        // Trigger performance callback
-        if (onPerformanceUpdate && this.renderer.info.render) {
-          const fps = 60; // TODO: Calculate actual FPS
-          const drawCalls = this.renderer.info.render.calls;
-          onPerformanceUpdate(fps, drawCalls);
-        }
       },
 
       onRemove: function() {
@@ -296,6 +301,37 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
               object.geometry.dispose();
               if (object.material instanceof THREE.Material) {
                 object.material.dispose();
+              }
+            }
+          });
+        }
+        
+        this.camera = undefined;
+        this.scene = undefined;
+        this.renderer = undefined;
+        
+        console.log('🧹 [ThreeJSShadowLayer] Three.js Shadow Layer cleaned up');
+      }
+    };
+
+    // Add the custom layer to the map
+    try {
+      mapInstance.addLayer(customLayer);
+      setIsLayerAdded(true);
+      console.log('✅ [ThreeJSShadowLayer] Three.js layer added to map');
+    } catch (error) {
+      console.error('❌ [ThreeJSShadowLayer] Error adding Three.js layer:', error);
+    }
+
+    // Cleanup ONLY on unmount
+    return () => {
+      if (mapInstance.getLayer(layerIdRef.current)) {
+        mapInstance.removeLayer(layerIdRef.current);
+        setIsLayerAdded(false);
+      }
+    };
+  }, [map, shadowQuality]); // IMPORTANT: Include shadowQuality to update layer when quality changes
+
   // Add trees to the scene when data changes
   useEffect(() => {
     console.log('🌳 [ThreeJSShadowLayer] Tree data effect triggered');
@@ -399,38 +435,9 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
     // Trigger map repaint
     mapInstance.triggerRepaint();
     console.log('🔄 [ThreeJSShadowLayer] Map repaint triggered');
-  }, [map, isLayerAdded, treeData]);;
-    if (!mapInstance) return;
-    
-    const layer = mapInstance.getLayer(layerIdRef.current) as unknown as ThreeJSCustomLayer;
-    if (!layer || !layer.scene || !layer.treeObjects) return;
+  }, [map, isLayerAdded, treeData]);
 
-    // Clear existing trees
-    layer.treeObjects.forEach((obj: THREE.Group) => {
-      layer.scene!.remove(obj);
-    });
-    layer.treeObjects = [];
-
-    // Add new trees
-    treeData.forEach((feature) => {
-      const props = feature.properties;
-      if (!props) return;
-
-      const treeGeometry = createTreeGeometry(feature, {
-        heightM: props.height_m || 10,
-        girthCm: props.girth_cm || 50,
-        canopyDiaM: props.canopy_dia_m || 5
-      });
-
-      layer.scene!.add(treeGeometry);
-      layer.treeObjects!.push(treeGeometry);
-    });
-
-    // Trigger map repaint
-    mapInstance.triggerRepaint();
-
-    console.log(`✅ Added ${treeData.length} trees to Three.js scene`);
-  }, [map, isLayerAdded, treeData]);  // This component doesn't render anything directly (custom layer handles rendering)
+  // This component doesn't render anything directly (custom layer handles rendering)
   return null;
 };
 
