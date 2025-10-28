@@ -35,7 +35,7 @@ import type {
 import { SceneGraphManager } from './SceneGraphManager';
 import { LightingManager } from './LightingManager';
 import { PerformanceMonitor } from './PerformanceMonitor';
-import { createGroundPlane } from '../../utils/geometryBuilder';
+import { createGroundPlane, geoToWorld } from '../../utils/geometryBuilder';
 
 /**
  * Singleton rendering manager
@@ -405,38 +405,47 @@ export class ShadowRenderingManager {
     
     // Add each tree as a simple mesh for now
     // In production, this should use TreeRenderPipeline for instanced rendering
-    treeData.forEach((feature) => {
+    let successCount = 0;
+    
+    treeData.forEach((feature, index) => {
       if (!feature.geometry || !feature.properties || !this.sceneManager) return;
       
       const [lng, lat] = feature.geometry.coordinates;
       const height = feature.properties.Height_m || feature.properties.height || 10;
       
-      // Convert lat/lng to world coordinates (simplified)
-      // In production, use proper projection from geometryBuilder
-      const x = (lng - 73.8567) * 100000; // Rough conversion for Pune
-      const z = (lat - 18.5204) * 100000;
+      // ✅ FIX: Use proper Mercator projection from geometryBuilder
+      const worldPos = geoToWorld(lng, lat, 0);
+      
+      // Log first few trees for debugging
+      if (index < 3) {
+        console.log(`🌳 Tree ${index}: [${lng.toFixed(4)}, ${lat.toFixed(4)}] → World: [${worldPos.x.toFixed(4)}, ${worldPos.y.toFixed(4)}, ${worldPos.z.toFixed(4)}]`);
+      }
       
       // Create simple tree representation (cylinder for trunk, cone for canopy)
-      const trunkGeometry = new THREE.CylinderGeometry(0.2, 0.3, height * 0.3, 8);
+      const trunkHeight = height * 0.3;
+      const canopyHeight = height * 0.7;
+      
+      const trunkGeometry = new THREE.CylinderGeometry(0.2, 0.3, trunkHeight, 8);
       const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
       const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
       trunk.castShadow = true;
       trunk.receiveShadow = true;
-      trunk.position.set(x, height * 0.15, z);
+      trunk.position.set(worldPos.x, trunkHeight * 0.5, worldPos.z); // Y is up in Three.js
       
-      const canopyGeometry = new THREE.ConeGeometry(height * 0.3, height * 0.7, 8);
+      const canopyGeometry = new THREE.ConeGeometry(height * 0.3, canopyHeight, 8);
       const canopyMaterial = new THREE.MeshStandardMaterial({ color: 0x2E7D32 });
       const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
       canopy.castShadow = true;
-      canopy.receiveShadow = true;
-      canopy.position.set(x, height * 0.3 + height * 0.35, z);
+      canopy.receiveShadow = false; // Canopy doesn't need to receive (top of tree)
+      canopy.position.set(worldPos.x, trunkHeight + (canopyHeight * 0.5), worldPos.z);
       
       // Add to scene
       this.sceneManager.addToGroup('trees', trunk);
       this.sceneManager.addToGroup('trees', canopy);
+      successCount++;
     });
     
-    console.log(`✅ Added ${treeData.length} trees successfully`);
+    console.log(`✅ Added ${successCount} trees successfully (${successCount * 2} meshes)`);
   }
   
   /**
