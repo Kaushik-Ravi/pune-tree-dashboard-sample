@@ -97,12 +97,25 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
   const customLayerIdRef = useRef<string>('realistic-shadows-layer');
   const isLayerAddedRef = useRef<boolean>(false);
 
+  // DEBUG: Log the dateTime prop to verify what time is being used
+  console.log('🕐 [RealisticShadowLayer] DateTime prop:', dateTime, 'Hours:', dateTime.getHours());
+
   // Calculate sun position
   const sunPosition = useSunPosition({
     latitude,
     longitude,
     date: dateTime,
     enabled
+  });
+
+  // DEBUG: Log sun position calculation
+  console.log('☀️ [RealisticShadowLayer] Sun position calculated:', {
+    altitude: sunPosition.altitude,
+    altitudeDegrees: (sunPosition.altitude * 180 / Math.PI).toFixed(2) + '°',
+    azimuth: sunPosition.azimuth,
+    intensity: sunPosition.intensity,
+    position: sunPosition.position,
+    isNight: sunPosition.altitude < 0
   });
 
   // Initialize rendering manager
