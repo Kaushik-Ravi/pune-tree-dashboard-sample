@@ -37,6 +37,11 @@ import { LightingManager } from './LightingManager';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { createGroundPlane, geoToWorld } from '../../utils/geometryBuilder';
 
+// Import Phase 2 Pipelines (Advanced Rendering)
+import { TreeRenderPipeline } from '../pipelines/TreeRenderPipeline';
+import { BuildingPipeline } from '../pipelines/BuildingPipeline';
+import { TerrainPipeline } from '../pipelines/TerrainPipeline';
+
 /**
  * Singleton rendering manager
  */
@@ -65,7 +70,12 @@ export class ShadowRenderingManager {
   private lightingManager: LightingManager | null = null;
   private performanceMonitor: PerformanceMonitor | null = null;
   
-  // Ground plane
+  // Phase 2 Pipelines (Advanced Rendering)
+  private treeRenderPipeline: TreeRenderPipeline | null = null;
+  private buildingPipeline: BuildingPipeline | null = null;
+  private terrainPipeline: TerrainPipeline | null = null;
+  
+  // Ground plane (legacy - will be replaced by TerrainPipeline)
   private groundPlane: THREE.Mesh | null = null;
   
   /**
@@ -141,6 +151,20 @@ export class ShadowRenderingManager {
       
       console.log('✅ [ShadowRenderingManager] Sub-managers initialized');
       
+      // Initialize Phase 2 Pipelines (Advanced Rendering)
+      console.log('🔧 [ShadowRenderingManager] Initializing rendering pipelines...');
+      
+      this.terrainPipeline = new TerrainPipeline(this.scene, this.camera);
+      console.log('✅ [ShadowRenderingManager] TerrainPipeline initialized (ground plane created)');
+      
+      this.buildingPipeline = new BuildingPipeline(this.scene, this.camera);
+      console.log('✅ [ShadowRenderingManager] BuildingPipeline initialized');
+      
+      this.treeRenderPipeline = new TreeRenderPipeline(this.scene, this.camera);
+      console.log('✅ [ShadowRenderingManager] TreeRenderPipeline initialized (instanced rendering)');
+      
+      console.log('✅ [ShadowRenderingManager] All pipelines initialized');
+      
       // Mark as initialized
       this.isInitialized = true;
       this.emitTyped('initialized', undefined);
@@ -177,6 +201,15 @@ export class ShadowRenderingManager {
       // Update camera matrix from MapLibre
       const projectionMatrix = new THREE.Matrix4().fromArray(matrix);
       this.camera.projectionMatrix = projectionMatrix;
+      
+      // Extract camera position for pipeline updates
+      const cameraPosition = new THREE.Vector3();
+      this.camera.getWorldPosition(cameraPosition);
+      
+      // Update all rendering pipelines (Phase 2 Integration)
+      this.terrainPipeline?.update(cameraPosition);
+      this.buildingPipeline?.update(cameraPosition);
+      this.treeRenderPipeline?.update(cameraPosition);
       
       // Render scene
       this.renderer.resetState();
@@ -389,63 +422,87 @@ export class ShadowRenderingManager {
   }
   
   /**
-   * Add trees to the scene (simplified method for React integration)
+   * Add trees to the scene using Phase 2 TreeRenderPipeline
+   * Uses advanced instanced rendering for optimal performance
    * @param treeData Array of GeoJSON features with tree data
    */
   addTrees(treeData: any[]): void {
-    if (!this.isInitialized || !this.sceneManager) {
+    if (!this.isInitialized || !this.treeRenderPipeline) {
       console.warn('⚠️ [ShadowRenderingManager] Cannot add trees - not initialized');
       return;
     }
 
-    console.log(`🌳 [ShadowRenderingManager] Adding ${treeData.length} trees to scene`);
+    console.log(`🌳 [ShadowRenderingManager] Adding ${treeData.length} trees using TreeRenderPipeline`);
     
-    // Clear existing trees
-    this.sceneManager.clearGroup('trees');
-    
-    // Add each tree as a simple mesh for now
-    // In production, this should use TreeRenderPipeline for instanced rendering
-    let successCount = 0;
-    
-    treeData.forEach((feature, index) => {
-      if (!feature.geometry || !feature.properties || !this.sceneManager) return;
+    // Transform GeoJSON features to TreeData format for pipeline
+    const transformedTrees = treeData.map((feature, index) => {
+      if (!feature.geometry || !feature.properties) return null;
       
       const [lng, lat] = feature.geometry.coordinates;
-      const height = feature.properties.Height_m || feature.properties.height || 10;
+      const height = feature.properties.Height_m || feature.properties.height_m || 10;
+      const species = feature.properties.botanical_name || feature.properties.common_name || 'default';
       
-      // ✅ FIX: Use proper Mercator projection from geometryBuilder
+      // Convert geo coordinates to world position
       const worldPos = geoToWorld(lng, lat, 0);
       
       // Log first few trees for debugging
       if (index < 3) {
-        console.log(`🌳 Tree ${index}: [${lng.toFixed(4)}, ${lat.toFixed(4)}] → World: [${worldPos.x.toFixed(4)}, ${worldPos.y.toFixed(4)}, ${worldPos.z.toFixed(4)}]`);
+        console.log(`🌳 Tree ${index}: [${lng.toFixed(4)}, ${lat.toFixed(4)}] → World: [${worldPos.x.toFixed(4)}, ${worldPos.y.toFixed(4)}, ${worldPos.z.toFixed(4)}], height: ${height}m`);
       }
       
-      // Create simple tree representation (cylinder for trunk, cone for canopy)
-      const trunkHeight = height * 0.3;
-      const canopyHeight = height * 0.7;
+      return {
+        id: feature.properties.id?.toString() || `tree-${index}`,
+        position: worldPos,
+        height: height,
+        species: species,
+        visible: true
+      };
+    }).filter(tree => tree !== null);
+    
+    // Use TreeRenderPipeline for instanced rendering (Phase 2)
+    this.treeRenderPipeline.clearTrees();
+    this.treeRenderPipeline.addTrees(transformedTrees as any[]);
+    
+    const stats = this.treeRenderPipeline.getStats();
+    console.log(`✅ TreeRenderPipeline: ${stats.totalTrees} trees added, ${stats.instancedGroups} instanced groups created`);
+    console.log(`📊 Performance: Draw calls will be ~${stats.instancedGroups * 2} (trunk + canopy per species)`);
+  }
+  
+  /**
+   * Add buildings to the scene using Phase 2 BuildingPipeline
+   * @param buildingData Array of building data with geometry
+   */
+  addBuildings(buildingData: any[]): void {
+    if (!this.isInitialized || !this.buildingPipeline) {
+      console.warn('⚠️ [ShadowRenderingManager] Cannot add buildings - not initialized');
+      return;
+    }
+
+    console.log(`🏢 [ShadowRenderingManager] Adding ${buildingData.length} buildings using BuildingPipeline`);
+    
+    // Transform data to BuildingData format
+    const transformedBuildings = buildingData.map((building, index) => {
+      // Convert vertices from geo to world coordinates
+      const worldVertices = building.vertices?.map((v: any) => {
+        const worldPos = geoToWorld(v.lng, v.lat, 0);
+        return new THREE.Vector3(worldPos.x, 0, worldPos.z); // Ground level vertices
+      }) || [];
       
-      const trunkGeometry = new THREE.CylinderGeometry(0.2, 0.3, trunkHeight, 8);
-      const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
-      const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-      trunk.castShadow = true;
-      trunk.receiveShadow = true;
-      trunk.position.set(worldPos.x, trunkHeight * 0.5, worldPos.z); // Y is up in Three.js
-      
-      const canopyGeometry = new THREE.ConeGeometry(height * 0.3, canopyHeight, 8);
-      const canopyMaterial = new THREE.MeshStandardMaterial({ color: 0x2E7D32 });
-      const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
-      canopy.castShadow = true;
-      canopy.receiveShadow = false; // Canopy doesn't need to receive (top of tree)
-      canopy.position.set(worldPos.x, trunkHeight + (canopyHeight * 0.5), worldPos.z);
-      
-      // Add to scene
-      this.sceneManager.addToGroup('trees', trunk);
-      this.sceneManager.addToGroup('trees', canopy);
-      successCount++;
+      return {
+        id: building.id || `building-${index}`,
+        vertices: worldVertices,
+        height: building.height || 15,
+        type: building.type || 'default',
+        feature: null as any, // BuildingPipeline doesn't use feature, only needs vertices
+      };
     });
     
-    console.log(`✅ Added ${successCount} trees successfully (${successCount * 2} meshes)`);
+    // Use BuildingPipeline (Phase 2)
+    this.buildingPipeline.clearBuildings();
+    this.buildingPipeline.addBuildings(transformedBuildings);
+    
+    const stats = this.buildingPipeline.getStats();
+    console.log(`✅ BuildingPipeline: ${stats.totalBuildings} buildings added, ${stats.cachedGeometries} geometries cached`);
   }
   
   /**
@@ -461,6 +518,12 @@ export class ShadowRenderingManager {
       this.sceneManager?.dispose();
       this.lightingManager?.dispose();
       this.performanceMonitor?.dispose();
+      
+      // Dispose Phase 2 Pipelines
+      console.log('🧹 [ShadowRenderingManager] Disposing rendering pipelines...');
+      this.treeRenderPipeline?.dispose();
+      this.buildingPipeline?.dispose();
+      this.terrainPipeline?.dispose();
       
       // Dispose ground plane
       if (this.groundPlane) {
@@ -480,6 +543,11 @@ export class ShadowRenderingManager {
       this.map = null;
       this.sceneManager = null;
       this.lightingManager = null;
+      this.performanceMonitor = null;
+      this.treeRenderPipeline = null;
+      this.buildingPipeline = null;
+      this.terrainPipeline = null;
+      this.groundPlane = null;
       this.performanceMonitor = null;
       this.groundPlane = null;
       

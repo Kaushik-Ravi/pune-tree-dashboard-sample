@@ -93,6 +93,7 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
   } = props;
 
   const [treeData, setTreeData] = useState<any[]>([]);
+  const [buildingData, setBuildingData] = useState<any[]>([]);
   const customLayerIdRef = useRef<string>('realistic-shadows-layer');
   const isLayerAddedRef = useRef<boolean>(false);
 
@@ -148,6 +149,63 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
   }, [maxVisibleTrees, onError]);
 
   /**
+   * Fetch building data from MapLibre vector tiles
+   */
+  const fetchBuildings = useCallback((mapInstance: MaplibreMap) => {
+    if (!mapInstance) return;
+    
+    try {
+      console.log('🏢 [RealisticShadowLayer] Fetching buildings from vector tiles...');
+      
+      // Query rendered building features from MapLibre
+      const features = mapInstance.queryRenderedFeatures(undefined, {
+        layers: ['3d-buildings'], // Must match layer ID from MapView
+        filter: ['has', 'height'] // Only buildings with height data
+      });
+      
+      if (features.length === 0) {
+        console.warn('⚠️ [RealisticShadowLayer] No buildings found. Is 3D mode enabled?');
+        return;
+      }
+      
+      // Transform MapLibre features to building data format
+      const buildings = features.map((feature: any, index: number) => {
+        // Get building polygon coordinates
+        const geometry = feature.geometry;
+        if (geometry.type !== 'Polygon') return null;
+        
+        // Convert coordinates to vertices
+        const coordinates = geometry.coordinates[0]; // Outer ring
+        const vertices = coordinates.map((coord: [number, number]) => ({
+          lng: coord[0],
+          lat: coord[1]
+        }));
+        
+        // Get building properties
+        const height = feature.properties.height || feature.properties.render_height || 15;
+        const minHeight = feature.properties.min_height || 0;
+        const buildingHeight = height - minHeight;
+        
+        return {
+          id: feature.id || `building-${index}`,
+          vertices: vertices,
+          height: buildingHeight,
+          type: feature.properties.type || 'building'
+        };
+      }).filter(Boolean);
+      
+      console.log(`✅ [RealisticShadowLayer] Processed ${buildings.length} buildings`);
+      setBuildingData(buildings);
+      
+    } catch (err) {
+      console.error('❌ [RealisticShadowLayer] Error fetching buildings:', err);
+      if (onError) {
+        onError(err as Error);
+      }
+    }
+  }, [onError]);
+
+  /**
    * Update bounds when map moves
    */
   useEffect(() => {
@@ -164,6 +222,7 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
       };
       
       fetchTrees(newBounds);
+      fetchBuildings(map); // Also fetch buildings on map move
     };
 
     // Initial fetch
@@ -175,7 +234,7 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
     return () => {
       map.off('moveend', handleMoveEnd);
     };
-  }, [map, enabled, fetchTrees]);
+  }, [map, enabled, fetchTrees, fetchBuildings]);
 
   /**
    * Add trees to scene when data is available
@@ -195,6 +254,25 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
       }
     }
   }, [manager, isInitialized, treeData, onError]);
+
+  /**
+   * Add buildings to scene when data is available
+   */
+  useEffect(() => {
+    if (!manager || !isInitialized || !buildingData.length) return;
+
+    console.log(`🎨 [RealisticShadowLayer] Adding ${buildingData.length} buildings to scene`);
+
+    try {
+      // Add buildings using the manager
+      manager.addBuildings(buildingData);
+    } catch (err) {
+      console.error('❌ [RealisticShadowLayer] Error adding buildings:', err);
+      if (onError) {
+        onError(err as Error);
+      }
+    }
+  }, [manager, isInitialized, buildingData, onError]);
 
   /**
    * Add manager as custom layer to MapLibre
