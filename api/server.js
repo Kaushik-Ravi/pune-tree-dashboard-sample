@@ -186,7 +186,7 @@ app.get('/api/tree-archetypes', async (req, res) => {
 
 // --- NEW API ENDPOINT FOR 3D TREE DATA ---
 app.post('/api/trees-in-bounds', async (req, res) => {
-  const { bounds } = req.body;
+  const { bounds, limit } = req.body;
 
   if (!bounds || !bounds.sw || !bounds.ne) {
     return res.status(400).json({ error: 'Invalid bounds provided.' });
@@ -195,8 +195,8 @@ app.post('/api/trees-in-bounds', async (req, res) => {
   const [swLon, swLat] = bounds.sw;
   const [neLon, neLat] = bounds.ne;
 
-  // Added a limit to prevent overwhelming requests for very large areas.
-  const MAX_TREES_RETURN = 5000;
+  // Use provided limit or default to 5000
+  const MAX_TREES_RETURN = limit || 5000;
 
   try {
     // This query uses a spatial index on `geom` for high performance.

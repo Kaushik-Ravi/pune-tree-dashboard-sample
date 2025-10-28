@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import Header from './components/Header';
 import MapView from './components/map/MapView';
 import Sidebar from './components/sidebar/Sidebar';
@@ -16,6 +16,7 @@ function App() {
   
   const [is3D, setIs3D] = useState(false);
   const [lightConfig, setLightConfig] = useState<LightConfig | null>(null);
+  const [shadowsEnabled, setShadowsEnabled] = useState(true);
 
   const handleLightChange = useCallback((newLightConfig: LightConfig | null) => {
     setLightConfig(newLightConfig);
@@ -74,6 +75,7 @@ function App() {
           is3D={is3D}
           onToggle3D={handleToggle3D}
           lightConfig={lightConfig}
+          shadowsEnabled={shadowsEnabled}
         />
 
         {/* --- ADDED: Mobile overlay for dismissing the bottom sheet --- */}
@@ -101,6 +103,8 @@ function App() {
           onActiveSpeciesChangeForChart={handleActiveSpeciesChangeForChart}
           onLightChange={handleLightChange}
           is3D={is3D}
+          shadowsEnabled={shadowsEnabled}
+          onShadowsToggle={setShadowsEnabled}
         />
       </div>
       {showTemperatureChart && activeSpeciesCooling && (
