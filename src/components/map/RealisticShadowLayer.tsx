@@ -12,8 +12,8 @@
  * - Type-safe props
  */
 
-import { useEffect, useState, useCallback } from 'react';
-import type { Map as MaplibreMap } from 'maplibre-gl';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import type { Map as MaplibreMap, CustomLayerInterface } from 'maplibre-gl';
 import axios from 'axios';
 import { useRenderingManager } from '../../hooks/useRenderingManager';
 import { useSunPosition } from '../../hooks/useSunPosition';
@@ -93,6 +93,8 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
   } = props;
 
   const [treeData, setTreeData] = useState<any[]>([]);
+  const customLayerIdRef = useRef<string>('realistic-shadows-layer');
+  const isLayerAddedRef = useRef<boolean>(false);
 
   // Calculate sun position
   const sunPosition = useSunPosition({
@@ -193,6 +195,66 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
       }
     }
   }, [manager, isInitialized, treeData, onError]);
+
+  /**
+   * Add manager as custom layer to MapLibre
+   * This is CRITICAL - without this, the render() method never gets called!
+   */
+  useEffect(() => {
+    if (!map || !manager || !isInitialized || !enabled) return;
+    if (isLayerAddedRef.current) return;
+
+    console.log('🎨 [RealisticShadowLayer] Adding custom layer to MapLibre');
+
+    // Create custom layer interface
+    const customLayer: CustomLayerInterface = {
+      id: customLayerIdRef.current,
+      type: 'custom',
+      renderingMode: '3d',
+
+      onAdd: function (_mapInstance: MaplibreMap, _gl: WebGLRenderingContext) {
+        console.log('✅ [RealisticShadowLayer] Custom layer onAdd called');
+        // Manager is already initialized, no additional setup needed
+      },
+
+      render: function (gl: WebGLRenderingContext, options: any) {
+        // Delegate to manager's render method
+        // Extract matrix from options (MapLibre passes matrix in options.matrix)
+        const matrix = options?.matrix || options;
+        if (manager && isInitialized && Array.isArray(matrix)) {
+          manager.render(gl, matrix);
+        }
+      },
+
+      onRemove: function () {
+        console.log('🗑️ [RealisticShadowLayer] Custom layer onRemove called');
+        // Cleanup handled by useEffect cleanup
+      },
+    };
+
+    try {
+      // Add custom layer to map
+      map.addLayer(customLayer);
+      isLayerAddedRef.current = true;
+      console.log('✅ [RealisticShadowLayer] Custom layer added successfully');
+    } catch (err) {
+      console.error('❌ [RealisticShadowLayer] Failed to add custom layer:', err);
+      if (onError) onError(err as Error);
+    }
+
+    // Cleanup function
+    return () => {
+      if (isLayerAddedRef.current && map.getLayer(customLayerIdRef.current)) {
+        try {
+          map.removeLayer(customLayerIdRef.current);
+          isLayerAddedRef.current = false;
+          console.log('🗑️ [RealisticShadowLayer] Custom layer removed');
+        } catch (err) {
+          console.warn('⚠️ [RealisticShadowLayer] Failed to remove custom layer:', err);
+        }
+      }
+    };
+  }, [map, manager, isInitialized, enabled, onError]);
 
   /**
    * Update configuration when props change
