@@ -155,6 +155,9 @@ export class BuildingPipeline {
 
   /**
    * Create extruded geometry from building polygon
+   * 
+   * CRITICAL: Vertices are in XZ plane (horizontal), extrude upward in Y axis
+   * Coordinates come from geoToWorld which returns (x, altitude, z) for (lng, lat, alt)
    */
   private createBuildingGeometry(building: BuildingData): THREE.ExtrudeGeometry | null {
     // Create cache key from vertices
@@ -166,7 +169,7 @@ export class BuildingPipeline {
     }
 
     try {
-      // Create shape from vertices
+      // Create shape from vertices in XZ plane
       const shape = new THREE.Shape();
       
       if (building.vertices.length < 3) {
@@ -174,30 +177,30 @@ export class BuildingPipeline {
         return null;
       }
 
-      // Move to first vertex
-      shape.moveTo(building.vertices[0].x, building.vertices[0].y);
+      // Move to first vertex (use X and Z coordinates)
+      shape.moveTo(building.vertices[0].x, building.vertices[0].z);
 
-      // Line to remaining vertices
+      // Line to remaining vertices (use X and Z coordinates)
       for (let i = 1; i < building.vertices.length; i++) {
-        shape.lineTo(building.vertices[i].x, building.vertices[i].y);
+        shape.lineTo(building.vertices[i].x, building.vertices[i].z);
       }
 
       // Close the shape
       shape.closePath();
 
-      // Extrude settings
+      // Extrude settings - extrude upward in Y axis
       const extrudeSettings: THREE.ExtrudeGeometryOptions = {
         depth: building.height,
         bevelEnabled: false,
       };
 
-      // Create extruded geometry
+      // Create extruded geometry (extrudes along Z by default)
       const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
 
-      // Rotate to stand upright (extrude is along Z, we want Y)
-      geometry.rotateX(Math.PI / 2);
+      // Rotate to stand upright: shape is in XY, extrude in Z, rotate to XZ plane with Y up
+      geometry.rotateX(-Math.PI / 2);
 
-      // Compute normals for proper lighting
+      // Compute normals for proper lighting and shadow calculation
       geometry.computeVertexNormals();
 
       // Cache the geometry
@@ -213,11 +216,12 @@ export class BuildingPipeline {
 
   /**
    * Create cache key from building vertices
+   * Uses X and Z coordinates (horizontal plane)
    */
   private createGeometryCacheKey(building: BuildingData): string {
     // Create a simple hash from vertices and height
     const vertexStr = building.vertices
-      .map((v) => `${v.x.toFixed(2)},${v.y.toFixed(2)}`)
+      .map((v) => `${v.x.toFixed(2)},${v.z.toFixed(2)}`)
       .join('|');
     return `${vertexStr}_${building.height.toFixed(1)}`;
   }

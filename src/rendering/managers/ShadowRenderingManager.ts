@@ -115,18 +115,21 @@ export class ShadowRenderingManager {
         canvas: map.getCanvas(),
         context: gl,
         antialias: true,
-        alpha: true,
+        alpha: true, // CRITICAL: Transparent background to show MapLibre beneath
         powerPreference: 'high-performance',
         precision: 'highp'
       });
       
-      // Configure renderer
+      // Configure renderer for shadow overlay mode
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      this.renderer.autoClear = false; // Don't clear MapLibre's rendering
+      this.renderer.autoClear = false; // CRITICAL: Don't clear MapLibre's rendering
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       
-      console.log('✅ [ShadowRenderingManager] WebGL renderer initialized');
+      // CRITICAL: Set clear color to fully transparent
+      this.renderer.setClearColor(0x000000, 0.0);
+      
+      console.log('✅ [ShadowRenderingManager] WebGL renderer initialized (transparent overlay mode)');
       
       // Initialize scene
       this.scene = new THREE.Scene();
@@ -188,6 +191,9 @@ export class ShadowRenderingManager {
   /**
    * Main render loop
    * Called every frame by MapLibre
+   * 
+   * CRITICAL: Properly synchronize Three.js camera with MapLibre's projection matrix
+   * to ensure objects appear in the correct viewport position
    */
   render(_gl: WebGLRenderingContext, matrix: number[]): void {
     if (!this.renderer || !this.scene || !this.camera || !this.isInitialized) {
@@ -198,20 +204,24 @@ export class ShadowRenderingManager {
       // Start performance tracking
       this.performanceMonitor?.startFrame();
       
-      // Update camera matrix from MapLibre
+      // CRITICAL: Sync Three.js camera with MapLibre's projection matrix
+      // This ensures Three.js objects appear correctly in MapLibre's viewport
       const projectionMatrix = new THREE.Matrix4().fromArray(matrix);
       this.camera.projectionMatrix = projectionMatrix;
       
+      // IMPORTANT: Set camera matrix mode to manual to prevent Three.js from overwriting
+      this.camera.projectionMatrixInverse.copy(projectionMatrix).invert();
+      
       // Extract camera position for pipeline updates
       const cameraPosition = new THREE.Vector3();
-      this.camera.getWorldPosition(cameraPosition);
+      cameraPosition.setFromMatrixPosition(this.camera.matrixWorld);
       
       // Update all rendering pipelines (Phase 2 Integration)
       this.terrainPipeline?.update(cameraPosition);
       this.buildingPipeline?.update(cameraPosition);
       this.treeRenderPipeline?.update(cameraPosition);
       
-      // Render scene
+      // Render scene with proper state management
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       
@@ -221,12 +231,13 @@ export class ShadowRenderingManager {
       // Increment frame counter
       this.frameCount++;
       
-      // Log every 60 frames (~1 second at 60 FPS)
-      if (this.frameCount % 60 === 0) {
+      // Log every 120 frames (~2 seconds at 60 FPS) for debugging
+      if (this.frameCount % 120 === 0) {
         const metrics = this.performanceMonitor?.getMetrics();
-        console.log(`🎬 Frame ${this.frameCount}:`, {
-          fps: metrics?.fps,
-          objects: this.sceneManager?.getTotalObjectCount()
+        console.log(`🎬 [ShadowRenderingManager] Frame ${this.frameCount}:`, {
+          fps: metrics?.fps.toFixed(1),
+          objects: this.sceneManager?.getTotalObjectCount(),
+          children: this.scene.children.length
         });
       }
       
@@ -480,20 +491,31 @@ export class ShadowRenderingManager {
 
     console.log(`🏢 [ShadowRenderingManager] Adding ${buildingData.length} buildings using BuildingPipeline`);
     
-    // Transform data to BuildingData format
+    // Transform data to BuildingData format with CORRECTED coordinate transformation
     const transformedBuildings = buildingData.map((building, index) => {
       // Convert vertices from geo to world coordinates
       const worldVertices = building.vertices?.map((v: any) => {
         const worldPos = geoToWorld(v.lng, v.lat, 0);
-        return new THREE.Vector3(worldPos.x, 0, worldPos.z); // Ground level vertices
+        // Return Vector3 with correct X, Z coordinates (Y is altitude, handled by building height)
+        return new THREE.Vector3(worldPos.x, worldPos.z, worldPos.y);
       }) || [];
+      
+      // Debug first few buildings
+      if (index < 2) {
+        console.log(`🏢 Building ${index}:`, {
+          id: building.id,
+          vertices: worldVertices.length,
+          height: building.height,
+          firstVertex: worldVertices[0],
+        });
+      }
       
       return {
         id: building.id || `building-${index}`,
         vertices: worldVertices,
         height: building.height || 15,
         type: building.type || 'default',
-        feature: null as any, // BuildingPipeline doesn't use feature, only needs vertices
+        feature: null as any,
       };
     });
     

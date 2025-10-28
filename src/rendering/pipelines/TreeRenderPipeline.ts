@@ -308,6 +308,9 @@ export class TreeRenderPipeline {
 
   /**
    * Create instanced meshes for trees at specific LOD level
+   * 
+   * CRITICAL: Trees must be made semi-transparent or use shadow-only rendering
+   * to avoid occluding the MapLibre native ThreeDTreesLayer beneath
    */
   private createInstancedMeshes(
     species: string,
@@ -321,19 +324,23 @@ export class TreeRenderPipeline {
     const trunkGeometry = this.getTrunkGeometry(lodLevel, config);
     const canopyGeometry = this.getCanopyGeometry(lodLevel, config);
 
-    // Get or create materials
-    const trunkMaterial = this.getMaterial(`trunk_${species}`, config.trunkColor);
-    const canopyMaterial = this.getMaterial(`canopy_${species}`, config.canopyColor);
+    // Get or create materials WITH TRANSPARENCY for shadow-only rendering
+    const trunkMaterial = this.getMaterial(`trunk_${species}`, config.trunkColor, true);
+    const canopyMaterial = this.getMaterial(`canopy_${species}`, config.canopyColor, true);
 
     // Create instanced meshes
     const trunkMesh = new THREE.InstancedMesh(trunkGeometry, trunkMaterial, count);
     const canopyMesh = new THREE.InstancedMesh(canopyGeometry, canopyMaterial, count);
 
-    // Configure shadow properties
+    // Configure shadow properties - ONLY cast shadows, don't render geometry
     trunkMesh.castShadow = true;
-    trunkMesh.receiveShadow = true;
+    trunkMesh.receiveShadow = false; // Don't receive, MapLibre trees will
     canopyMesh.castShadow = true;
-    canopyMesh.receiveShadow = true;
+    canopyMesh.receiveShadow = false;
+    
+    // Make meshes nearly invisible - we only want their shadows
+    trunkMesh.visible = true; // Must be visible to cast shadows
+    canopyMesh.visible = true;
 
     // Set transform matrices for each instance
     const matrix = new THREE.Matrix4();
@@ -344,8 +351,8 @@ export class TreeRenderPipeline {
     for (let i = 0; i < count; i++) {
       const tree = trees[i];
       
-      // Position (convert from Vector3 to coordinates)
-      position.set(tree.position.x, tree.position.y, tree.position.z);
+      // Position (from TreeData which uses fixed geoToWorld)
+      position.copy(tree.position);
 
       // Rotation (slight random variation for natural look)
       const randomRotation = Math.random() * Math.PI * 2;
@@ -426,19 +433,26 @@ export class TreeRenderPipeline {
   }
 
   /**
-   * Get or create material
+   * Get or create material with optional transparency for shadow-only rendering
+   * 
+   * @param shadowOnly - If true, makes material nearly invisible (opacity 0.05) to show only shadows
    */
-  private getMaterial(key: string, color: number): THREE.MeshStandardMaterial {
-    if (!this.materialCache.has(key)) {
+  private getMaterial(key: string, color: number, shadowOnly: boolean = false): THREE.MeshStandardMaterial {
+    const materialKey = shadowOnly ? `${key}_shadow` : key;
+    
+    if (!this.materialCache.has(materialKey)) {
       const material = new THREE.MeshStandardMaterial({
         color,
         roughness: 0.8,
         metalness: 0.2,
+        transparent: shadowOnly,
+        opacity: shadowOnly ? 0.05 : 1.0, // Nearly invisible if shadow-only
+        side: THREE.DoubleSide,
       });
-      this.materialCache.set(key, material);
+      this.materialCache.set(materialKey, material);
     }
 
-    return this.materialCache.get(key) as THREE.MeshStandardMaterial;
+    return this.materialCache.get(materialKey) as THREE.MeshStandardMaterial;
   }
 
   /**

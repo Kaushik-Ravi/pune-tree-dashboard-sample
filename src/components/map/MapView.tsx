@@ -73,7 +73,6 @@ interface MapViewProps {
   shadowQuality?: ShadowQuality;
   showTreeShadows?: boolean;
   showBuildingShadows?: boolean;
-  renderMode?: 'basic' | 'realistic';
 }
 
 const MapView: React.FC<MapViewProps> = ({
@@ -91,7 +90,6 @@ const MapView: React.FC<MapViewProps> = ({
   shadowQuality = 'high',
   showTreeShadows: _showTreeShadows = true,
   showBuildingShadows: _showBuildingShadows = true,
-  renderMode = 'basic', // Default to basic mode
 }) => {
   const mapRef = useRef<MapRef | null>(null);
   const { setSelectedArea } = useTreeStore();
@@ -357,8 +355,8 @@ const MapView: React.FC<MapViewProps> = ({
         )}
         {is3D && <Layer {...buildings3DLayerStyle} />}
         
-        {/* Basic 3D mode - fast, no realistic shadows */}
-        {is3D && renderMode === 'basic' && (
+        {/* ALWAYS render MapLibre native 3D trees when in 3D mode - these are VISIBLE */}
+        {is3D && (
           <ThreeDTreesLayer 
             bounds={viewBounds} 
             selectedTreeId={selectedTreeId}
@@ -368,8 +366,10 @@ const MapView: React.FC<MapViewProps> = ({
           />
         )}
         
-        {/* Realistic 3D mode - beautiful, accurate sun-based shadows */}
-        {is3D && renderMode === 'realistic' && shadowsEnabled && mapRef.current && (
+        {/* Overlay Three.js realistic shadows ON TOP of MapLibre trees when enabled */}
+        {/* The Three.js trees are semi-transparent (opacity 0.05) so they're invisible */}
+        {/* but their SHADOWS are rendered, creating realistic shadow effects */}
+        {is3D && shadowsEnabled && mapRef.current && (
           <RealisticShadowLayer
             map={mapRef.current.getMap()}
             enabled={true}

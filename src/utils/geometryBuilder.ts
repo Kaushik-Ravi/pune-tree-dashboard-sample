@@ -6,6 +6,15 @@ import type { Feature, Point, Polygon } from 'geojson';
 /**
  * Converts geographic coordinates to Three.js world space
  * Uses Mercator projection to match MapLibre GL coordinate system
+ * 
+ * CRITICAL: This function now uses MapLibre's modelMatrix scaling convention
+ * to ensure Three.js objects appear correctly in the MapLibre viewport.
+ * 
+ * The coordinate system works as follows:
+ * 1. MapLibre uses normalized Mercator coordinates (0-1 range globally)
+ * 2. Custom layers receive a projectionMatrix that transforms these to clip space
+ * 3. We position objects using Mercator coordinates directly (no scaling)
+ * 4. The projectionMatrix handles the transformation to screen space
  */
 export const geoToWorld = (
   longitude: number,
@@ -14,22 +23,15 @@ export const geoToWorld = (
 ): THREE.Vector3 => {
   const mercator = MercatorCoordinate.fromLngLat([longitude, latitude], altitude);
   
-  console.log(`🗺️ [geometryBuilder] Converting geo to world:`, {
-    input: { longitude, latitude, altitude },
-    mercator: { x: mercator.x, y: mercator.y, z: mercator.z },
-    scale: mercator.meterInMercatorCoordinateUnits()
-  });
-  
-  // Scale to world coordinates (MapLibre uses normalized 0-1 coordinates)
+  // MapLibre custom layers expect coordinates in Mercator space (0-1 range)
+  // We convert altitude from meters to Mercator units for proper vertical scaling
   const scale = mercator.meterInMercatorCoordinateUnits();
   
   const result = new THREE.Vector3(
-    mercator.x,
-    mercator.z / scale, // altitude in meters
-    mercator.y
+    mercator.x,              // Longitude in Mercator space (0-1)
+    altitude * scale,        // Altitude in Mercator units (scaled from meters)
+    -mercator.y              // Latitude in Mercator space (0-1), negated for Three.js Z-axis
   );
-  
-  console.log(`  📍 World position:`, result);
   
   return result;
 };
@@ -37,6 +39,10 @@ export const geoToWorld = (
 /**
  * Creates realistic tree geometry with trunk and canopy
  * Returns a Group containing both meshes, ready to cast/receive shadows
+ * 
+ * Shadow configuration:
+ * - Trunk: Casts and receives shadows
+ * - Canopy: Casts shadows, receives shadows (for building shadows on trees)
  */
 export const createTreeGeometry = (
   feature: Feature<Point>,
@@ -53,24 +59,11 @@ export const createTreeGeometry = (
   const coords = feature.geometry.coordinates as [number, number];
   const [lng, lat] = coords;
   
-  console.log(`🌳 [geometryBuilder] Creating tree at [${lng}, ${lat}]`, {
-    heightM,
-    girthCm,
-    canopyDiaM
-  });
-  
   // Calculate dimensions
   const trunkRadius = (girthCm / 100) / (2 * Math.PI); // circumference → radius
   const trunkHeight = heightM * 0.4; // 40% of total height is trunk
   const canopyHeight = heightM * 0.6; // 60% is canopy
   const canopyRadius = canopyDiaM / 2;
-  
-  console.log(`  📏 Calculated dimensions:`, {
-    trunkRadius,
-    trunkHeight,
-    canopyRadius,
-    canopyHeight
-  });
   
   // Create group to hold both trunk and canopy
   const treeGroup = new THREE.Group();
@@ -94,12 +87,6 @@ export const createTreeGeometry = (
   trunk.receiveShadow = true;
   trunk.position.y = trunkHeight / 2; // Center at base
   
-  console.log(`  🪵 Trunk created:`, {
-    castShadow: trunk.castShadow,
-    receiveShadow: trunk.receiveShadow,
-    position: trunk.position
-  });
-  
   // Create canopy (cone shape for realistic tree)
   const canopyGeometry = new THREE.ConeGeometry(
     canopyRadius,
@@ -116,28 +103,16 @@ export const createTreeGeometry = (
   
   const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
   canopy.castShadow = true;
-  canopy.receiveShadow = false; // Canopy doesn't need to receive (top of tree)
+  canopy.receiveShadow = true; // IMPORTANT: Receive shadows from buildings
   canopy.position.y = trunkHeight + (canopyHeight / 2);
-  
-  console.log(`  🌿 Canopy created:`, {
-    castShadow: canopy.castShadow,
-    receiveShadow: canopy.receiveShadow,
-    position: canopy.position
-  });
   
   // Add both to group
   treeGroup.add(trunk);
   treeGroup.add(canopy);
   
-  // Position in world space
+  // Position in world space using fixed coordinate transformation
   const worldPos = geoToWorld(lng, lat, 0);
   treeGroup.position.copy(worldPos);
-  
-  console.log(`  🌍 World position:`, worldPos);
-  console.log(`  ✅ Tree group complete:`, {
-    children: treeGroup.children.length,
-    position: treeGroup.position
-  });
   
   // Store metadata
   treeGroup.userData = {
@@ -215,6 +190,9 @@ export const createBuildingGeometry = (
 /**
  * Creates ground plane to receive shadows
  * Size is dynamically calculated based on viewport bounds
+ * 
+ * CRITICAL: Ground plane must be large enough to catch all shadows
+ * and positioned correctly in Mercator coordinate space
  */
 export const createGroundPlane = (
   bounds: { sw: [number, number]; ne: [number, number] },
@@ -225,8 +203,6 @@ export const createGroundPlane = (
 ): THREE.Mesh => {
   const { color = '#f0f0f0', receiveShadow = true } = options;
   
-  console.log(`🟩 [geometryBuilder] Creating ground plane with bounds:`, bounds);
-  
   // Convert bounds to world space
   const swPos = geoToWorld(bounds.sw[0], bounds.sw[1], 0);
   const nePos = geoToWorld(bounds.ne[0], bounds.ne[1], 0);
@@ -234,14 +210,14 @@ export const createGroundPlane = (
   const width = Math.abs(nePos.x - swPos.x);
   const height = Math.abs(nePos.z - swPos.z);
   
-  console.log(`  📐 Ground plane dimensions:`, { width, height });
-  
-  const geometry = new THREE.PlaneGeometry(width, height, 64, 64); // High segments for terrain
+  // Create high-resolution plane for shadow quality
+  const geometry = new THREE.PlaneGeometry(width, height, 128, 128);
   
   const material = new THREE.MeshStandardMaterial({
     color: color,
     roughness: 0.95,
-    metalness: 0.0
+    metalness: 0.0,
+    side: THREE.DoubleSide, // Render both sides for safety
   });
   
   const plane = new THREE.Mesh(geometry, material);
@@ -251,14 +227,7 @@ export const createGroundPlane = (
   // Center the plane
   const centerX = (swPos.x + nePos.x) / 2;
   const centerZ = (swPos.z + nePos.z) / 2;
-  plane.position.set(centerX, 0, centerZ);
-  
-  console.log(`  📍 Ground plane position:`, plane.position);
-  console.log(`  ✅ Ground plane created:`, {
-    receiveShadow: plane.receiveShadow,
-    rotation: plane.rotation.x,
-    segments: '64x64'
-  });
+  plane.position.set(centerX, -0.001, centerZ); // Slightly below ground to avoid z-fighting
   
   plane.userData = {
     type: 'ground'
