@@ -19,7 +19,7 @@ import { useRenderingManager } from '../../hooks/useRenderingManager';
 import { useSunPosition } from '../../hooks/useSunPosition';
 import type { RenderConfig, ShadowQuality } from '../../rendering';
 
-// Fix API URL: Use relative path in production, localhost in dev
+// API Base URL: localhost in development, empty (relative) in production
 const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
 /**
@@ -193,45 +193,6 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
       }
     }
   }, [manager, isInitialized, treeData, onError]);
-  
-  /**
-   * Fetch and render buildings from MapLibre vector tiles
-   */
-  useEffect(() => {
-    if (!map || !enabled || !manager || !isInitialized) return;
-
-    const handleStyleData = () => {
-      try {
-        // Get building features from MapLibre's loaded style
-        const features = map.queryRenderedFeatures(undefined, {
-          layers: ['building'],
-        });
-
-        if (features && features.length > 0) {
-          console.log(`🏢 [RealisticShadowLayer] Found ${features.length} buildings`);
-          manager.addBuildings(features);
-        }
-      } catch (err) {
-        console.error('❌ [RealisticShadowLayer] Error fetching buildings:', err);
-      }
-    };
-
-    // Listen for style data loaded (buildings available)
-    map.on('styledata', handleStyleData);
-    
-    // Also trigger on map move
-    map.on('moveend', handleStyleData);
-
-    // Initial fetch
-    if (map.isStyleLoaded()) {
-      handleStyleData();
-    }
-
-    return () => {
-      map.off('styledata', handleStyleData);
-      map.off('moveend', handleStyleData);
-    };
-  }, [map, enabled, manager, isInitialized]);
 
   /**
    * Update configuration when props change
