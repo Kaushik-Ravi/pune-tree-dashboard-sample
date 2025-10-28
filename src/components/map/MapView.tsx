@@ -17,7 +17,7 @@ import DrawControl, { DrawEvent, DrawActionEvent } from './DrawControl';
 import MapboxDraw from 'maplibre-gl-draw';
 import ViewModeToggle from './ViewModeToggle';
 import ThreeDTreesLayer from './ThreeDTreesLayer';
-import ThreeJSShadowLayer from './ThreeJSShadowLayer';
+import { RealisticShadowLayer } from './RealisticShadowLayer';
 import { LightConfig } from '../sidebar/tabs/LightAndShadowControl';
 import { ShadowQuality } from '../sidebar/tabs/MapLayers';
 
@@ -89,8 +89,8 @@ const MapView: React.FC<MapViewProps> = ({
   lightConfig,
   shadowsEnabled,
   shadowQuality = 'high',
-  showTreeShadows = true,
-  showBuildingShadows = true,
+  showTreeShadows: _showTreeShadows = true,
+  showBuildingShadows: _showBuildingShadows = true,
   renderMode = 'basic', // Default to basic mode
 }) => {
   const mapRef = useRef<MapRef | null>(null);
@@ -369,14 +369,21 @@ const MapView: React.FC<MapViewProps> = ({
         )}
         
         {/* Realistic 3D mode - beautiful, accurate sun-based shadows */}
-        {is3D && renderMode === 'realistic' && shadowsEnabled && (
-          <ThreeJSShadowLayer
-            bounds={viewBounds}
-            sunDate={new Date()} // Uses current date/time for sun position
-            shadowQuality={shadowQuality}
-            showBuildingShadows={showBuildingShadows}
-            showTreeShadows={showTreeShadows}
-            onLoadingChange={handleLoading3DChange}
+        {is3D && renderMode === 'realistic' && shadowsEnabled && mapRef.current && (
+          <RealisticShadowLayer
+            map={mapRef.current.getMap()}
+            enabled={true}
+            shadowQuality={shadowQuality || 'high'}
+            maxVisibleTrees={5000}
+            latitude={18.5204} // Pune, India
+            longitude={73.8567}
+            dateTime={new Date()} // Uses current date/time for sun position
+            onPerformanceUpdate={(fps) => {
+              // Optional: handle performance metrics
+              if (fps < 30) {
+                console.warn('Low FPS detected:', fps);
+              }
+            }}
           />
         )}
 
