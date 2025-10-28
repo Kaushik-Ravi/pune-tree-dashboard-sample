@@ -44,6 +44,14 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
   const layerIdRef = useRef<string>('threejs-shadow-layer');
   const [treeData, setTreeData] = useState<Feature<Point>[]>([]);
   const [isLayerAdded, setIsLayerAdded] = useState(false);
+
+  // Calculate sun position FIRST before anything else
+  const sunPosition = useSunPosition({
+    latitude: 18.5204,
+    longitude: 73.8567,
+    date: sunDate,
+    enabled: true
+  });
   
   // Use refs to hold latest values for the render function
   const sunPositionRef = useRef(sunPosition);
@@ -72,14 +80,6 @@ const ThreeJSShadowLayer: React.FC<ThreeJSShadowLayerProps> = ({
   useEffect(() => {
     boundsRef.current = bounds;
   }, [bounds]);
-
-  // Calculate sun position based on Pune coordinates and selected time
-  const sunPosition = useSunPosition({
-    latitude: 18.5204,
-    longitude: 73.8567,
-    date: sunDate,
-    enabled: true
-  });
 
   // Fetch tree data when bounds change
   useEffect(() => {
