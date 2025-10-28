@@ -94,7 +94,7 @@ const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({
     ...trunkLayerStyle,
     paint: {
       ...trunkLayerStyle.paint,
-      ...(shadowsEnabled && { 'fill-extrusion-ambient-occlusion-intensity': 0.5 } as any),
+      'fill-extrusion-opacity': shadowsEnabled ? 0.9 : 0.85,
     }
   }), [shadowsEnabled]);
 
@@ -102,7 +102,7 @@ const ThreeDTreesLayer: React.FC<ThreeDTreesLayerProps> = ({
     ...canopyLayerStyle,
     paint: {
       ...canopyLayerStyle.paint,
-      ...(shadowsEnabled && { 'fill-extrusion-ambient-occlusion-intensity': 0.5 } as any),
+      'fill-extrusion-opacity': shadowsEnabled ? 0.85 : 0.8,
     }
   }), [shadowsEnabled]);
 
