@@ -51,3 +51,33 @@ export { TreeRenderPipeline } from './pipelines/TreeRenderPipeline';
 export { BuildingPipeline } from './pipelines/BuildingPipeline';
 export { TerrainPipeline } from './pipelines/TerrainPipeline';
 export { CullingPipeline, type CullingConfig } from './pipelines/CullingPipeline';
+
+// Optimization
+export {
+  ObjectPool,
+  Vector3Pool,
+  Matrix4Pool,
+  QuaternionPool,
+  ColorPool,
+  GeometryPool,
+  MaterialPool,
+  PoolManager,
+  type IPoolable,
+  type PoolConfig,
+  type PoolStats,
+} from './optimization/ObjectPool';
+
+export {
+  GeometryWorkerManager,
+  createGeometryFromWorkerData,
+  type GeometryRequest,
+  type GeometryResponse,
+  type TreeGeometryParams,
+  type BuildingGeometryParams,
+} from './optimization/GeometryWorker';
+
+export {
+  AdaptiveLODManager,
+  QualityPreset,
+  type LODStrategy,
+} from './optimization/AdaptiveLODManager';
