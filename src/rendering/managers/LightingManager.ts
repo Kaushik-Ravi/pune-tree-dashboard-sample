@@ -109,14 +109,17 @@ export class LightingManager {
     light.shadow.mapSize.width = shadowMapSize;
     light.shadow.mapSize.height = shadowMapSize;
     
-    // Shadow camera (orthographic frustum)
-    const shadowCameraSize = 500; // Covers 500m x 500m area
+    // CRITICAL: Shadow camera must use MERCATOR UNITS, not meters!
+    // We're rendering in Mercator coordinate space (0-1 for entire world)
+    // At Pune (18.52°), 500m ≈ 1.3e-5 Mercator units (microscopic!)
+    // Instead, use 0.01 Mercator units (~400km at equator) to cover city area
+    const shadowCameraSize = 0.01; // 0.01 Mercator units (~400km coverage)
     light.shadow.camera.left = -shadowCameraSize;
     light.shadow.camera.right = shadowCameraSize;
     light.shadow.camera.top = shadowCameraSize;
     light.shadow.camera.bottom = -shadowCameraSize;
     light.shadow.camera.near = 0.5;
-    light.shadow.camera.far = 5000; // 5km far plane
+    light.shadow.camera.far = 0.1; // 0.1 Mercator units far plane
     
     // Shadow bias (prevents shadow acne)
     light.shadow.bias = -0.001;
@@ -125,7 +128,7 @@ export class LightingManager {
     // Shadow radius (PCF soft shadows)
     light.shadow.radius = quality === 'ultra' ? 2 : 1;
     
-    console.log(`🔧 [LightingManager] Shadow quality: ${quality} (${shadowMapSize}px)`);
+    console.log(`🔧 [LightingManager] Shadow quality: ${quality} (${shadowMapSize}px), frustum: ±${shadowCameraSize} Mercator units`);
   }
   
   /**
