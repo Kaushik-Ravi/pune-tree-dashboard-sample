@@ -64,8 +64,11 @@ export class TerrainPipeline {
   private terrainTiles: Map<string, TerrainTile> = new Map();
   private terrainData: TerrainData | null = null;
   
-  // Configuration
-  private groundSize = 10000; // 10km x 10km
+  // Configuration - IMPORTANT: Using Mercator coordinate units (0-1 for entire world)
+  // At Pune latitude (~18.5°), 1 meter ≈ 2.6e-8 Mercator units
+  // So 10km ground plane = 10000m × 2.6e-8 ≈ 0.00026 Mercator units
+  // For visibility, we use a much larger plane in Mercator space: 0.01 units ≈ 400km at equator
+  private groundSize = 0.01; // 0.01 Mercator units (~400km at equator, ~380km at Pune)
   private groundSegments = 100; // Grid resolution
 
   constructor(scene: THREE.Scene, _camera: THREE.Camera) {
