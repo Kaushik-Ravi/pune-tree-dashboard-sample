@@ -108,9 +108,10 @@ function App() {
 
     const handleTransitionEnd = () => {
       if (tourAdvancementRef.current.nextStep !== null) {
-        const nextStepKey = (Object.entries(TourSteps).find(([, step]) => 
-            step === (window.innerWidth < 768 ? TourSteps.openDashboardMobile : TourSteps.openDashboardDesktop)
-        ) || [])[0];
+        // Unused variable kept for potential future debugging
+        // const nextStepKey = (Object.entries(TourSteps).find(([, step]) => 
+        //     step === (window.innerWidth < 768 ? TourSteps.openDashboardMobile : TourSteps.openDashboardDesktop)
+        // ) || [])[0];
 
         // Set active tab after transition, right before showing the step
         const stepToAdvanceTo = tourAdvancementRef.current.nextStep;

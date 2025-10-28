@@ -1,12 +1,17 @@
 // src/components/sidebar/tabs/LightAndShadowControl.tsx
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { Light } from 'maplibre-gl'; // --- FIX: Correct import from 'maplibre-gl' ---
 import SunCalc from 'suncalc';
 import { Sun, Moon, Clock, Calendar, Globe, Power, PowerOff, Play, Pause } from 'lucide-react';
 
-// --- FIX: Moved LightConfig type here to decouple from App.tsx and exported it ---
+// LightConfig type - compatible with MapLibre GL light configuration
 export interface LightConfig {
-  directional: Light;
+  directional: {
+    direction?: [number, number];
+    position?: [number, number, number];
+    color?: string;
+    intensity: number;
+    anchor?: 'map' | 'viewport';
+  };
   ambientIntensity: number;
 }
 
