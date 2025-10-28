@@ -12,6 +12,9 @@ import type { Feature, Point, Polygon } from 'geojson';
  * Tree data from GeoJSON
  */
 export interface TreeData {
+  /** Unique tree identifier */
+  id: string;
+  
   /** Original GeoJSON feature */
   feature: Feature<Point>;
   
@@ -27,8 +30,8 @@ export interface TreeData {
   /** Tree species/type */
   species?: string;
   
-  /** World position [x, y, z] */
-  position: [number, number, number];
+  /** World position (THREE.Vector3) */
+  position: THREE.Vector3;
   
   /** Three.js object reference */
   object?: THREE.Object3D;
@@ -44,6 +47,9 @@ export interface TreeData {
  * Building data from GeoJSON
  */
 export interface BuildingData {
+  /** Unique building identifier */
+  id: string;
+  
   /** Original GeoJSON feature */
   feature: Feature<Polygon>;
   
@@ -53,8 +59,8 @@ export interface BuildingData {
   /** Building type (residential, commercial, etc.) */
   type?: string;
   
-  /** World positions for vertices */
-  vertices: Array<[number, number, number]>;
+  /** World positions for vertices (Vector3 format) */
+  vertices: Array<THREE.Vector3>;
   
   /** Three.js object reference */
   object?: THREE.Object3D;
@@ -67,10 +73,18 @@ export interface BuildingData {
  * Terrain/ground data
  */
 export interface TerrainData {
-  /** Bounds of terrain [swLng, swLat, neLng, neLat] */
-  bounds: [number, number, number, number];
+  /** Bounds of terrain [minX, minY, maxX, maxY] */
+  bounds: {
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+  };
   
-  /** Elevation data (optional, for DEM) */
+  /** Elevation data (2D grid for DEM) */
+  elevationGrid?: number[][];
+  
+  /** Elevation data (1D array alternative) */
   elevations?: Float32Array;
   
   /** Width of elevation grid */
@@ -84,17 +98,22 @@ export interface TerrainData {
 }
 
 /**
- * LOD level definition
+ * LOD level type
  */
-export interface LODLevel {
-  /** Distance threshold in meters */
-  distance: number;
+export type LODLevel = 'high' | 'medium' | 'low';
+
+/**
+ * LOD group data
+ */
+export interface LODGroup {
+  /** LOD level identifier */
+  level: LODLevel;
   
-  /** Geometry for this LOD level */
-  geometry: THREE.BufferGeometry;
+  /** Trees at this LOD level */
+  trees: TreeData[];
   
-  /** Material for this LOD level */
-  material: THREE.Material;
+  /** Mesh for this LOD level (trunk mesh, canopy in userData) */
+  mesh: THREE.InstancedMesh | null;
 }
 
 /**
@@ -102,54 +121,43 @@ export interface LODLevel {
  */
 export interface InstancedTreeGroup {
   /** Tree type/species identifier */
-  type: string;
-  
-  /** Number of instances */
-  count: number;
-  
-  /** Instanced mesh */
-  instancedMesh: THREE.InstancedMesh;
+  species: string;
   
   /** Individual tree data */
   trees: TreeData[];
   
-  /** Transform matrices for each instance */
-  matrices: THREE.Matrix4[];
+  /** LOD groups (high/medium/low detail) */
+  lodGroups: {
+    high: LODGroup;
+    medium: LODGroup;
+    low: LODGroup;
+  };
 }
 
 /**
  * Bounds for frustum culling
  */
 export interface CullingBounds {
-  /** Minimum x coordinate */
-  minX: number;
+  /** Bounding sphere */
+  boundingSphere?: {
+    center: THREE.Vector3;
+    radius: number;
+  };
   
-  /** Maximum x coordinate */
-  maxX: number;
-  
-  /** Minimum y coordinate */
-  minY: number;
-  
-  /** Maximum y coordinate */
-  maxY: number;
-  
-  /** Minimum z coordinate */
-  minZ: number;
-  
-  /** Maximum z coordinate */
-  maxZ: number;
+  /** Bounding box */
+  boundingBox?: {
+    min: THREE.Vector3;
+    max: THREE.Vector3;
+  };
 }
 
 /**
  * Camera frustum for culling
  */
 export interface CameraFrustum {
-  /** Frustum planes */
-  planes: THREE.Plane[];
-  
-  /** Camera position */
-  position: THREE.Vector3;
-  
-  /** View distance */
-  far: number;
+  /** Frustum planes (simplified - normal and constant only) */
+  planes: Array<{
+    normal: THREE.Vector3;
+    constant: number;
+  }>;
 }

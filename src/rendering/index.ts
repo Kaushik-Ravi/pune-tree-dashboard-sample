@@ -45,3 +45,9 @@ export type {
   CullingBounds,
   CameraFrustum
 } from './types/SceneObject';
+
+// Pipelines
+export { TreeRenderPipeline } from './pipelines/TreeRenderPipeline';
+export { BuildingPipeline } from './pipelines/BuildingPipeline';
+export { TerrainPipeline } from './pipelines/TerrainPipeline';
+export { CullingPipeline, type CullingConfig } from './pipelines/CullingPipeline';
