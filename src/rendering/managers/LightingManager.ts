@@ -152,27 +152,8 @@ export class LightingManager {
     
     // Apply position
     if (config.position) {
-      // TEMPORARY FIX: Force sun to be above horizon for shadow visibility testing
-      const [_x, y, _z] = config.position;
-      console.log('🔧 [LightingManager] Original sun position:', config.position);
-      
-      // If Y (altitude) is negative or too low, override to daytime position
-      if (y < 500) {
-        console.warn('⚠️ [LightingManager] Sun too low or underground! Forcing to 10 AM position');
-        // Good daytime position: 45 degrees altitude, from southeast
-        const distance = 1000;
-        const altitude = 45 * (Math.PI / 180); // 45 degrees
-        const azimuth = -45 * (Math.PI / 180); // From southeast
-        
-        const forcedX = distance * Math.cos(altitude) * Math.sin(azimuth);
-        const forcedY = distance * Math.sin(altitude); // This will be positive ~707
-        const forcedZ = distance * Math.cos(altitude) * Math.cos(azimuth);
-        
-        this.directionalLight.position.set(forcedX, forcedY, forcedZ);
-        console.log('✅ [LightingManager] Forced daytime position:', [forcedX, forcedY, forcedZ]);
-      } else {
-        this.directionalLight.position.set(...config.position);
-      }
+      console.log('🔧 [LightingManager] Sun position:', config.position);
+      this.directionalLight.position.set(...config.position);
     }
     
     // Apply intensity
