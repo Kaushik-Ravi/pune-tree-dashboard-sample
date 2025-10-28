@@ -467,12 +467,12 @@ export class ShadowRenderingManager {
       const species = feature.properties.botanical_name || feature.properties.common_name || 'default';
       
       // Convert geo coordinates to Mercator world position
-      const mercator = MercatorCoordinate.fromLngLat([lng, lat], 0);
       const worldPos = geoToWorld(lng, lat, 0);
       
       // CRITICAL: Get the scale factor to convert meters to Mercator units at this latitude
-      // This scale factor tells us how many Mercator units = 1 meter at this location
-      const mercatorScale = mercator.meterInMercatorCoordinateUnits();
+      // fromLngLat with NO altitude parameter (undefined) gives ground-level reference
+      const mercatorRef = MercatorCoordinate.fromLngLat([lng, lat]);
+      const mercatorScale = mercatorRef.meterInMercatorCoordinateUnits();
       
       // Log first few trees for debugging
       if (index < 3) {
@@ -512,9 +512,10 @@ export class ShadowRenderingManager {
     // Transform data to BuildingData format with Mercator scaling
     const transformedBuildings = buildingData.map((building, index) => {
       // Get the scale factor for the first vertex (all vertices should be roughly the same location)
+      // fromLngLat with NO altitude parameter gives ground-level reference for correct scale
       const firstV = building.vertices?.[0];
-      const mercator = firstV ? MercatorCoordinate.fromLngLat([firstV.lng, firstV.lat], 0) : null;
-      const mercatorScale = mercator ? mercator.meterInMercatorCoordinateUnits() : 1e-6; // fallback
+      const mercatorRef = firstV ? MercatorCoordinate.fromLngLat([firstV.lng, firstV.lat]) : null;
+      const mercatorScale = mercatorRef ? mercatorRef.meterInMercatorCoordinateUnits() : 1e-6; // fallback
       
       // Convert vertices from geo to Mercator world coordinates
       const worldVertices = building.vertices?.map((v: any) => {
