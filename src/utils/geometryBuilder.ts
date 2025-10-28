@@ -27,11 +27,13 @@ export const geoToWorld = (
   // The mercator object already contains altitude in the correct units
   // mercator.x, mercator.y are in [0,1] normalized Mercator coordinates
   // mercator.z is altitude already in Mercator units (not meters)
-  
+  // Convert mercator units to meters at this latitude
+  const metersPerUnit = mercator.meterInMercatorCoordinateUnits();
+
   const result = new THREE.Vector3(
-    mercator.x,              // Longitude in Mercator space (0-1)
-    mercator.z,              // Altitude in Mercator units (directly from mercator.z)
-    -mercator.y              // Latitude in Mercator space (0-1), negated for Three.js Z-axis
+    mercator.x * metersPerUnit,           // X in meters (east)
+    mercator.z * metersPerUnit,           // Y in meters (altitude)
+    -mercator.y * metersPerUnit           // Z in meters (north), negated to match Three.js orientation
   );
   
   return result;
@@ -236,7 +238,8 @@ export const createGroundPlane = (
   // Center the plane
   const centerX = (swPos.x + nePos.x) / 2;
   const centerZ = (swPos.z + nePos.z) / 2;
-  plane.position.set(centerX, -0.001, centerZ); // Slightly below ground to avoid z-fighting
+  const centerY = (swPos.y + nePos.y) / 2; // Use average altitude for proper placement
+  plane.position.set(centerX, centerY - 0.001, centerZ); // Slightly below ground to avoid z-fighting
   
   plane.userData = {
     type: 'ground'

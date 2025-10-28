@@ -170,6 +170,15 @@ export class ShadowRenderingManager {
       
       // Mark as initialized
       this.isInitialized = true;
+      // Expose manager for debugging in development
+      try {
+        if ((import.meta as any).DEV) {
+          (window as any).__shadowRenderingManager = this;
+          console.log('🔎 [ShadowRenderingManager] Exposed as window.__shadowRenderingManager for debugging');
+        }
+      } catch (e) {
+        // non-critical if exposure fails
+      }
       this.emitTyped('initialized', undefined);
       
       console.log('✅ [ShadowRenderingManager] Initialization complete', {
@@ -499,8 +508,8 @@ export class ShadowRenderingManager {
       // Convert vertices from geo to world coordinates
       const worldVertices = building.vertices?.map((v: any) => {
         const worldPos = geoToWorld(v.lng, v.lat, 0);
-        // Return Vector3 with correct X, Z coordinates (Y is altitude, handled by building height)
-        return new THREE.Vector3(worldPos.x, worldPos.z, worldPos.y);
+        // Use the unified X,Y,Z from geoToWorld (X east, Y altitude in meters, Z north)
+        return new THREE.Vector3(worldPos.x, worldPos.y, worldPos.z);
       }) || [];
       
       // Debug first few buildings
