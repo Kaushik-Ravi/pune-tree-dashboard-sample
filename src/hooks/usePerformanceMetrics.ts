@@ -12,8 +12,8 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import type { PerformanceMetrics } from '../../rendering';
-import { ShadowRenderingManager } from '../../rendering';
+import type { PerformanceMetrics } from '../rendering/index';
+import { ShadowRenderingManager } from '../rendering/index';
 
 /**
  * Hook configuration
@@ -94,7 +94,7 @@ export function usePerformanceMetrics(
   const [history, setHistory] = useState<PerformanceHistoryEntry[]>([]);
   const [isCollecting, setIsCollecting] = useState(false);
   
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<number | null>(null);
   const managerRef = useRef<ShadowRenderingManager | null>(null);
 
   /**
@@ -202,15 +202,15 @@ export function usePerformanceMetrics(
       managerRef.current = manager;
 
       // Subscribe to performance updates
-      const unsubscribe = manager.onTyped?.('performance:update', (payload) => {
-        setMetrics(payload);
+      const listener = (payload: { metrics: PerformanceMetrics }) => {
+        setMetrics(payload.metrics);
         setIsCollecting(true);
 
         if (trackHistory) {
           setHistory(prev => {
             const newEntry: PerformanceHistoryEntry = {
               timestamp: Date.now(),
-              metrics: payload,
+              metrics: payload.metrics,
             };
             
             const newHistory = [...prev, newEntry];
@@ -222,12 +222,12 @@ export function usePerformanceMetrics(
             return newHistory;
           });
         }
-      });
+      };
+
+      manager.onTyped?.('performance:update', listener);
 
       return () => {
-        if (unsubscribe) {
-          unsubscribe();
-        }
+        manager.offTyped?.('performance:update', listener);
       };
     } catch (err) {
       console.error('[usePerformanceMetrics] Failed to subscribe to events:', err);

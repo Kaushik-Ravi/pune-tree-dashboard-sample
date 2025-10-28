@@ -19,7 +19,7 @@ import {
   type SunConfig,
   type RenderingEventType,
   type RenderingEventPayloads,
-} from '../../rendering';
+} from '../rendering/index';
 
 /**
  * Hook configuration
