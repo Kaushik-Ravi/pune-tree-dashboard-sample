@@ -389,6 +389,57 @@ export class ShadowRenderingManager {
   }
   
   /**
+   * Add trees to the scene (simplified method for React integration)
+   * @param treeData Array of GeoJSON features with tree data
+   */
+  addTrees(treeData: any[]): void {
+    if (!this.isInitialized || !this.sceneManager) {
+      console.warn('⚠️ [ShadowRenderingManager] Cannot add trees - not initialized');
+      return;
+    }
+
+    console.log(`🌳 [ShadowRenderingManager] Adding ${treeData.length} trees to scene`);
+    
+    // Clear existing trees
+    this.sceneManager.clearGroup('trees');
+    
+    // Add each tree as a simple mesh for now
+    // In production, this should use TreeRenderPipeline for instanced rendering
+    treeData.forEach((feature) => {
+      if (!feature.geometry || !feature.properties || !this.sceneManager) return;
+      
+      const [lng, lat] = feature.geometry.coordinates;
+      const height = feature.properties.Height_m || feature.properties.height || 10;
+      
+      // Convert lat/lng to world coordinates (simplified)
+      // In production, use proper projection from geometryBuilder
+      const x = (lng - 73.8567) * 100000; // Rough conversion for Pune
+      const z = (lat - 18.5204) * 100000;
+      
+      // Create simple tree representation (cylinder for trunk, cone for canopy)
+      const trunkGeometry = new THREE.CylinderGeometry(0.2, 0.3, height * 0.3, 8);
+      const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+      const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+      trunk.castShadow = true;
+      trunk.receiveShadow = true;
+      trunk.position.set(x, height * 0.15, z);
+      
+      const canopyGeometry = new THREE.ConeGeometry(height * 0.3, height * 0.7, 8);
+      const canopyMaterial = new THREE.MeshStandardMaterial({ color: 0x2E7D32 });
+      const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
+      canopy.castShadow = true;
+      canopy.receiveShadow = true;
+      canopy.position.set(x, height * 0.3 + height * 0.35, z);
+      
+      // Add to scene
+      this.sceneManager.addToGroup('trees', trunk);
+      this.sceneManager.addToGroup('trees', canopy);
+    });
+    
+    console.log(`✅ [ShadowRenderingManager] Added ${treeData.length} trees successfully`);
+  }
+  
+  /**
    * Dispose all resources
    */
   dispose(): void {

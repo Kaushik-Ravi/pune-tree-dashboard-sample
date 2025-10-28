@@ -12,11 +12,14 @@
  * - Type-safe props
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import type { Map as MaplibreMap } from 'maplibre-gl';
+import axios from 'axios';
 import { useRenderingManager } from '../../hooks/useRenderingManager';
 import { useSunPosition } from '../../hooks/useSunPosition';
 import type { RenderConfig, ShadowQuality } from '../../rendering';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 /**
  * Component props
@@ -88,6 +91,8 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
     onPerformanceUpdate,
   } = props;
 
+  const [treeData, setTreeData] = useState<any[]>([]);
+
   // Calculate sun position
   const sunPosition = useSunPosition({
     latitude,
@@ -114,6 +119,79 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
     autoInitialize: true,
     enabled,
   });
+
+  /**
+   * Fetch tree data when map bounds change
+   */
+  const fetchTrees = useCallback(async (mapBounds: any) => {
+    if (!mapBounds) return;
+    
+    try {
+      console.log('🌳 [RealisticShadowLayer] Fetching trees for bounds:', mapBounds);
+      const response = await axios.post(`${API_BASE_URL}/api/trees-in-bounds`, {
+        bounds: mapBounds,
+        limit: maxVisibleTrees,
+      });
+      
+      const features = response.data.features || [];
+      console.log(`✅ [RealisticShadowLayer] Fetched ${features.length} trees`);
+      setTreeData(features);
+    } catch (err) {
+      console.error('❌ [RealisticShadowLayer] Error fetching trees:', err);
+      if (onError) {
+        onError(err as Error);
+      }
+    }
+  }, [maxVisibleTrees, onError]);
+
+  /**
+   * Update bounds when map moves
+   */
+  useEffect(() => {
+    if (!map || !enabled) return;
+
+    const handleMoveEnd = () => {
+      const mapBounds = map.getBounds();
+      const sw = mapBounds.getSouthWest();
+      const ne = mapBounds.getNorthEast();
+      
+      const newBounds = {
+        sw: [sw.lng, sw.lat],
+        ne: [ne.lng, ne.lat],
+      };
+      
+      fetchTrees(newBounds);
+    };
+
+    // Initial fetch
+    handleMoveEnd();
+
+    // Listen for map movements
+    map.on('moveend', handleMoveEnd);
+
+    return () => {
+      map.off('moveend', handleMoveEnd);
+    };
+  }, [map, enabled, fetchTrees]);
+
+  /**
+   * Add trees to scene when data is available
+   */
+  useEffect(() => {
+    if (!manager || !isInitialized || !treeData.length) return;
+
+    console.log(`🎨 [RealisticShadowLayer] Adding ${treeData.length} trees to scene`);
+
+    try {
+      // Add trees using the manager
+      manager.addTrees(treeData);
+    } catch (err) {
+      console.error('❌ [RealisticShadowLayer] Error adding trees:', err);
+      if (onError) {
+        onError(err as Error);
+      }
+    }
+  }, [manager, isInitialized, treeData, onError]);
 
   /**
    * Update configuration when props change

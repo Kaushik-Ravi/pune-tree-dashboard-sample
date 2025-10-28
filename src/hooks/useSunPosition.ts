@@ -60,7 +60,11 @@ export const useSunPosition = ({
     
     // Calculate light intensity based on sun altitude
     // Full intensity when sun is high (noon), dimmer at sunrise/sunset
-    const intensity = Math.max(0, Math.min(1, (Math.sin(altitude) + 0.5) / 1.5));
+    // For visualization purposes, ensure minimum intensity even at night
+    const naturalIntensity = Math.max(0, Math.min(1, (Math.sin(altitude) + 0.5) / 1.5));
+    
+    // Use natural intensity during day, but provide minimum intensity at night for visibility
+    const intensity = altitude > 0 ? naturalIntensity : Math.max(0.3, naturalIntensity);
     
     // Convert spherical coordinates to Three.js Cartesian position
     // We want the light to come FROM the sun position
