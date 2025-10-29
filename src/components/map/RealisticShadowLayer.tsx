@@ -338,16 +338,31 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
       },
 
       render: function (gl: WebGLRenderingContext, ...args: any[]) {
-        // CRITICAL: MapLibre may pass matrix as first arg or in args array
-        // Handle both signatures: render(gl, matrix) and render(gl, matrix, projection)
-        const matrix = args[0];
+        // CRITICAL: MapLibre v3 changed API!
+        // Old: render(gl, matrix: number[])
+        // New: render(gl, options: {modelViewProjectionMatrix: Float64Array, ...})
+        const firstArg = args[0];
         
-        // DEBUG: Log to verify this is being called
-        console.log('🟢 [CustomLayer] render() CALLED!', {
-          argsLength: args.length,
-          matrixIsArray: Array.isArray(matrix),
-          matrixLength: Array.isArray(matrix) ? matrix.length : 0
-        });
+        // Extract matrix based on MapLibre version
+        let matrix: number[] | Float64Array;
+        if (Array.isArray(firstArg) || firstArg instanceof Float64Array || firstArg instanceof Float32Array) {
+          // MapLibre v2 style: matrix directly passed
+          matrix = firstArg;
+        } else if (firstArg && firstArg.modelViewProjectionMatrix) {
+          // MapLibre v3 style: matrix inside options object
+          matrix = firstArg.modelViewProjectionMatrix;
+          console.log('🟢 [CustomLayer] render() CALLED! (MapLibre v3 API)', {
+            argsLength: args.length,
+            matrixType: matrix.constructor.name,
+            matrixLength: matrix.length
+          });
+        } else {
+          console.error('❌ [CustomLayer] render() called with unknown format!', {
+            typeof: typeof firstArg,
+            keys: firstArg ? Object.keys(firstArg) : []
+          });
+          return;
+        }
         
         if (!managerRef) {
           console.error('❌ [CustomLayer] render() called but manager is null!');
@@ -357,15 +372,10 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
           console.error('❌ [CustomLayer] render() called but not initialized!');
           return;
         }
-        if (!Array.isArray(matrix)) {
-          console.error('❌ [CustomLayer] render() called but matrix is not an array!', {
-            typeof: typeof matrix,
-            matrix: matrix
-          });
-          return;
-        }
         
-        managerRef.render(gl, matrix);
+        // Convert Float64Array/Float32Array to regular array if needed
+        const matrixArray = Array.isArray(matrix) ? matrix : Array.from(matrix);
+        managerRef.render(gl, matrixArray);
       },
 
       onRemove: function () {

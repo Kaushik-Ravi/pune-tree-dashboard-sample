@@ -264,6 +264,16 @@ export class LightingManager {
   }
   
   /**
+   * Update lighting system (should be called every frame)
+   */
+  update(): void {
+    // Update shadow camera helper if enabled
+    if (this.shadowCameraHelper) {
+      this.shadowCameraHelper.update();
+    }
+  }
+  
+  /**
    * Get current sun configuration
    */
   getSunConfig(): SunConfig {

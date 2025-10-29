@@ -205,7 +205,9 @@ export class ShadowRenderingManager {
    */
   render(_gl: WebGLRenderingContext, matrix: number[]): void {
     // DEBUG: Log IMMEDIATELY to verify this method is called
-    console.log('🔴 [ShadowRenderingManager] render() CALLED! Frame:', this.frameCount);
+    if (this.frameCount === 0) {
+      console.log('🎬 [ShadowRenderingManager] FIRST RENDER! Starting shadow rendering loop');
+    }
     
     if (!this.renderer || !this.scene || !this.camera || !this.isInitialized) {
       console.error('❌ [ShadowRenderingManager] render() early return:', {
@@ -241,6 +243,9 @@ export class ShadowRenderingManager {
       this.buildingPipeline?.update(cameraPosition);
       this.treeRenderPipeline?.update(cameraPosition);
       
+      // Update lighting manager (updates shadow camera helper if enabled)
+      this.lightingManager?.update();
+      
       // Render scene with proper state management
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
@@ -250,6 +255,24 @@ export class ShadowRenderingManager {
       
       // Increment frame counter
       this.frameCount++;
+      
+      // Log first successful render with scene details
+      if (this.frameCount === 1) {
+        const directionalLight = this.lightingManager?.getDirectionalLight();
+        console.log('✅ [ShadowRenderingManager] FIRST RENDER COMPLETE!', {
+          sceneChildren: this.scene.children.length,
+          shadowMapEnabled: this.renderer.shadowMap.enabled,
+          shadowMapType: this.renderer.shadowMap.type,
+          directionalLight: {
+            castShadow: directionalLight?.castShadow,
+            shadowMapSize: directionalLight?.shadow.mapSize.width,
+            position: directionalLight?.position.toArray()
+          },
+          trees: this.sceneManager?.getGroup('trees')?.children.length || 0,
+          buildings: this.sceneManager?.getGroup('buildings')?.children.length || 0,
+          terrain: this.sceneManager?.getGroup('terrain')?.children.length || 0
+        });
+      }
       
       // Log every 120 frames (~2 seconds at 60 FPS) for debugging
       if (this.frameCount % 120 === 0) {
