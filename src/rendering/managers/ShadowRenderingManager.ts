@@ -204,7 +204,16 @@ export class ShadowRenderingManager {
    * to ensure objects appear in the correct viewport position
    */
   render(_gl: WebGLRenderingContext, matrix: number[]): void {
+    // DEBUG: Log IMMEDIATELY to verify this method is called
+    console.log('🔴 [ShadowRenderingManager] render() CALLED! Frame:', this.frameCount);
+    
     if (!this.renderer || !this.scene || !this.camera || !this.isInitialized) {
+      console.error('❌ [ShadowRenderingManager] render() early return:', {
+        renderer: !!this.renderer,
+        scene: !!this.scene,
+        camera: !!this.camera,
+        isInitialized: this.isInitialized
+      });
       return;
     }
     

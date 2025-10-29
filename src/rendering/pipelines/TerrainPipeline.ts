@@ -15,21 +15,6 @@ import * as THREE from 'three';
 import { TerrainData } from '../types/SceneObject';
 
 /**
- * Ground material configuration
- */
-interface GroundMaterialConfig {
-  color: number;
-  roughness: number;
-  metalness: number;
-}
-
-const GROUND_MATERIAL_CONFIG: GroundMaterialConfig = {
-  color: 0x6b8e23, // Olive green for ground
-  roughness: 0.95,
-  metalness: 0.0,
-};
-
-/**
  * Terrain tile for LOD system
  */
 interface TerrainTile {
@@ -58,7 +43,7 @@ export class TerrainPipeline {
   
   // Ground plane
   private groundPlane: THREE.Mesh | null = null;
-  private groundMaterial: THREE.MeshStandardMaterial;
+  private groundMaterial: THREE.ShadowMaterial; // CHANGED: ShadowMaterial only renders shadows, transparent otherwise
   
   // Terrain tiles (for DEM support)
   private terrainTiles: Map<string, TerrainTile> = new Map();
@@ -74,13 +59,12 @@ export class TerrainPipeline {
   constructor(scene: THREE.Scene, _camera: THREE.Camera) {
     this.scene = scene;
     
-    // Initialize ground material
-    this.groundMaterial = new THREE.MeshStandardMaterial({
-      color: GROUND_MATERIAL_CONFIG.color,
-      roughness: GROUND_MATERIAL_CONFIG.roughness,
-      metalness: GROUND_MATERIAL_CONFIG.metalness,
-      emissive: 0x000000,
-      emissiveIntensity: 0.0,
+    // CRITICAL: Use ShadowMaterial for transparent shadow-only rendering
+    // This material is TRANSPARENT except where shadows are cast
+    // Perfect for overlaying shadows on top of MapLibre map
+    this.groundMaterial = new THREE.ShadowMaterial({
+      opacity: 0.5, // Shadow darkness (0 = invisible, 1 = black)
+      color: 0x000000, // Shadow color (black)
     });
     
     // Create initial ground plane
@@ -285,25 +269,17 @@ export class TerrainPipeline {
   }
 
   /**
-   * Set ground color
+   * Set ground color (shadow color)
    */
   public setGroundColor(color: number): void {
     this.groundMaterial.color.setHex(color);
   }
 
   /**
-   * Set ground material properties
+   * Set shadow opacity
    */
-  public setGroundMaterial(config: Partial<GroundMaterialConfig>): void {
-    if (config.color !== undefined) {
-      this.groundMaterial.color.setHex(config.color);
-    }
-    if (config.roughness !== undefined) {
-      this.groundMaterial.roughness = config.roughness;
-    }
-    if (config.metalness !== undefined) {
-      this.groundMaterial.metalness = config.metalness;
-    }
+  public setShadowOpacity(opacity: number): void {
+    this.groundMaterial.opacity = opacity;
   }
 
   /**

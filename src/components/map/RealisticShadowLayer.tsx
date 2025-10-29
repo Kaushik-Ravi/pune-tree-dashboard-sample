@@ -322,6 +322,10 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
 
     console.log('🎨 [RealisticShadowLayer] Adding custom layer to MapLibre');
 
+    // CRITICAL: Store manager reference that won't change
+    const managerRef = manager;
+    const isInitializedRef = isInitialized;
+
     // Create custom layer interface
     const customLayer: CustomLayerInterface = {
       id: customLayerIdRef.current,
@@ -333,13 +337,35 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
         // Manager is already initialized, no additional setup needed
       },
 
-      render: function (gl: WebGLRenderingContext, options: any) {
-        // Delegate to manager's render method
-        // Extract matrix from options (MapLibre passes matrix in options.matrix)
-        const matrix = options?.matrix || options;
-        if (manager && isInitialized && Array.isArray(matrix)) {
-          manager.render(gl, matrix);
+      render: function (gl: WebGLRenderingContext, ...args: any[]) {
+        // CRITICAL: MapLibre may pass matrix as first arg or in args array
+        // Handle both signatures: render(gl, matrix) and render(gl, matrix, projection)
+        const matrix = args[0];
+        
+        // DEBUG: Log to verify this is being called
+        console.log('🟢 [CustomLayer] render() CALLED!', {
+          argsLength: args.length,
+          matrixIsArray: Array.isArray(matrix),
+          matrixLength: Array.isArray(matrix) ? matrix.length : 0
+        });
+        
+        if (!managerRef) {
+          console.error('❌ [CustomLayer] render() called but manager is null!');
+          return;
         }
+        if (!isInitializedRef) {
+          console.error('❌ [CustomLayer] render() called but not initialized!');
+          return;
+        }
+        if (!Array.isArray(matrix)) {
+          console.error('❌ [CustomLayer] render() called but matrix is not an array!', {
+            typeof: typeof matrix,
+            matrix: matrix
+          });
+          return;
+        }
+        
+        managerRef.render(gl, matrix);
       },
 
       onRemove: function () {
@@ -353,6 +379,16 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
       map.addLayer(customLayer);
       isLayerAddedRef.current = true;
       console.log('✅ [RealisticShadowLayer] Custom layer added successfully');
+      
+      // DEBUG: Verify layer was added
+      setTimeout(() => {
+        const layer = map.getLayer(customLayerIdRef.current);
+        console.log('🔍 [RealisticShadowLayer] Layer verification:', {
+          layerExists: !!layer,
+          layerId: customLayerIdRef.current,
+          allLayers: map.getStyle()?.layers?.map(l => l.id) || []
+        });
+      }, 100);
     } catch (err) {
       console.error('❌ [RealisticShadowLayer] Failed to add custom layer:', err);
       if (onError) onError(err as Error);

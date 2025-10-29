@@ -366,9 +366,12 @@ export class TreeRenderPipeline {
       const randomRotation = Math.random() * Math.PI * 2;
       rotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), randomRotation);
 
-      // Scale based on tree height
+      // CRITICAL: Scale based on tree height in Mercator units
+      // Base geometry is 5 units tall (trunk), so scale = desiredHeight / 5
+      // tree.height is already in Mercator units from addTrees() transformation
       const treeHeight = tree.height * config.heightMultiplier;
-      const scaleValue = treeHeight / 10; // Normalize to base height of 10m
+      const baseGeometryHeight = 5; // Trunk geometry base height
+      const scaleValue = treeHeight / baseGeometryHeight;
       scale.set(scaleValue, scaleValue, scaleValue);
 
       // Build matrix
