@@ -6,6 +6,16 @@ import { useEffect } from 'react';
 import * as THREE from 'three';
 import * as SunCalc from 'suncalc';
 import type { Map as MapLibreMap } from 'maplibre-gl';
+import type { Feature, Point } from 'geojson';
+
+interface TreeFeature extends Feature<Point> {
+  properties: {
+    id: string;
+    height_m: number;
+    girth_cm: number;
+    canopy_dia_m: number;
+  };
+}
 
 interface SimpleShadowCanvasProps {
   map: MapLibreMap;
@@ -13,10 +23,11 @@ interface SimpleShadowCanvasProps {
   latitude?: number;
   longitude?: number;
   dateTime?: Date;
+  treeData?: TreeFeature[] | null;
 }
 
-export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude = 73.8567, dateTime }: SimpleShadowCanvasProps) {
-  console.log('🎯 [SimpleShadowCanvas] Render - enabled:', enabled);
+export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude = 73.8567, dateTime, treeData }: SimpleShadowCanvasProps) {
+  console.log('🎯 [SimpleShadowCanvas] Render - enabled:', enabled, 'trees:', treeData?.length || 0);
 
   useEffect(() => {
     if (!enabled) {
@@ -119,39 +130,90 @@ export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude
 
     console.log('🌍 [SimpleShadowCanvas] Ground plane added');
 
-    // Add demo shadow-casting objects (API doesn't exist yet)
-    // TODO: Integrate with real tree data from MapLibre layer
-    
-    // Add a grid of trees for testing
-    for (let x = -100; x <= 100; x += 30) {
-      for (let z = -100; z <= 100; z += 30) {
+    // Add real tree data if available, otherwise demo grid
+    if (treeData && treeData.length > 0) {
+      console.log(`🌳 [SimpleShadowCanvas] Adding ${treeData.length} real trees`);
+      
+      treeData.forEach((tree) => {
+        const { height_m, girth_cm, canopy_dia_m } = tree.properties;
+        const [lng, lat] = tree.geometry.coordinates;
+        
+        if (!height_m || !girth_cm || !canopy_dia_m || height_m <= 0) return;
+        
+        // Convert lat/lng to scene coordinates (simplified - just use relative positioning)
+        // For more accurate projection, we'd need to match MapLibre's projection
+        const x = (lng - longitude) * 111320 * Math.cos(latitude * Math.PI / 180); // meters
+        const z = -(lat - latitude) * 110540; // meters (negative Z = north)
+        
+        // Skip trees too far from center
+        if (Math.abs(x) > 500 || Math.abs(z) > 500) return;
+        
         // Tree trunk
-        const trunkGeometry = new THREE.CylinderGeometry(2, 2, 15, 8);
+        const trunkRadiusM = Math.max(0.15, (girth_cm / 100) / (2 * Math.PI));
+        const trunkHeight = Math.min(height_m * 0.3, 4);
+        
+        const trunkGeometry = new THREE.CylinderGeometry(trunkRadiusM, trunkRadiusM, trunkHeight, 8);
         const trunkMaterial = new THREE.MeshStandardMaterial({ 
           color: 0x4a3520,
           metalness: 0,
           roughness: 0.9
         });
         const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-        trunk.position.set(x, 7.5, z);
+        trunk.position.set(x, trunkHeight / 2, z);
         trunk.castShadow = true;
         scene.add(trunk);
         
         // Tree canopy
-        const canopyGeometry = new THREE.SphereGeometry(8, 16, 16);
+        const canopyRadiusM = canopy_dia_m / 2;
+        const canopyHeight = height_m - trunkHeight;
+        
+        const canopyGeometry = new THREE.SphereGeometry(canopyRadiusM, 16, 16);
         const canopyMaterial = new THREE.MeshStandardMaterial({
           color: 0x228b22,
           metalness: 0,
           roughness: 0.8
         });
         const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
-        canopy.position.set(x, 18, z);
+        canopy.position.set(x, trunkHeight + canopyHeight * 0.5, z);
         canopy.castShadow = true;
         scene.add(canopy);
+      });
+      
+      console.log(`✅ [SimpleShadowCanvas] ${treeData.length} real trees added`);
+    } else {
+      // Fallback demo grid if no tree data
+      console.log('🌳 [SimpleShadowCanvas] No tree data - adding demo grid');
+      
+      for (let x = -100; x <= 100; x += 30) {
+        for (let z = -100; z <= 100; z += 30) {
+          // Tree trunk
+          const trunkGeometry = new THREE.CylinderGeometry(2, 2, 15, 8);
+          const trunkMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x4a3520,
+            metalness: 0,
+            roughness: 0.9
+          });
+          const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+          trunk.position.set(x, 7.5, z);
+          trunk.castShadow = true;
+          scene.add(trunk);
+          
+          // Tree canopy
+          const canopyGeometry = new THREE.SphereGeometry(8, 16, 16);
+          const canopyMaterial = new THREE.MeshStandardMaterial({
+            color: 0x228b22,
+            metalness: 0,
+            roughness: 0.8
+          });
+          const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
+          canopy.position.set(x, 18, z);
+          canopy.castShadow = true;
+          scene.add(canopy);
+        }
       }
+      
+      console.log('🌳 [SimpleShadowCanvas] Added demo tree grid');
     }
-    
-    console.log('🌳 [SimpleShadowCanvas] Added demo tree grid');
 
     // Skip API fetch for now - API endpoint doesn't exist
     /*
@@ -247,7 +309,7 @@ export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude
       canvas.remove();
       renderer.dispose();
     };
-  }, [map, enabled, latitude, longitude, dateTime]);
+  }, [map, enabled, latitude, longitude, dateTime, treeData]);
 
   return null; // No JSX - we create canvas manually
 }
