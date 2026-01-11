@@ -17,7 +17,8 @@ import DrawControl, { DrawEvent, DrawActionEvent } from './DrawControl';
 import MapboxDraw from 'maplibre-gl-draw';
 import ViewModeToggle from './ViewModeToggle';
 import ThreeDTreesLayer from './ThreeDTreesLayer';
-import { ShadowOverlay } from './ShadowOverlay';
+// import { ShadowOverlay } from './ShadowOverlay'; // COMMENTED OUT - OLD APPROACH WITH REF ISSUES
+import { SimpleShadowCanvas } from './SimpleShadowCanvas'; // NEW: Simple, working shadow implementation
 import { LightConfig } from '../sidebar/tabs/LightAndShadowControl';
 import { ShadowQuality } from '../sidebar/tabs/MapLayers';
 
@@ -366,14 +367,21 @@ const MapView: React.FC<MapViewProps> = ({
           />
         )}
         
-        {/* Overlay Three.js realistic shadows ON TOP of MapLibre trees when enabled */}
-        {/* NEW ARCHITECTURE: Separate canvas overlay - no custom layer, no React lifecycle issues */}
+        {/* NEW SIMPLE SHADOW IMPLEMENTATION - Creates canvas directly in DOM, bypasses all React issues */}
         {mapRef.current && (
+          <SimpleShadowCanvas
+            map={mapRef.current.getMap()}
+            enabled={is3D && shadowsEnabled}
+          />
+        )}
+
+        {/* OLD SHADOW OVERLAY - COMMENTED OUT DUE TO REF PERSISTENCE ISSUES */}
+        {/* {mapRef.current && (
           <ShadowOverlay
             map={mapRef.current.getMap()}
             enabled={is3D && shadowsEnabled}
             shadowQuality={shadowQuality === 'ultra' ? 'high' : (shadowQuality as 'low' | 'medium' | 'high' || 'high')}
-            latitude={18.5204} // Pune, India
+            latitude={18.5204}
             longitude={73.8567}
             dateTime={lightConfig?.dateTime || (() => {
               const date = new Date();
@@ -381,7 +389,7 @@ const MapView: React.FC<MapViewProps> = ({
               return date;
             })()}
           />
-        )}
+        )} */}
 
         <DrawControl
           ref={drawControlRef as any}
