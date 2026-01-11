@@ -115,8 +115,8 @@ export class LightingManager {
     // 600m altitude is roughly 1.5e-5 units.
     
     // Frustum Size: Needs to cover the viewable city block. 
-    // 0.005 is roughly ~20km, which is safe for Pune level views.
-    const frustumSize = 0.005; 
+    // 0.0005 is roughly ~2km, which provides much sharper shadows for city views.
+    const frustumSize = 0.0005; 
     
     light.shadow.camera.left = -frustumSize;
     light.shadow.camera.right = frustumSize;
@@ -130,13 +130,13 @@ export class LightingManager {
     light.shadow.camera.far = 2.0;   // Covers entire depth range (0 to 1+)
     
     // Shadow bias (prevents shadow acne)
-    light.shadow.bias = -0.001;
-    light.shadow.normalBias = 0.02;
+    light.shadow.bias = -0.000001; // Tighter bias for tighter frustum
+    light.shadow.normalBias = 0.002;
     
     // Shadow radius (PCF soft shadows)
     light.shadow.radius = quality === 'ultra' ? 2 : 1;
     
-    console.log(`🔧 [LightingManager] Shadow quality: ${quality} (${shadowMapSize}px), frustum: ±${shadowCameraSize} Mercator units`);
+    console.log(`🔧 [LightingManager] Shadow quality: ${quality} (${shadowMapSize}px), frustum: ±${frustumSize} Mercator units`);
   }
   
   /**
