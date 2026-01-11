@@ -369,10 +369,11 @@ const MapView: React.FC<MapViewProps> = ({
         {/* Overlay Three.js realistic shadows ON TOP of MapLibre trees when enabled */}
         {/* The Three.js trees are semi-transparent (opacity 0.05) so they're invisible */}
         {/* but their SHADOWS are rendered, creating realistic shadow effects */}
-        {is3D && shadowsEnabled && mapRef.current && (
+        {/* CRITICAL FIX: Don't conditionally render - use enabled prop instead */}
+        {mapRef.current && (
           <RealisticShadowLayer
             map={mapRef.current.getMap()}
-            enabled={true}
+            enabled={is3D && shadowsEnabled}
             shadowQuality={shadowQuality || 'high'}
             maxVisibleTrees={5000}
             latitude={18.5204} // Pune, India
