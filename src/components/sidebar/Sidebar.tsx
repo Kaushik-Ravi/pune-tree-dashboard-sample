@@ -8,6 +8,9 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Github,
+  Linkedin,
+  Globe,
 } from 'lucide-react';
 import CityOverview from './tabs/CityOverview';
 import TreeDetails from './tabs/TreeDetails';
@@ -155,7 +158,44 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
         <button onClick={() => scrollTabs('right')} className="hidden md:block absolute right-0 top-1/2 -translate-y-1/2 z-20 p-2 text-gray-500 hover:text-gray-800" aria-label="Scroll tabs right"><ChevronRight size={20} /></button>
       </div>
 
-      <div className="sidebar-content-area p-4">{renderTabContent()}</div>
+      <div className="sidebar-content-area p-4 flex-1 overflow-y-auto">{renderTabContent()}</div>
+
+      {/* Creator Attribution - Fixed at Bottom */}
+      <div className="border-t border-gray-200 bg-gray-50 p-3 text-xs text-gray-500 flex justify-between items-center z-20">
+        <div className="flex items-center space-x-1">
+          <span>Built by</span>
+          <a 
+            href="https://www.kaushikravi.tech/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="font-medium text-gray-700 hover:text-primary-600 transition-colors flex items-center gap-1"
+          >
+            Kaushik
+            <Globe size={12} className="inline opacity-0 md:group-hover:opacity-100 transition-opacity" />
+          </a>
+        </div>
+        
+        <div className="flex items-center space-x-3">
+          <a 
+            href="https://github.com/Kaushik-Ravi" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-gray-900 transition-colors"
+            title="GitHub"
+          >
+            <Github size={14} />
+          </a>
+          <a 
+            href="https://www.linkedin.com/in/kaushik2002/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-blue-600 transition-colors"
+            title="LinkedIn"
+          >
+            <Linkedin size={14} />
+          </a>
+        </div>
+      </div>
     </div>
   );
 });
