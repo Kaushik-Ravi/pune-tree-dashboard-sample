@@ -36,7 +36,7 @@ export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude
     canvas.style.height = '100%';
     canvas.style.pointerEvents = 'none';
     canvas.style.zIndex = '1';
-    canvas.style.border = '3px solid lime'; // DEBUG: Bright green border
+    // canvas.style.border = '3px solid lime'; // DEBUG: Bright green border (REMOVED - working now)
 
     // Append to map container
     const mapContainer = map.getContainer();
@@ -89,7 +89,7 @@ export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude
 
     // Add lights
     const sunLight = new THREE.DirectionalLight(0xffffff, Math.max(intensity, 0.5));
-    sunLight.position.set(200, 300, 200);
+    sunLight.position.set(sunX, sunY, sunZ);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
@@ -102,7 +102,12 @@ export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude
     scene.add(sunLight);
     scene.add(new THREE.AmbientLight(0x404040, 0.3));
 
-    console.log('☀️ [SimpleShadowCanvas] Lights added');
+    console.log('☀️ [SimpleShadowCanvas] Sun synced:', {
+      time: currentDateTime.toLocaleTimeString(),
+      altitude: (altitude * 180 / Math.PI).toFixed(1) + '°',
+      intensity: sunLight.intensity.toFixed(2),
+      position: [sunX.toFixed(0), sunY.toFixed(0), sunZ.toFixed(0)]
+    });
 
     // Add ground plane
     const groundGeometry = new THREE.PlaneGeometry(3000, 3000);
@@ -114,6 +119,42 @@ export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude
 
     console.log('🌍 [SimpleShadowCanvas] Ground plane added');
 
+    // Add demo shadow-casting objects (API doesn't exist yet)
+    // TODO: Integrate with real tree data from MapLibre layer
+    
+    // Add a grid of trees for testing
+    for (let x = -100; x <= 100; x += 30) {
+      for (let z = -100; z <= 100; z += 30) {
+        // Tree trunk
+        const trunkGeometry = new THREE.CylinderGeometry(2, 2, 15, 8);
+        const trunkMaterial = new THREE.MeshStandardMaterial({ 
+          color: 0x4a3520,
+          metalness: 0,
+          roughness: 0.9
+        });
+        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+        trunk.position.set(x, 7.5, z);
+        trunk.castShadow = true;
+        scene.add(trunk);
+        
+        // Tree canopy
+        const canopyGeometry = new THREE.SphereGeometry(8, 16, 16);
+        const canopyMaterial = new THREE.MeshStandardMaterial({
+          color: 0x228b22,
+          metalness: 0,
+          roughness: 0.8
+        });
+        const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
+        canopy.position.set(x, 18, z);
+        canopy.castShadow = true;
+        scene.add(canopy);
+      }
+    }
+    
+    console.log('🌳 [SimpleShadowCanvas] Added demo tree grid');
+
+    // Skip API fetch for now - API endpoint doesn't exist
+    /*
     // Fetch and add real trees
     const fetchTrees = async () => {
       try {
@@ -174,20 +215,6 @@ export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude
     fetchTrees();
 
     // Remove test cube - we have real trees now!
-    /*
-    // Add GIANT RED CUBE for testing
-    const cubeGeometry = new THREE.BoxGeometry(80, 80, 80);
-    const cubeMaterial = new THREE.MeshStandardMaterial({
-      color: 0xff0000,
-      metalness: 0,
-      roughness: 1,
-    });
-    const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-    cube.position.set(0, 40, 0);
-    cube.castShadow = true;
-    scene.add(cube);
-
-    console.log('🧊 [SimpleShadowCanvas] GIANT RED CUBE added');
     */
 
     // Render
