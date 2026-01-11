@@ -128,6 +128,7 @@ export class ShadowRenderingManager {
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       
       // CRITICAL: Set clear color to fully transparent
+      // This fixes the "bleaching" / white screen issue
       this.renderer.setClearColor(0x000000, 0.0);
       
       console.log('✅ [ShadowRenderingManager] WebGL renderer initialized (transparent overlay mode)');
@@ -365,9 +366,12 @@ export class ShadowRenderingManager {
     }
     
     // Create new ground plane
+    // CRITICAL: Explicitly set shadowOnly to true for transparent overlay
     this.groundPlane = createGroundPlane(bounds, {
-      color: '#f0f0f0',
-      receiveShadow: true
+      color: '#000000', // Set to black so if it fails to transparency, it's not blinding white
+      receiveShadow: true,
+      shadowOnly: true,
+      opacity: 0.5
     });
     
     if (this.groundPlane) {

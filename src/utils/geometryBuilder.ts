@@ -210,9 +210,16 @@ export const createGroundPlane = (
   options: {
     color?: string;
     receiveShadow?: boolean;
+    opacity?: number;
+    shadowOnly?: boolean;
   } = {}
 ): THREE.Mesh => {
-  const { color = '#f0f0f0', receiveShadow = true } = options;
+  const { 
+    color = '#000000', 
+    receiveShadow = true, 
+    opacity = 0.5,
+    shadowOnly = true // Default to transparency for map overlays
+  } = options;
   
   // Convert bounds to world space
   const swPos = geoToWorld(bounds.sw[0], bounds.sw[1], 0);
@@ -224,14 +231,29 @@ export const createGroundPlane = (
   // Create high-resolution plane for shadow quality
   const geometry = new THREE.PlaneGeometry(width, height, 128, 128);
   
-  const material = new THREE.MeshStandardMaterial({
-    color: color,
-    roughness: 0.95,
-    metalness: 0.0,
-    side: THREE.DoubleSide, // Render both sides for safety
-    emissive: 0x000000,
-    emissiveIntensity: 0.0,
-  });
+  let material: THREE.Material;
+
+  if (shadowOnly) {
+    // CRITICAL: Use ShadowMaterial for transparent overlay
+    // This allows the map to show through while still receiving shadows
+    console.log('🌑 [geometryBuilder] Creating transparent ShadowMaterial ground plane');
+    material = new THREE.ShadowMaterial({
+      color: new THREE.Color(0x000000), // Force black shadows
+      opacity: opacity,
+      side: THREE.DoubleSide
+    });
+  } else {
+    // Legacy/Debug mode: Opaque plane
+    console.log('⬜ [geometryBuilder] Creating OPAQUE MeshStandardMaterial ground plane (Legacy/Debug)');
+    material = new THREE.MeshStandardMaterial({
+      color: color,
+      roughness: 0.95,
+      metalness: 0.0,
+      side: THREE.DoubleSide,
+      emissive: 0x000000,
+      emissiveIntensity: 0.0,
+    });
+  }
   
   const plane = new THREE.Mesh(geometry, material);
   plane.receiveShadow = receiveShadow;

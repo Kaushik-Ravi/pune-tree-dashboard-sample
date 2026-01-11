@@ -344,7 +344,7 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
         const firstArg = args[0];
         
         // Extract matrix based on MapLibre version
-        let matrix: number[] | Float64Array;
+        let matrix: number[] | Float64Array | Float32Array;
         if (Array.isArray(firstArg) || firstArg instanceof Float64Array || firstArg instanceof Float32Array) {
           // MapLibre v2 style: matrix directly passed
           matrix = firstArg;

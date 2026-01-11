@@ -13,6 +13,7 @@ export interface LightConfig {
     anchor?: 'map' | 'viewport';
   };
   ambientIntensity: number;
+  dateTime?: Date; // Added to sync realistic shadows
 }
 
 const PUNE_COORDS = { lat: 18.5204, lon: 73.8567 };
@@ -69,7 +70,8 @@ const EnvironmentControl: React.FC<EnvironmentControlProps> = ({ onLightChange, 
         intensity: directionalIntensity,
         color: '#fffee0' // Slight warm tint for sunlight
       },
-      ambientIntensity: ambientIntensity
+      ambientIntensity: ambientIntensity,
+      dateTime: newDate // Pass the calculated date/time
     };
     onLightChange(lightConfig);
   }, [onLightChange]);

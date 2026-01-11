@@ -377,8 +377,8 @@ const MapView: React.FC<MapViewProps> = ({
             maxVisibleTrees={5000}
             latitude={18.5204} // Pune, India
             longitude={73.8567}
-            dateTime={(() => {
-              // Set sun at 10 AM for good shadow visibility
+            dateTime={lightConfig?.dateTime || (() => {
+              // Fallback: Set sun at 10 AM for good shadow visibility
               const date = new Date();
               date.setHours(10, 0, 0, 0); // 10:00 AM local time
               return date;
