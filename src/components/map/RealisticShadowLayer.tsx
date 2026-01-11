@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import type { Map as MaplibreMap, CustomLayerInterface } from 'maplibre-gl';
+import type { Map as MaplibreMap, CustomLayerInterface, CustomRenderMethodInput } from 'maplibre-gl';
 import axios from 'axios';
 import { useRenderingManager } from '../../hooks/useRenderingManager';
 import { useSunPosition } from '../../hooks/useSunPosition';
@@ -332,37 +332,29 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
       type: 'custom',
       renderingMode: '3d',
 
-      onAdd: function (_mapInstance: MaplibreMap, _gl: WebGLRenderingContext) {
-        console.log('✅ [RealisticShadowLayer] Custom layer onAdd called');
+      onAdd: function (_mapInstance: MaplibreMap, gl: WebGLRenderingContext | WebGL2RenderingContext) {
+        console.log('✅✅✅ [RealisticShadowLayer] Custom layer onAdd() CALLED!', {
+          managerExists: !!managerRef,
+          isInitialized: isInitializedRef,
+          glContext: gl.constructor.name,
+          glVersion: gl.getParameter(gl.VERSION)
+        });
         // Manager is already initialized, no additional setup needed
       },
 
-      render: function (gl: WebGLRenderingContext, ...args: any[]) {
-        // CRITICAL: MapLibre v3 changed API!
-        // Old: render(gl, matrix: number[])
-        // New: render(gl, options: {modelViewProjectionMatrix: Float64Array, ...})
-        const firstArg = args[0];
-        
-        // Extract matrix based on MapLibre version
-        let matrix: number[] | Float64Array | Float32Array;
-        if (Array.isArray(firstArg) || firstArg instanceof Float64Array || firstArg instanceof Float32Array) {
-          // MapLibre v2 style: matrix directly passed
-          matrix = firstArg;
-        } else if (firstArg && firstArg.modelViewProjectionMatrix) {
-          // MapLibre v3 style: matrix inside options object
-          matrix = firstArg.modelViewProjectionMatrix;
-          console.log('🟢 [CustomLayer] render() CALLED! (MapLibre v3 API)', {
-            argsLength: args.length,
-            matrixType: matrix.constructor.name,
-            matrixLength: matrix.length
-          });
-        } else {
-          console.error('❌ [CustomLayer] render() called with unknown format!', {
-            typeof: typeof firstArg,
-            keys: firstArg ? Object.keys(firstArg) : []
-          });
-          return;
-        }
+      // CRITICAL FIX: MapLibre v5.6.1 API signature change!
+      // Old API (v2/v3): render(gl: WebGLRenderingContext, matrix: Float64Array)
+      // New API (v5+):    render(gl: WebGL2RenderingContext, options: CustomRenderMethodInput)
+      render: function (
+        gl: WebGLRenderingContext | WebGL2RenderingContext,
+        options: CustomRenderMethodInput
+      ) {
+        console.log('🟢🟢🟢 [CustomLayer] render() CALLED!', {
+          glContext: gl.constructor.name,
+          matrixLength: options.modelViewProjectionMatrix.length,
+          managerExists: !!managerRef,
+          isInitialized: isInitializedRef
+        });
         
         if (!managerRef) {
           console.error('❌ [CustomLayer] render() called but manager is null!');
@@ -373,8 +365,8 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
           return;
         }
         
-        // Convert Float64Array/Float32Array to regular array if needed
-        const matrixArray = Array.isArray(matrix) ? matrix : Array.from(matrix);
+        // Convert mat4 (tuple of 16 numbers) to array for manager
+        const matrixArray = Array.from(options.modelViewProjectionMatrix);
         managerRef.render(gl, matrixArray);
       },
 
