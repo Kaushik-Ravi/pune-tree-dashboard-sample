@@ -84,6 +84,10 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
     shadowQuality: props.shadowQuality
   });
   
+  // IMMEDIATE: Test if any code runs BEFORE hooks
+  const testVar = 'BEFORE_HOOKS_' + Date.now();
+  console.log('⚡⚡⚡ IMMEDIATE CODE RUNS:', testVar);
+  
   const {
     map,
     enabled = true,
@@ -97,11 +101,15 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
     onError,
     onPerformanceUpdate,
   } = props;
+  
+  console.log('⚡⚡⚡ AFTER DESTRUCTURING, BEFORE STATE');
 
   const [treeData, setTreeData] = useState<any[]>([]);
   const [buildingData, setBuildingData] = useState<any[]>([]);
   const customLayerIdRef = useRef<string>('realistic-shadows-layer');
   const isLayerAddedRef = useRef<boolean>(false);
+  
+  console.log('⚡⚡⚡ AFTER STATE/REFS, BEFORE USEEFFECTS');
   
   // NUCLEAR DEBUG: Track component mount/unmount
   useEffect(() => {
@@ -588,6 +596,12 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
       });
     }
   }, [isInitialized, enabled, shadowQuality, maxVisibleTrees, sunPosition]);
+
+  // Early return if disabled - no rendering needed
+  if (!enabled) {
+    console.log('⏸️ [RealisticShadowLayer] DISABLED - SKIPPING RENDER');
+    return null;
+  }
 
   // This is a controller component - no UI to render
   return null;
