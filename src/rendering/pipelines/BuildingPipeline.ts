@@ -151,12 +151,13 @@ export class BuildingPipeline {
       mesh.userData.buildingId = building.id;
       mesh.userData.buildingType = materialType;
       
-      // SHADOW RECEIVER MODE (Top 1% Trick):
-      // We want the original MapLibre buildings to be visible because they are high-res.
-      // We only want THESE Three.js buildings to catch shadows.
-      // So we make the material invisible, but keep the depth and shadow properties active.
-      mesh.material.colorWrite = false; // Don't draw pixels
-      mesh.material.depthWrite = false; // Don't write to depth buffer (lets MapLibre show through)
+      // SHADOW OVERLAY MODE:
+      // Make buildings semi-transparent so MapLibre's native buildings show through
+      // but Three.js buildings still cast shadows on ground and trees
+      const transparentMaterial = (material as THREE.MeshStandardMaterial).clone();
+      transparentMaterial.transparent = true;
+      transparentMaterial.opacity = 0.05; // Nearly invisible, shadows-only mode
+      mesh.material = transparentMaterial;
       
       // Add to scene
       this.scene.add(mesh);

@@ -115,8 +115,9 @@ export class LightingManager {
     // 600m altitude is roughly 1.5e-5 units.
     
     // Frustum Size: Needs to cover the viewable city block. 
-    // 0.0005 is roughly ~2km, which provides much sharper shadows for city views.
-    const frustumSize = 0.0005; 
+    // INCREASED from 0.0005 to 0.002 (~8km) to ensure shadows are visible
+    // at typical zoom levels (zoom 15-18 = ~1-4km viewport)
+    const frustumSize = 0.002; 
     
     light.shadow.camera.left = -frustumSize;
     light.shadow.camera.right = frustumSize;

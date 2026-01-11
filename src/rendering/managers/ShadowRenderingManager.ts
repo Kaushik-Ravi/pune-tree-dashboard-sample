@@ -129,7 +129,16 @@ export class ShadowRenderingManager {
       
       // CRITICAL: Set clear color to fully transparent
       // This fixes the "bleaching" / white screen issue
+      // Alpha MUST be 0 for transparent overlay
       this.renderer.setClearColor(0x000000, 0.0);
+      
+      // VERIFY transparency is working
+      console.log('🔧 [ShadowRenderingManager] Renderer configured:', {
+        autoClear: this.renderer.autoClear,
+        shadowMapEnabled: this.renderer.shadowMap.enabled,
+        clearColor: this.renderer.getClearColor(new THREE.Color()).getHexString(),
+        clearAlpha: this.renderer.getClearAlpha()
+      });
       
       console.log('✅ [ShadowRenderingManager] WebGL renderer initialized (transparent overlay mode)');
       
@@ -260,18 +269,43 @@ export class ShadowRenderingManager {
       // Log first successful render with scene details
       if (this.frameCount === 1) {
         const directionalLight = this.lightingManager?.getDirectionalLight();
+        const terrainGroup = this.sceneManager?.getGroup('terrain');
+        const groundPlane = terrainGroup?.children.find(c => c.userData.isGroundPlane);
+        
         console.log('✅ [ShadowRenderingManager] FIRST RENDER COMPLETE!', {
           sceneChildren: this.scene.children.length,
           shadowMapEnabled: this.renderer.shadowMap.enabled,
           shadowMapType: this.renderer.shadowMap.type,
+          rendererState: {
+            autoClear: this.renderer.autoClear,
+            clearAlpha: this.renderer.getClearAlpha(),
+          },
           directionalLight: {
             castShadow: directionalLight?.castShadow,
             shadowMapSize: directionalLight?.shadow.mapSize.width,
-            position: directionalLight?.position.toArray()
+            position: directionalLight?.position.toArray(),
+            intensity: directionalLight?.intensity,
+            shadowCamera: {
+              left: directionalLight?.shadow.camera.left,
+              right: directionalLight?.shadow.camera.right,
+              top: directionalLight?.shadow.camera.top,
+              bottom: directionalLight?.shadow.camera.bottom,
+              near: directionalLight?.shadow.camera.near,
+              far: directionalLight?.shadow.camera.far
+            }
           },
-          trees: this.sceneManager?.getGroup('trees')?.children.length || 0,
-          buildings: this.sceneManager?.getGroup('buildings')?.children.length || 0,
-          terrain: this.sceneManager?.getGroup('terrain')?.children.length || 0
+          sceneGroups: {
+            trees: this.sceneManager?.getGroup('trees')?.children.length || 0,
+            buildings: this.sceneManager?.getGroup('buildings')?.children.length || 0,
+            terrain: terrainGroup?.children.length || 0
+          },
+          groundPlane: groundPlane ? {
+            exists: true,
+            receiveShadow: groundPlane.receiveShadow,
+            visible: groundPlane.visible,
+            position: groundPlane.position.toArray(),
+            material: (groundPlane as THREE.Mesh).material ? ((groundPlane as THREE.Mesh).material as THREE.Material).type : 'unknown'
+          } : { exists: false }
         });
       }
       

@@ -391,6 +391,20 @@ export class TreeRenderPipeline {
     trunkMesh.userData.lodLevel = lodLevel;
     canopyMesh.userData.species = species;
     canopyMesh.userData.lodLevel = lodLevel;
+    
+    // Debug first creation
+    if (count > 0) {
+      console.log(`[TreePipeline] Created instanced meshes for ${species} at ${lodLevel} LOD:`, {
+        treeCount: count,
+        trunkCastShadow: trunkMesh.castShadow,
+        canopyCastShadow: canopyMesh.castShadow,
+        trunkOpacity: (trunkMesh.material as THREE.MeshStandardMaterial).opacity,
+        canopyOpacity: (canopyMesh.material as THREE.MeshStandardMaterial).opacity,
+        trunkTransparent: (trunkMesh.material as THREE.MeshStandardMaterial).transparent,
+        canopyTransparent: (canopyMesh.material as THREE.MeshStandardMaterial).transparent,
+        samplePosition: trees[0]?.position.toArray()
+      });
+    }
 
     return { trunkMesh, canopyMesh };
   }

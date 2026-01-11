@@ -52,9 +52,10 @@ export class TerrainPipeline {
   // Configuration - IMPORTANT: Using Mercator coordinate units (0-1 for entire world)
   // At Pune latitude (~18.5°), 1 meter ≈ 2.6e-8 Mercator units
   // So 10km ground plane = 10000m × 2.6e-8 ≈ 0.00026 Mercator units
-  // For visibility, we use a much larger plane in Mercator space: 0.01 units ≈ 400km at equator
-  private groundSize = 0.01; // 0.01 Mercator units (~400km at equator, ~380km at Pune)
-  private groundSegments = 100; // Grid resolution
+  // INCREASED to 0.05 Mercator units (~2000km) for comprehensive shadow coverage
+  // This ensures shadows are visible even when zoomed out
+  private groundSize = 0.05; // Was 0.01, now 0.05 for better coverage
+  private groundSegments = 128; // Increased from 100 for smoother shadows
 
   constructor(scene: THREE.Scene, _camera: THREE.Camera) {
     this.scene = scene;
@@ -102,7 +103,16 @@ export class TerrainPipeline {
     // Add to scene
     this.scene.add(this.groundPlane);
 
-    console.log('[TerrainPipeline] Ground plane created');
+    console.log('[TerrainPipeline] Ground plane created', {
+      size: this.groundSize,
+      segments: this.groundSegments,
+      receiveShadow: this.groundPlane.receiveShadow,
+      castShadow: this.groundPlane.castShadow,
+      position: this.groundPlane.position.toArray(),
+      material: Array.isArray(this.groundPlane.material) ? 'Array' : (this.groundPlane.material as THREE.Material).type,
+      materialOpacity: (this.groundPlane.material as THREE.ShadowMaterial).opacity,
+      visible: this.groundPlane.visible
+    });
   }
 
   /**
