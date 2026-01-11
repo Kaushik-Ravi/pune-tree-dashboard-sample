@@ -111,15 +111,23 @@ export class LightingManager {
     
     // CRITICAL: Shadow camera must use MERCATOR UNITS, not meters!
     // We're rendering in Mercator coordinate space (0-1 for entire world)
-    // At Pune (18.52°), 500m ≈ 1.3e-5 Mercator units (microscopic!)
-    // Instead, use 0.01 Mercator units (~400km at equator) to cover city area
-    const shadowCameraSize = 0.01; // 0.01 Mercator units (~400km coverage)
-    light.shadow.camera.left = -shadowCameraSize;
-    light.shadow.camera.right = shadowCameraSize;
-    light.shadow.camera.top = shadowCameraSize;
-    light.shadow.camera.bottom = -shadowCameraSize;
-    light.shadow.camera.near = 0.5;
-    light.shadow.camera.far = 0.1; // 0.1 Mercator units far plane
+    // For Mercator Z (altitude), 1 unit = World Circumference.
+    // 600m altitude is roughly 1.5e-5 units.
+    
+    // Frustum Size: Needs to cover the viewable city block. 
+    // 0.005 is roughly ~20km, which is safe for Pune level views.
+    const frustumSize = 0.005; 
+    
+    light.shadow.camera.left = -frustumSize;
+    light.shadow.camera.right = frustumSize;
+    light.shadow.camera.top = frustumSize;
+    light.shadow.camera.bottom = -frustumSize;
+    
+    // Near/Far planes: Must be valid ranges for Mercator Z
+    // Near: Close to the light source (which we place "high up" relatively)
+    // Far: Must reach past the ground.
+    light.shadow.camera.near = 1e-6; // Very close to light
+    light.shadow.camera.far = 2.0;   // Covers entire depth range (0 to 1+)
     
     // Shadow bias (prevents shadow acne)
     light.shadow.bias = -0.001;
@@ -170,11 +178,18 @@ export class LightingManager {
     if (config.castShadow !== undefined) {
       this.directionalLight.castShadow = config.castShadow;
     }
+
+    // DYNAMIC TARGET TRACKING:
+    // Instead of hardcoding to Pune center, we should ideally track the camera center.
+    // For now, we update the target to match the light's X/Z but at ground level (Y=0)
+    // This ensures the light always points "down" relative to its new position.
     
-    // CRITICAL: Update shadow camera to point at scene center in Mercator space
-    // Pune is at approximately [0.705, 0, -0.448] in Mercator coordinates
-    // Point the light target at this location for proper shadow coverage
-    this.directionalLight.target.position.set(0.705, 0, -0.448);
+    const lightPos = this.directionalLight.position;
+    this.directionalLight.target.position.set(
+        lightPos.x, 
+        0, // Always look at ground level
+        lightPos.z
+    );
     this.directionalLight.target.updateMatrixWorld();
     
     console.log('☀️ [LightingManager] Sun updated', {
