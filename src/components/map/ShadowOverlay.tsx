@@ -30,14 +30,15 @@ export function ShadowOverlay(props: ShadowOverlayProps) {
   const cameraRef = useRef<THREE.PerspectiveCamera>();
   const rendererRef = useRef<THREE.WebGLRenderer>();
   const animationFrameRef = useRef<number>();
+  const initializedRef = useRef(false);
   
   console.log('🎨 [ShadowOverlay] Component rendering:', { enabled, shadowQuality });
 
-  // Initialize Three.js scene
-  useEffect(() => {
-    if (!canvasRef.current || !enabled) return;
+  // FORCE IMMEDIATE INITIALIZATION - NO WAITING FOR useEffect
+  const initializeScene = (canvas: HTMLCanvasElement) => {
+    if (initializedRef.current || !enabled) return;
     
-    console.log('🚀 [ShadowOverlay] Initializing Three.js scene');
+    console.log('🚀 [ShadowOverlay] IMMEDIATE INITIALIZATION - NO useEffect!');
 
     // Get map container dimensions
     const mapContainer = map.getContainer();
@@ -103,21 +104,10 @@ export function ShadowOverlay(props: ShadowOverlayProps) {
     ground.receiveShadow = true;
     scene.add(ground);
 
-    console.log('✅ [ShadowOverlay] Three.js scene initialized');
+    initializedRef.current = true;
+    console.log('✅ [ShadowOverlay] Three.js scene initialized IMMEDIATELY');
 
-    return () => {
-      console.log('🧹 [ShadowOverlay] Cleaning up Three.js scene');
-      renderer.dispose();
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [map, enabled, shadowQuality]);
-
-  // Sync camera with MapLibre on every map move/zoom
-  useEffect(() => {
-    if (!map || !enabled || !cameraRef.current || !sceneRef.current || !rendererRef.current) return;
-
+    // Start render loop IMMEDIATELY
     const updateCamera = () => {
       const camera = cameraRef.current!;
       const scene = sceneRef.current!;
@@ -164,37 +154,23 @@ export function ShadowOverlay(props: ShadowOverlayProps) {
 
     // Continuous render loop (for shadow animations, tree sway, etc.)
     const animate = () => {
+      uContinuous render loop (for shadow animations, tree sway, etc.)
+    const animate = () => {
       updateCamera();
       animationFrameRef.current = requestAnimationFrame(animate);
     };
+    
+    // Start loop
     animate();
+    
+    // Listen to map events
+    map.on('move', updateCamera);
+    map.on('zoom', updateCamera);
+    map.on('rotate', updateCamera);
+    map.on('pitch', updateCamera);
 
-    console.log('🔄 [ShadowOverlay] Camera sync and render loop started');
-
-    return () => {
-      map.off('move', updateCamera);
-      map.off('zoom', updateCamera);
-      map.off('rotate', updateCamera);
-      map.off('pitch', updateCamera);
-      
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-      
-      console.log('🛑 [ShadowOverlay] Camera sync stopped');
-    };
-  }, [map, enabled]);
-
-  if (!enabled) {
-    return null;
+    console.log('🔄 [ShadowOverlay] Render loop STARTED - NO useEffect delay!');
   }
-
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        position: 'absolute',
-        top: 0,
         left: 0,
         width: '100%',
         height: '100%',
@@ -204,3 +180,10 @@ export function ShadowOverlay(props: ShadowOverlayProps) {
     />
   );
 }
+(canvas) => {
+        if (canvas && !initializedRef.current) {
+          canvasRef.current = canvas;
+          console.log('📦 [ShadowOverlay] Canvas ref callback - initializing NOW!');
+          initializeScene(canvas);
+        }
+      }
