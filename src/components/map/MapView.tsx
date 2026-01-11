@@ -17,7 +17,6 @@ import DrawControl, { DrawEvent, DrawActionEvent } from './DrawControl';
 import MapboxDraw from 'maplibre-gl-draw';
 import ViewModeToggle from './ViewModeToggle';
 import ThreeDTreesLayer from './ThreeDTreesLayer';
-import { RealisticShadowLayer } from './RealisticShadowLayer';
 import { ShadowOverlay } from './ShadowOverlay';
 import { LightConfig } from '../sidebar/tabs/LightAndShadowControl';
 import { ShadowQuality } from '../sidebar/tabs/MapLayers';
@@ -373,7 +372,7 @@ const MapView: React.FC<MapViewProps> = ({
           <ShadowOverlay
             map={mapRef.current.getMap()}
             enabled={is3D && shadowsEnabled}
-            shadowQuality={shadowQuality || 'high'}
+            shadowQuality={shadowQuality === 'ultra' ? 'high' : (shadowQuality as 'low' | 'medium' | 'high' || 'high')}
             latitude={18.5204} // Pune, India
             longitude={73.8567}
             dateTime={lightConfig?.dateTime || (() => {
