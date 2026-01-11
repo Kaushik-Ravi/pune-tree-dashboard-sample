@@ -18,6 +18,7 @@ import MapboxDraw from 'maplibre-gl-draw';
 import ViewModeToggle from './ViewModeToggle';
 import ThreeDTreesLayer from './ThreeDTreesLayer';
 import { RealisticShadowLayer } from './RealisticShadowLayer';
+import { ShadowOverlay } from './ShadowOverlay';
 import { LightConfig } from '../sidebar/tabs/LightAndShadowControl';
 import { ShadowQuality } from '../sidebar/tabs/MapLayers';
 
@@ -367,29 +368,19 @@ const MapView: React.FC<MapViewProps> = ({
         )}
         
         {/* Overlay Three.js realistic shadows ON TOP of MapLibre trees when enabled */}
-        {/* The Three.js trees are semi-transparent (opacity 0.05) so they're invisible */}
-        {/* but their SHADOWS are rendered, creating realistic shadow effects */}
-        {/* CRITICAL FIX: Don't conditionally render - use enabled prop instead */}
+        {/* NEW ARCHITECTURE: Separate canvas overlay - no custom layer, no React lifecycle issues */}
         {mapRef.current && (
-          <RealisticShadowLayer
+          <ShadowOverlay
             map={mapRef.current.getMap()}
             enabled={is3D && shadowsEnabled}
             shadowQuality={shadowQuality || 'high'}
-            maxVisibleTrees={5000}
             latitude={18.5204} // Pune, India
             longitude={73.8567}
             dateTime={lightConfig?.dateTime || (() => {
-              // Fallback: Set sun at 10 AM for good shadow visibility
               const date = new Date();
-              date.setHours(10, 0, 0, 0); // 10:00 AM local time
+              date.setHours(10, 0, 0, 0);
               return date;
             })()}
-            onPerformanceUpdate={(fps) => {
-              // Optional: handle performance metrics
-              if (fps < 30) {
-                console.warn('Low FPS detected:', fps);
-              }
-            }}
           />
         )}
 
