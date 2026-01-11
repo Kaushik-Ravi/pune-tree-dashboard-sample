@@ -317,10 +317,36 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
    * This is CRITICAL - without this, the render() method never gets called!
    */
   useEffect(() => {
-    if (!map || !manager || !isInitialized || !enabled) return;
-    if (isLayerAddedRef.current) return;
+    console.log('🔥🔥🔥 [RealisticShadowLayer] useEffect TRIGGERED for custom layer', {
+      map: !!map,
+      manager: !!manager,
+      isInitialized,
+      enabled,
+      isLayerAddedRef: isLayerAddedRef.current
+    });
+    
+    if (!map) {
+      console.warn('⚠️ [RealisticShadowLayer] Skipping layer add: no map');
+      return;
+    }
+    if (!manager) {
+      console.warn('⚠️ [RealisticShadowLayer] Skipping layer add: no manager');
+      return;
+    }
+    if (!isInitialized) {
+      console.warn('⚠️ [RealisticShadowLayer] Skipping layer add: not initialized');
+      return;
+    }
+    if (!enabled) {
+      console.warn('⚠️ [RealisticShadowLayer] Skipping layer add: not enabled');
+      return;
+    }
+    if (isLayerAddedRef.current) {
+      console.warn('⚠️ [RealisticShadowLayer] Skipping layer add: already added');
+      return;
+    }
 
-    console.log('🎨 [RealisticShadowLayer] Adding custom layer to MapLibre');
+    console.log('🎨🎨🎨 [RealisticShadowLayer] ALL CHECKS PASSED - Adding custom layer to MapLibre!');
 
     // CRITICAL: Store manager reference that won't change
     const managerRef = manager;
@@ -377,22 +403,51 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
     };
 
     try {
+      console.log('🚀 [RealisticShadowLayer] About to call map.addLayer()...', {
+        customLayerId: customLayer.id,
+        customLayerType: customLayer.type,
+        renderingMode: customLayer.renderingMode,
+        hasOnAdd: typeof customLayer.onAdd === 'function',
+        hasRender: typeof customLayer.render === 'function'
+      });
+      
       // Add custom layer to map
       map.addLayer(customLayer);
       isLayerAddedRef.current = true;
-      console.log('✅ [RealisticShadowLayer] Custom layer added successfully');
       
-      // DEBUG: Verify layer was added
+      console.log('✅✅✅ [RealisticShadowLayer] map.addLayer() completed successfully!');
+      
+      // IMMEDIATE verification (not delayed)
+      const layer = map.getLayer(customLayerIdRef.current);
+      console.log('🔍🔍🔍 [RealisticShadowLayer] IMMEDIATE Layer verification:', {
+        layerExists: !!layer,
+        layerId: customLayerIdRef.current,
+        layerType: layer ? (layer as any).type : 'N/A',
+        allLayerIds: map.getStyle()?.layers?.map(l => l.id) || []
+      });
+      
+      // Also verify after a short delay
       setTimeout(() => {
-        const layer = map.getLayer(customLayerIdRef.current);
-        console.log('🔍 [RealisticShadowLayer] Layer verification:', {
-          layerExists: !!layer,
-          layerId: customLayerIdRef.current,
-          allLayers: map.getStyle()?.layers?.map(l => l.id) || []
+        const delayedLayer = map.getLayer(customLayerIdRef.current);
+        console.log('🔍 [RealisticShadowLayer] DELAYED Layer verification (100ms):', {
+          layerExists: !!delayedLayer,
+          layerId: customLayerIdRef.current
         });
+        
+        // Force a map repaint to trigger render()
+        console.log('🔄 [RealisticShadowLayer] Forcing map repaint...');
+        map.triggerRepaint();
       }, 100);
+      
+      // Also force immediate repaint
+      console.log('🔄 [RealisticShadowLayer] Forcing IMMEDIATE map repaint...');
+      map.triggerRepaint();
     } catch (err) {
-      console.error('❌ [RealisticShadowLayer] Failed to add custom layer:', err);
+      console.error('❌❌❌ [RealisticShadowLayer] FAILED to add custom layer:', err);
+      console.error('❌ Error details:', {
+        message: (err as Error).message,
+        stack: (err as Error).stack
+      });
       if (onError) onError(err as Error);
     }
 
