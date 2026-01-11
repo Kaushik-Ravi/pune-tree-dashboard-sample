@@ -6,7 +6,7 @@
  */
 
 import { useRef } from 'react';
-import * THREE from 'three';
+import * as THREE from 'three';
 import { MercatorCoordinate } from 'maplibre-gl';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
