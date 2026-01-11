@@ -367,11 +367,18 @@ const MapView: React.FC<MapViewProps> = ({
           />
         )}
         
-        {/* NEW SIMPLE SHADOW IMPLEMENTATION - Creates canvas directly in DOM, bypasses all React issues */}
+        {/* NEW SIMPLE SHADOW IMPLEMENTATION - Working with real trees and time-synced sun! */}
         {mapRef.current && (
           <SimpleShadowCanvas
             map={mapRef.current.getMap()}
             enabled={is3D && shadowsEnabled}
+            dateTime={lightConfig?.dateTime || (() => {
+              const date = new Date();
+              date.setHours(10, 0, 0, 0);
+              return date;
+            })()}
+            latitude={18.5204} // Pune, India
+            longitude={73.8567}
           />
         )}
 
