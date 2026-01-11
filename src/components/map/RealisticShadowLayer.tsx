@@ -78,6 +78,12 @@ export interface RealisticShadowLayerProps {
  * ```
  */
 export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
+  console.log('🎬🎬🎬 [RealisticShadowLayer] COMPONENT RENDERING!', {
+    enabled: props.enabled,
+    hasMap: !!props.map,
+    shadowQuality: props.shadowQuality
+  });
+  
   const {
     map,
     enabled = true,
@@ -96,6 +102,27 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
   const [buildingData, setBuildingData] = useState<any[]>([]);
   const customLayerIdRef = useRef<string>('realistic-shadows-layer');
   const isLayerAddedRef = useRef<boolean>(false);
+  
+  // NUCLEAR DEBUG: Track component mount/unmount
+  useEffect(() => {
+    console.log('🎬 [RealisticShadowLayer] COMPONENT MOUNTED!');
+    return () => {
+      console.log('💀 [RealisticShadowLayer] COMPONENT UNMOUNTING!');
+    };
+  }, []);
+  
+  // NUCLEAR DEBUG: Track enabled state changes
+  useEffect(() => {
+    console.log('🔘 [RealisticShadowLayer] ENABLED STATE CHANGED:', enabled);
+  }, [enabled]);
+  
+  // NUCLEAR DEBUG: Track map state changes
+  useEffect(() => {
+    console.log('🗺️ [RealisticShadowLayer] MAP STATE CHANGED:', {
+      hasMap: !!map,
+      mapLoaded: map ? map.loaded() : false
+    });
+  }, [map]);
 
   // DEBUG: Log the dateTime prop to verify what time is being used
   console.log('🕐 [RealisticShadowLayer] DateTime prop:', dateTime, 'Hours:', dateTime.getHours());
@@ -136,6 +163,16 @@ export function RealisticShadowLayer(props: RealisticShadowLayerProps) {
     autoInitialize: true,
     enabled,
   });
+  
+  // NUCLEAR DEBUG: Track manager state
+  useEffect(() => {
+    console.log('🎛️ [RealisticShadowLayer] MANAGER STATE:', {
+      hasManager: !!manager,
+      isInitialized,
+      hasError: !!error,
+      error: error?.message
+    });
+  }, [manager, isInitialized, error]);
 
   /**
    * Fetch tree data when map bounds change
