@@ -1,6 +1,6 @@
 // src/components/sidebar/tabs/MapLayers.tsx
 import React, { useState } from 'react';
-import { Layers as LayersIcon, Thermometer, Zap } from 'lucide-react';
+import { Layers as LayersIcon, Thermometer, Zap, Sun as SunIcon, ChevronDown } from 'lucide-react';
 import { LightConfig } from './LightAndShadowControl'; // --- MODIFIED ---
 import LightAndShadowControl from './LightAndShadowControl';
 
@@ -54,50 +54,107 @@ const MapLayers: React.FC<MapLayersProps> = ({
     ultra: '4096px - Maximum Detail'
   };
 
+const MapLayers: React.FC<MapLayersProps> = ({
+  baseMap,
+  changeBaseMap,
+  showLSTOverlay,      
+  toggleLSTOverlay,
+  lstMinValue,
+  lstMaxValue,
+  onLightChange,
+  is3D,
+  shadowsEnabled,
+  onShadowsToggle,
+  shadowQuality = 'high',
+  onShadowQualityChange,
+  showTreeShadows = true,
+  onTreeShadowsToggle,
+  showBuildingShadows = true,
+  onBuildingShadowsToggle,
+}) => {
+  const [showAdvancedShadows, setShowAdvancedShadows] = useState(false);
+  
+  const lstLegendGradient = 'linear-gradient(to right, #0D1282, #00A9FF, #00E0C7, #90F1AC, #FFF80A, #FFB344, #FF4A4A, #D72323)';
+
+  const qualityDescriptions = {
+    low: '512px - Best Performance',
+    medium: '1024px - Balanced',
+    high: '2048px - High Quality',
+    ultra: '4096px - Maximum Detail'
+  };
+
   return (
     <div className="space-y-6">
-      <LightAndShadowControl onLightChange={onLightChange} is3D={is3D} />
-
+      
       {is3D && (
-        <div className="card">
-          <div className="card-header">
-            <h3 className="font-medium flex items-center justify-between">
-              <span>Shadow Settings</span>
-              <button 
-                onClick={() => setShowAdvancedShadows(!showAdvancedShadows)}
-                className="text-xs text-primary-600 hover:text-primary-700"
-              >
-                {showAdvancedShadows ? 'Simple' : 'Advanced'}
-              </button>
+        <div className="card shadow-md border border-gray-200">
+          <div className="card-header bg-gray-50 border-b border-gray-100 flex justify-between items-center py-3">
+            <h3 className="font-semibold text-gray-800 flex items-center">
+              <SunIcon size={18} className="mr-2 text-amber-500" />
+              Environment & Lighting
             </h3>
-          </div>
-          <div className="card-body space-y-4">
-            {/* Master Shadow Toggle */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div>
-                  <div className="font-medium">Enable Realistic Shadows</div>
-                  <div className="text-xs text-gray-500">Real-time sun-based shadows</div>
-                </div>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  className="sr-only peer" 
-                  checked={shadowsEnabled} 
-                  onChange={(e) => onShadowsToggle(e.target.checked)} 
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-              </label>
+            
+            {/* Master Toggle */}
+            <div className="flex items-center">
+                <label className="relative inline-flex items-center cursor-pointer" title="Enable/Disable Shadows">
+                    <input 
+                    type="checkbox" 
+                    className="sr-only peer" 
+                    checked={shadowsEnabled} 
+                    onChange={(e) => onShadowsToggle(e.target.checked)} 
+                    />
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
+                </label>
             </div>
+          </div>
+          
+          <div className={`card-body space-y-4 p-4 transition-all duration-300 ${!shadowsEnabled ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
+            {/* Unified Light Control */}
+            <LightAndShadowControl onLightChange={onLightChange} is3D={is3D} />
 
-            {shadowsEnabled && (
-              <>
-                {/* Shadow Quality Selector */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700 flex items-center">
-                    <Zap size={14} className="mr-1 text-yellow-500" />
-                    Shadow Quality
+            {/* Quality Settings (Collapsible) */}
+            <div className="pt-4 border-t border-gray-100">
+                <button 
+                  onClick={() => setShowAdvancedShadows(!showAdvancedShadows)}
+                  className="w-full flex justify-between items-center text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700"
+                >
+                  <span>Rendering Quality</span>
+                  <ChevronDown size={14} className={`transform transition-transform ${showAdvancedShadows ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {showAdvancedShadows && (
+                    <div className="mt-3 space-y-4 animate-fade-in-down">
+                        <div className="space-y-2">
+                        <label className="text-sm text-gray-600 flex items-center">
+                            <Zap size={14} className="mr-1.5 text-gray-400" />
+                            Shadow Resolution
+                        </label>
+                        <div className="grid grid-cols-4 gap-1 p-1 bg-gray-100 rounded-lg">
+                            {(['low', 'medium', 'high', 'ultra'] as const).map((q) => (
+                            <button
+                                key={q}
+                                onClick={() => onShadowQualityChange?.(q)}
+                                className={`text-xs py-1.5 rounded-md capitalize font-medium transition-all ${
+                                shadowQuality === q
+                                    ? 'bg-white text-primary-700 shadow-sm ring-1 ring-black/5'
+                                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                                }`}
+                                title={qualityDescriptions[q]}
+                            >
+                                {q}
+                            </button>
+                            ))}
+                        </div>
+                        <p className="text-[10px] text-gray-400 pl-1">
+                            {qualityDescriptions[shadowQuality || 'high']}
+                        </p>
+                        </div>
+                    </div>
+                )}
+            </div>
+          </div>
+        </div>
+      )}
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     {(['low', 'medium', 'high', 'ultra'] as ShadowQuality[]).map((quality) => (
