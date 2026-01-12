@@ -113,7 +113,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     styles: tourStyles,
     floaterProps: {
       disableFlip: false,
-      offset: 15,
+      offset: 20,
     },
     requirements: {
       requiresSidebar: 'open',
