@@ -167,7 +167,10 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
         showSkipButton
         disableOverlayClose
         disableCloseOnEsc
-        disableScrolling
+        disableScrolling={false}
+        disableScrollParentFix={false}
+        scrollOffset={100}
+        scrollDuration={300}
         spotlightPadding={10}
         styles={{
           options: {
@@ -188,7 +191,11 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
           disableAnimation: false,
           offset: 15,
           disableFlip: false,
-          portalElement: document.body,
+          options: {
+            preventOverflow: {
+              boundariesElement: 'window',
+            },
+          },
           styles: {
             floater: {
               filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))',

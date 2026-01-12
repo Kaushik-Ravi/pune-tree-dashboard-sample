@@ -96,27 +96,8 @@ function App() {
       // Handle tab switching (after sidebar is in correct state)
       if (requirements.requiresTab !== undefined && sidebarOpen) {
         setActiveTabIndex(requirements.requiresTab);
-        // Small delay to let tab content render
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
-        // Scroll target element into view within sidebar
-        if (stepKey) {
-          const targetMap: Record<string, string> = {
-            'knowYourNeighbourhood': '[data-tour-id="know-your-neighbourhood"]',
-            'plantingAdvisor': '[data-tour-id="tab-planting-advisor"]',
-            'mapLayers': '[data-tour-id="tab-map-layers"]',
-          };
-          
-          const targetSelector = targetMap[stepKey];
-          if (targetSelector) {
-            const targetElement = document.querySelector(targetSelector) as HTMLElement;
-            if (targetElement) {
-              // Scroll element into view at top of sidebar content area
-              targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              await new Promise(resolve => setTimeout(resolve, 400));
-            }
-          }
-        }
+        // Small delay to let tab content render before Joyride scrolls
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
 
       // Handle 3D mode if needed
