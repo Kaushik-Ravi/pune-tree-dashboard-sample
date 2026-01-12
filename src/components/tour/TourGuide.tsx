@@ -188,6 +188,7 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
           disableAnimation: false,
           offset: 15,
           disableFlip: false,
+          portalElement: document.body,
           styles: {
             floater: {
               filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))',

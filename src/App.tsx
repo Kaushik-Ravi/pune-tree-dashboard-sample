@@ -99,38 +99,22 @@ function App() {
         // Small delay to let tab content render
         await new Promise(resolve => setTimeout(resolve, 200));
         
-        // Scroll sidebar content to ensure tooltip has space to show
-        const sidebarContent = document.querySelector('.sidebar-content-area') as HTMLElement;
-        if (sidebarContent) {
-          const targetSelector = stepKey === 'knowYourNeighbourhood' 
-            ? '[data-tour-id="know-your-neighbourhood"]'
-            : stepKey === 'plantingAdvisor' 
-            ? '[data-tour-id="tab-planting-advisor"]'
-            : stepKey === 'mapLayers'
-            ? '[data-tour-id="tab-map-layers"]'
-            : null;
+        // Scroll target element into view within sidebar
+        if (stepKey) {
+          const targetMap: Record<string, string> = {
+            'knowYourNeighbourhood': '[data-tour-id="know-your-neighbourhood"]',
+            'plantingAdvisor': '[data-tour-id="tab-planting-advisor"]',
+            'mapLayers': '[data-tour-id="tab-map-layers"]',
+          };
           
+          const targetSelector = targetMap[stepKey];
           if (targetSelector) {
             const targetElement = document.querySelector(targetSelector) as HTMLElement;
             if (targetElement) {
-              // For know-your-neighbourhood, scroll so element is near bottom of sidebar
-              // This gives space above for the tooltip
-              if (stepKey === 'knowYourNeighbourhood') {
-                const targetTop = targetElement.offsetTop;
-                const sidebarHeight = sidebarContent.clientHeight;
-                // Position element at 70% down the sidebar (leaving 30% above for tooltip)
-                const scrollTarget = targetTop - (sidebarHeight * 0.7);
-                sidebarContent.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
-                await new Promise(resolve => setTimeout(resolve, 400));
-              } else {
-                // For tab elements, keep at top
-                sidebarContent.scrollTop = 0;
-              }
-            } else {
-              sidebarContent.scrollTop = 0;
+              // Scroll element into view at top of sidebar content area
+              targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              await new Promise(resolve => setTimeout(resolve, 400));
             }
-          } else {
-            sidebarContent.scrollTop = 0;
           }
         }
       }
