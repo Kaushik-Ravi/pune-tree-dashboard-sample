@@ -19,6 +19,12 @@ export function SimpleShadowCanvas({ map, enabled }: SimpleShadowCanvasProps) {
   useEffect(() => {
     if (!enabled) {
       console.log('⏸️ [SimpleShadowCanvas] Disabled, skipping');
+      // Ensure any existing shadow canvas is removed when toggled off
+      const existing = map.getContainer().querySelector('#shadow-canvas');
+      if (existing) {
+        existing.remove();
+        console.log('🧹 [SimpleShadowCanvas] Removed shadow canvas while disabled');
+      }
       return;
     }
 
@@ -259,15 +265,18 @@ export function SimpleShadowCanvas({ map, enabled }: SimpleShadowCanvasProps) {
       renderer.render(scene, camera);
     };
 
+    // Track previous zoom so we can refetch buildings when zoom changes materially
+    let prevZoom = map.getZoom();
+
     // Event handlers
     const handleMapMove = () => {
       render();
     };
 
     const handleMapZoom = () => {
-      // Re-fetch buildings on significant zoom changes for better performance
       const currentZoom = map.getZoom();
-      if (Math.abs(currentZoom - map.getZoom()) > 2) {
+      if (Math.abs(currentZoom - prevZoom) > 2) {
+        prevZoom = currentZoom;
         fetchBuildings();
       }
       render();
@@ -291,26 +300,21 @@ export function SimpleShadowCanvas({ map, enabled }: SimpleShadowCanvasProps) {
     map.on('pitch', handleMapMove);
     map.on('resize', handleMapResize);
 
-    // Wait for map to be fully loaded, then fetch buildings
-    const initBuildings = () => {
+    // Wait for style readiness, then fetch buildings once; if style isn't ready, retry on styledata
+    const startBuildingFetch = () => {
       console.log('🔄 [SimpleShadowCanvas] Map loaded, waiting for style...');
-      const checkAndFetch = () => {
-        if (map.isStyleLoaded()) {
-          console.log('✅ [SimpleShadowCanvas] Style loaded, fetching buildings');
-          fetchBuildings();
-        } else {
-          console.log('⏳ [SimpleShadowCanvas] Style not ready, retrying...');
-          setTimeout(checkAndFetch, 200);
-        }
-      };
-      checkAndFetch();
+      if (map.isStyleLoaded()) {
+        console.log('✅ [SimpleShadowCanvas] Style loaded, fetching buildings');
+        fetchBuildings();
+        return;
+      }
+
+      console.log('⏳ [SimpleShadowCanvas] Style not ready, retrying on styledata...');
+      map.once('styledata', startBuildingFetch);
     };
 
-    if (map.loaded() && map.isStyleLoaded()) {
-      setTimeout(initBuildings, 100);
-    } else {
-      map.once('load', initBuildings);
-    }
+    // Kick off building load immediately (even if map was already loaded before React mounted)
+    startBuildingFetch();
 
     // Initial render
     syncCamera();
