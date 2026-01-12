@@ -183,78 +183,102 @@ const MapView: React.FC<MapViewProps> = ({
   // Initialize shadow layer
   useEffect(() => {
     const map = mapRef.current?.getMap();
-    if (!map || !is3D || !shadowsEnabled) {
-      // Remove shadow layer if exists
-      if (shadowLayerRef.current && map) {
-        try {
-          map.removeLayer('realistic-shadows');
-        } catch (e) {
-          // Layer might not exist
-        }
-        shadowLayerRef.current = null;
-      }
+    if (!map) {
+      console.log('⏭️ [MapView] No map ref, skipping shadow init');
       return;
     }
 
-    // Only initialize if style is loaded
-    if (!map.isStyleLoaded()) {
-      const onStyleLoad = () => {
-        // Retry initialization after style loads
-        setTimeout(() => {
-          if (is3D && shadowsEnabled) {
-            initShadowLayer();
-          }
-        }, 100);
-      };
-      map.once('styledata', onStyleLoad);
+    if (!is3D || !shadowsEnabled) {
+      // Remove shadow layer if exists
+      if (shadowLayerRef.current) {
+        try {
+          console.log('🧹 [MapView] Removing shadow layer...');
+          map.removeLayer('realistic-shadows');
+          shadowLayerRef.current = null;
+          console.log('✅ [MapView] Shadow layer removed');
+        } catch (e) {
+          console.warn('⚠️ [MapView] Layer already removed:', e);
+        }
+      }
       return;
     }
 
     const initShadowLayer = () => {
       try {
+        console.log('🎬 [MapView] Initializing shadow layer...');
+        
         // Remove existing layer if present
         if (map.getLayer('realistic-shadows')) {
+          console.log('🔄 [MapView] Removing existing shadow layer...');
           map.removeLayer('realistic-shadows');
         }
 
-        // Create shadow layer
-        const shadowLayer = new RealisticShadowsLayer({
-          id: 'realistic-shadows',
-          lightConfig,
-          shadowQuality,
-          showTreeShadows: _showTreeShadows,
-          showBuildingShadows: _showBuildingShadows,
-          onLoadingChange: setIsLoadingShadows,
-        });
+        // Wait a bit for the map to be fully ready
+        setTimeout(() => {
+          try {
+            console.log('📦 [MapView] Creating RealisticShadowsLayer instance...');
+            
+            // Create shadow layer
+            const shadowLayer = new RealisticShadowsLayer({
+              id: 'realistic-shadows',
+              lightConfig,
+              shadowQuality,
+              showTreeShadows: _showTreeShadows,
+              showBuildingShadows: _showBuildingShadows,
+              onLoadingChange: setIsLoadingShadows,
+            });
 
-        // Add to map
-        map.addLayer(shadowLayer as any);
-        shadowLayerRef.current = shadowLayer;
+            console.log('➕ [MapView] Adding shadow layer to map...');
+            
+            // Add to map
+            map.addLayer(shadowLayer as any);
+            shadowLayerRef.current = shadowLayer;
 
-        // Handle map move/zoom
-        const handleMapMove = () => {
-          shadowLayer.onMapMove();
-        };
+            // Handle map move/zoom
+            const handleMapMove = () => {
+              if (shadowLayer && shadowLayer.onMapMove) {
+                shadowLayer.onMapMove();
+              }
+            };
 
-        map.on('moveend', handleMapMove);
-        map.on('zoomend', handleMapMove);
+            map.on('moveend', handleMapMove);
+            map.on('zoomend', handleMapMove);
 
-        console.log('✅ [MapView] Shadow layer added to map');
+            console.log('✅ [MapView] Shadow layer successfully added to map');
+          } catch (innerError) {
+            console.error('❌ [MapView] Error in delayed shadow init:', innerError);
+          }
+        }, 500); // Wait 500ms for map to stabilize
       } catch (error) {
-        console.error('❌ [MapView] Failed to add shadow layer:', error);
+        console.error('❌ [MapView] Failed to initialize shadow layer:', error);
       }
     };
 
+    // Only initialize if style is loaded
+    if (!map.isStyleLoaded()) {
+      console.log('⏳ [MapView] Waiting for style to load...');
+      const onStyleLoad = () => {
+        console.log('✅ [MapView] Style loaded, initializing shadows...');
+        if (is3D && shadowsEnabled) {
+          initShadowLayer();
+        }
+      };
+      map.once('styledata', onStyleLoad);
+      return;
+    }
+
+    console.log('✅ [MapView] Style already loaded, initializing shadows...');
     initShadowLayer();
 
     return () => {
       if (shadowLayerRef.current && map) {
         try {
+          console.log('🧹 [MapView] Cleanup: Removing shadow layer...');
           map.removeLayer('realistic-shadows');
+          shadowLayerRef.current = null;
         } catch (e) {
-          // Layer might already be removed
+          console.warn('⚠️ [MapView] Cleanup: Layer already removed');
         }
-        shadowLayerRef.current = null;
       }
     };
   }, [is3D, shadowsEnabled, lightConfig, shadowQuality, _showTreeShadows, _showBuildingShadows]);

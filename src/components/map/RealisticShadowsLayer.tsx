@@ -40,8 +40,8 @@ interface ShadowLayerOptions {
  */
 export class RealisticShadowsLayer implements CustomLayerInterface {
   id: string;
-  type: 'custom' = 'custom';
-  renderingMode: '3d' = '3d'; // Share depth buffer with MapLibre
+  type = 'custom' as const;
+  renderingMode = '3d' as const; // Share depth buffer with MapLibre
 
   private map!: MapLibreMap;
   private camera!: THREE.Camera;
@@ -75,28 +75,29 @@ export class RealisticShadowsLayer implements CustomLayerInterface {
    * Initialize Three.js scene using MapLibre's WebGL context
    */
   onAdd(map: MapLibreMap, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
-    this.map = map;
-    console.log('🎬 [RealisticShadows] Initializing shadow system...');
+    try {
+      this.map = map;
+      console.log('🎬 [RealisticShadows] Initializing shadow system...');
 
-    // Create camera (will be synced with MapLibre's camera)
-    this.camera = new THREE.PerspectiveCamera();
+      // Create camera (will be synced with MapLibre's camera)
+      this.camera = new THREE.PerspectiveCamera();
 
-    // Create scene
-    this.scene = new THREE.Scene();
+      // Create scene
+      this.scene = new THREE.Scene();
 
-    // Create renderer using MapLibre's WebGL context
-    this.renderer = new THREE.WebGLRenderer({
-      canvas: map.getCanvas(),
-      context: gl as WebGL2RenderingContext,
-      antialias: true,
-    });
-    this.renderer.autoClear = false; // Don't clear MapLibre's render
+      // Create renderer using MapLibre's WebGL context
+      this.renderer = new THREE.WebGLRenderer({
+        canvas: map.getCanvas(),
+        context: gl as WebGL2RenderingContext,
+        antialias: true,
+      });
+      this.renderer.autoClear = false; // Don't clear MapLibre's render
 
-    // Configure shadows based on quality
-    this.configureShadows();
+      // Configure shadows based on quality
+      this.configureShadows();
 
-    // Setup lighting
-    this.setupLighting();
+      // Setup lighting
+      this.setupLighting();
 
     // Create ground plane to receive shadows
     this.setupGround();
@@ -110,10 +111,14 @@ export class RealisticShadowsLayer implements CustomLayerInterface {
     this.treeGroup.name = 'trees';
     this.scene.add(this.treeGroup);
 
-    console.log('✅ [RealisticShadows] Shadow system initialized');
-    
-    // Initial load
-    this.updateShadowGeometry();
+      console.log('✅ [RealisticShadows] Shadow system initialized');
+      
+      // Initial load
+      this.updateShadowGeometry();
+    } catch (error) {
+      console.error('❌ [RealisticShadows] Failed to initialize:', error);
+      throw error;
+    }
   }
 
   /**
@@ -515,7 +520,7 @@ export class RealisticShadowsLayer implements CustomLayerInterface {
   /**
    * Render method called by MapLibre
    */
-  render(): void {
+  render(_gl: WebGLRenderingContext | WebGL2RenderingContext, _matrix: any): void {
     // Update light position
     this.updateLighting();
     
