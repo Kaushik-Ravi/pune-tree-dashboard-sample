@@ -99,10 +99,26 @@ function App() {
         // Small delay to let tab content render
         await new Promise(resolve => setTimeout(resolve, 200));
         
-        // Scroll sidebar content to top for better tooltip positioning
+        // Scroll sidebar content to ensure target element is visible
         const sidebarContent = document.querySelector('.sidebar-content-area');
         if (sidebarContent) {
-          sidebarContent.scrollTop = 0;
+          // Get the target element for this step
+          const targetElement = document.querySelector(`[data-tour-id="${stepKey}"]`) as HTMLElement;
+          if (targetElement) {
+            // Calculate if element is too low in viewport
+            const rect = targetElement.getBoundingClientRect();
+            const viewportHeight = window.innerHeight;
+            
+            // If element is in bottom 40% of viewport, scroll it higher
+            if (rect.bottom > viewportHeight * 0.6) {
+              targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              await new Promise(resolve => setTimeout(resolve, 300));
+            } else {
+              sidebarContent.scrollTop = 0;
+            }
+          } else {
+            sidebarContent.scrollTop = 0;
+          }
         }
       }
 

@@ -109,8 +109,12 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     key: 'knowYourNeighbourhood',
     target: '[data-tour-id="know-your-neighbourhood"]',
     content: 'After drawing an area, this section will show you detailed statistics like tree count and CO₂ sequestration for that specific zone.',
-    placement: 'auto',
+    placement: 'top',
     styles: tourStyles,
+    floaterProps: {
+      disableFlip: false,
+      offset: 15,
+    },
     requirements: {
       requiresSidebar: 'open',
       requiresTab: 0,

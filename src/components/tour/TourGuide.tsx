@@ -174,7 +174,7 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
             zIndex: 10000,
           },
           tooltip: {
-            maxWidth: '90vw',
+            maxWidth: 'min(400px, 90vw)',
             width: 'auto',
           },
           tooltipContainer: {
@@ -186,14 +186,11 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
         }}
         floaterProps={{
           disableAnimation: false,
+          offset: 15,
+          disableFlip: false,
           styles: {
             floater: {
               filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))',
-            },
-          },
-          options: {
-            preventOverflow: {
-              boundariesElement: 'viewport',
             },
           },
         }}
