@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Building Geometry Extraction Test</title>
+    <meta charset="utf-8">
+    <style>
+        body { margin: 0; font-family: monospace; }
+        #map { position: absolute; top: 0; bottom: 50%; width: 100%; }
+        #output { position: absolute; top: 50%; bottom: 0; width: 100%; 
+                  background: #1e1e1e; color: #d4d4d4; padding: 20px; 
+                  overflow-y: auto; font-size: 12px; }
+        .success { color: #4ec9b0; }
+        .error { color: #f48771; }
+        .info { color: #dcdcaa; }
+    </style>
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+</head>
+<body>
+    <div id="map"></div>
+    <div id="output">
+        <h3>🧪 Building Geometry Extraction Test</h3>
+        <div id="log"></div>
+    </div>
+
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/three@0.170.0/build/three.module.js" type="module"></script>
+    
+    <script type="module">
+        import * as THREE from 'https://unpkg.com/three@0.170.0/build/three.module.js';
+
+        const log = document.getElementById('log');
+        
+        function addLog(message, type = 'info') {
+            const line = document.createElement('div');
+            line.className = type;
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.appendChild(line);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // Initialize MapLibre map centered on Pune
+        const MAPTILER_KEY = 'AiIlI9bkXnUEf02qe3AB'; // Your Buildings tileset key
+        
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: 'https://api.maptiler.com/maps/streets-v2/style.json?key=EjaSOkaQbol1TzBASD5l',
+            center: [73.8567, 18.5204], // Pune coordinates
+            zoom: 16,
+            pitch: 60,
+            bearing: -17.6
+        });
+
+        map.on('load', () => {
+            addLog('✅ Map loaded successfully', 'success');
+            addLog('🔧 Adding Buildings tileset as separate source...', 'info');
+            
+            // Add Buildings tileset as a source
+            map.addSource('maptiler-buildings', {
+                type: 'vector',
+                url: `https://api.maptiler.com/tiles/buildings/tiles.json?key=${MAPTILER_KEY}`
+            });
+            
+            addLog('✅ Buildings source added', 'success');
+            
+            // Add a 3D buildings layer (optional - for visualization)
+            map.addLayer({
+                id: '3d-buildings-layer',
+                type: 'fill-extrusion',
+                source: 'maptiler-buildings',
+                'source-layer': 'building',
+                paint: {
+                    'fill-extrusion-color': '#aaa',
+                    'fill-extrusion-height': ['get', 'render_height'],
+                    'fill-extrusion-base': ['get', 'render_min_height'],
+                    'fill-extrusion-opacity': 0.6
+                }
+            });
+            
+            addLog('✅ 3D buildings layer added to map', 'success');
+            
+            // Wait a bit for tiles to load
+            setTimeout(() => {
+                testBuildingExtraction();
+            }, 2000);
+        });
+
+        function testBuildingExtraction() {
+            addLog('🔍 Starting building extraction test...', 'info');
+            
+            // Get map style to find building layers
+            const style = map.getStyle();
+            addLog(`📋 Style has ${style.layers.length} total layers`, 'info');
+            
+            // Find all fill-extrusion layers (3D buildings)
+            const buildingLayers = style.layers.filter(layer => 
+                layer.type === 'fill-extrusion'
+            );
+            
+            addLog(`🏢 Found ${buildingLayers.length} fill-extrusion layers:`, 'success');
+            buildingLayers.forEach(layer => {
+                addLog(`   - ${layer.id} (source: ${layer.source}, source-layer: ${layer['source-layer']})`, 'info');
+            });
+
+            if (buildingLayers.length === 0) {
+                addLog('❌ No 3D building layers found in style!', 'error');
+                
+                // List all layer types to see what's available
+                const layerTypes = {};
+                style.layers.forEach(layer => {
+                    layerTypes[layer.type] = (layerTypes[layer.type] || 0) + 1;
+                });
+                addLog('📊 Layer types in style:', 'info');
+                Object.entries(layerTypes).forEach(([type, count]) => {
+                    addLog(`   - ${type}: ${count}`, 'info');
+                });
+                
+                // Try querying building source-layer directly
+                addLog('', 'info');
+                addLog('🔍 Attempting to query building source-layer directly...', 'info');
+                queryBuildingSourceLayer();
+                return;
+            }
+
+            // Query rendered features from building layers
+            const layerIds = buildingLayers.map(l => l.id);
+            addLog(`🔍 Querying layers: ${layerIds.join(', ')}`, 'info');
+            
+            const features = map.queryRenderedFeatures(undefined, {
+                layers: layerIds
+            });
+
+            addLog(`📦 Queried ${features.length} building features`, features.length > 0 ? 'success' : 'error');
+
+            if (features.length === 0) {
+                addLog('⚠️  No features returned - trying direct source-layer query...', 'error');
+                
+                // Try querying all features and filtering
+                const allFeatures = map.queryRenderedFeatures();
+                const buildingsFromSource = allFeatures.filter(f => 
+                    f.source === 'maptiler-buildings' || f.sourceLayer === 'building'
+                );
+                
+                addLog(`📦 Found ${buildingsFromSource.length} features from Buildings source`, 
+                       buildingsFromSource.length > 0 ? 'success' : 'error');
+                
+                if (buildingsFromSource.length === 0) {
+                    addLog('❌ No building features found at all', 'error');
+                    addLog('   Try zooming in or moving the map', 'info');
+                    return;
+                }
+                
+                // Use these features instead
+                features.length = 0;
+                features.push(...buildingsFromSource);
+            }
+
+            // Analyze first few features
+            addLog('', 'info');
+            addLog('🔬 Analyzing building features...', 'info');
+            
+            const samplesToShow = Math.min(3, features.length);
+            for (let i = 0; i < samplesToShow; i++) {
+                const feature = features[i];
+                addLog(``, 'info');
+                addLog(`Building ${i + 1}:`, 'success');
+                addLog(`  Type: ${feature.geometry.type}`, 'info');
+                addLog(`  Properties: ${JSON.stringify(feature.properties).substring(0, 100)}...`, 'info');
+                
+                // Check for height property
+                const height = feature.properties.height || 
+                              feature.properties.render_height || 
+                              feature.properties.ele || 
+                              feature.properties.building_height ||
+                              10; // default
+                
+                addLog(`  Height: ${height}m`, 'info');
+                
+                if (feature.geometry.type === 'Polygon') {
+                    const coords = feature.geometry.coordinates[0];
+                    addLog(`  Coordinates: ${coords.length} points`, 'info');
+                    addLog(`  First point: [${coords[0][0].toFixed(4)}, ${coords[0][1].toFixed(4)}]`, 'info');
+                }
+            }
+
+            // Test Three.js mesh creation
+            addLog('', 'info');
+            addLog('🎨 Testing Three.js mesh creation...', 'info');
+            testThreeJSMeshCreation(features[0]);
+        }
+
+        function queryBuildingSourceLayer() {
+            // Query all features without layer filter
+            const allFeatures = map.queryRenderedFeatures();
+            
+            addLog(`📦 Total rendered features: ${allFeatures.length}`, 'info');
+            
+            // Group by source-layer
+            const bySourceLayer = {};
+            allFeatures.forEach(f => {
+                const sl = f.sourceLayer || 'unknown';
+                bySourceLayer[sl] = (bySourceLayer[sl] || 0) + 1;
+            });
+            
+            addLog('📊 Features by source-layer:', 'info');
+            Object.entries(bySourceLayer).sort((a, b) => b[1] - a[1]).slice(0, 10).forEach(([sl, count]) => {
+                addLog(`   - ${sl}: ${count}`, 'info');
+            });
+
+            // Look for building-related features
+            const buildingFeatures = allFeatures.filter(f => 
+                f.sourceLayer === 'building' || 
+                f.sourceLayer === 'buildings' ||
+                (f.properties && (f.properties.building || f.properties.height))
+            );
+
+            addLog(`🏢 Found ${buildingFeatures.length} potential building features`, 
+                   buildingFeatures.length > 0 ? 'success' : 'error');
+
+            if (buildingFeatures.length > 0) {
+                addLog('', 'info');
+                addLog('🔬 Sample building feature:', 'info');
+                const sample = buildingFeatures[0];
+                addLog(`  Source Layer: ${sample.sourceLayer}`, 'info');
+                addLog(`  Geometry Type: ${sample.geometry.type}`, 'info');
+                addLog(`  Properties: ${JSON.stringify(sample.properties)}`, 'info');
+            }
+        }
+
+        function testThreeJSMeshCreation(feature) {
+            try {
+                if (!feature || feature.geometry.type !== 'Polygon') {
+                    addLog('❌ Feature is not a Polygon, cannot create mesh', 'error');
+                    return;
+                }
+
+                const coords = feature.geometry.coordinates[0];
+                const height = feature.properties.height || 
+                              feature.properties.render_height || 
+                              10;
+
+                // Convert lat/lng to local coordinates (simplified)
+                const center = map.getCenter();
+                const metersPerDegree = 111320; // at equator
+                
+                const points = coords.map(coord => {
+                    const x = (coord[0] - center.lng) * metersPerDegree * Math.cos(center.lat * Math.PI / 180);
+                    const y = (coord[1] - center.lat) * metersPerDegree;
+                    return new THREE.Vector2(x, y);
+                });
+
+                // Create shape from coordinates
+                const shape = new THREE.Shape(points);
+                
+                // Extrude to create 3D building
+                const extrudeSettings = {
+                    depth: height,
+                    bevelEnabled: false
+                };
+                
+                const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+                const material = new THREE.MeshStandardMaterial({ 
+                    color: 0x808080,
+                    transparent: true,
+                    opacity: 0 // Invisible, only for shadow casting
+                });
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.castShadow = true;
+
+                addLog('✅ Successfully created Three.js mesh!', 'success');
+                addLog(`   - Vertices: ${geometry.attributes.position.count}`, 'info');
+                addLog(`   - Faces: ${geometry.index ? geometry.index.count / 3 : 'N/A'}`, 'info');
+                addLog(`   - Height: ${height}m`, 'info');
+                addLog(`   - Shadow casting: ${mesh.castShadow}`, 'success');
+                addLog('', 'info');
+                addLog('✅ PROOF OF CONCEPT SUCCESSFUL!', 'success');
+                addLog('We CAN extract building geometry and create Three.js meshes for shadow casting', 'success');
+
+            } catch (error) {
+                addLog(`❌ Error creating mesh: ${error.message}`, 'error');
+                addLog(error.stack, 'error');
+            }
+        }
+
+        map.on('error', (e) => {
+            addLog(`❌ Map error: ${e.error.message}`, 'error');
+        });
+    </script>
+</body>
+</html>

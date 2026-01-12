@@ -125,6 +125,11 @@ export class RealisticShadowsLayer implements CustomLayerInterface {
    * Configure shadow map quality based on settings
    */
   private configureShadows(): void {
+    if (!this.renderer) {
+      console.warn('⚠️ [RealisticShadows] Renderer not initialized');
+      return;
+    }
+
     const qualitySettings = {
       low: { mapSize: 1024, bias: -0.0001 },
       medium: { mapSize: 2048, bias: -0.00005 },
@@ -248,6 +253,11 @@ export class RealisticShadowsLayer implements CustomLayerInterface {
    * Fetch and build shadow-casting geometry
    */
   private async fetchAndBuildGeometry(): Promise<void> {
+    if (!this.map) {
+      console.warn('⚠️ [RealisticShadows] Map not initialized');
+      return;
+    }
+
     const zoom = this.map.getZoom();
     const bounds = this.map.getBounds();
     
@@ -285,6 +295,8 @@ export class RealisticShadowsLayer implements CustomLayerInterface {
    * Load buildings from MapLibre as shadow casters
    */
   private async loadBuildings(): Promise<void> {
+    if (!this.map) return;
+
     // Clear existing buildings
     while (this.buildingGroup.children.length > 0) {
       const mesh = this.buildingGroup.children[0] as THREE.Mesh;
@@ -294,9 +306,24 @@ export class RealisticShadowsLayer implements CustomLayerInterface {
     }
 
     try {
-      // Query visible buildings
+      // Find all fill-extrusion layers (3D buildings) in the style
+      const style = this.map.getStyle();
+      const buildingLayers = style?.layers?.filter(
+        (layer: any) => layer.type === 'fill-extrusion'
+      ) || [];
+
+      if (buildingLayers.length === 0) {
+        console.log('ℹ️ [RealisticShadows] No 3D building layers found in style');
+        this.buildingCount = 0;
+        return;
+      }
+
+      console.log(`🏢 [RealisticShadows] Found ${buildingLayers.length} building layers:`, buildingLayers.map((l: any) => l.id));
+
+      // Query visible buildings from all building layers
+      const layerIds = buildingLayers.map((l: any) => l.id);
       const features = this.map.queryRenderedFeatures(undefined, {
-        layers: ['3d-buildings'], // From MapView.tsx
+        layers: layerIds,
       });
 
       console.log(`🏢 [RealisticShadows] Found ${features.length} building features`);
@@ -564,6 +591,11 @@ export class RealisticShadowsLayer implements CustomLayerInterface {
    * Update shadow layer options
    */
   updateOptions(options: Partial<ShadowLayerOptions>): void {
+    if (!this.map || !this.renderer) {
+      console.warn('⚠️ [RealisticShadows] Cannot update options - system not initialized');
+      return;
+    }
+
     this.options = { ...this.options, ...options };
     
     // Reconfigure if quality changed

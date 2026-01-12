@@ -76,6 +76,12 @@ const DrawControl = forwardRef<DrawControlWrapper, DrawControlProps>((props, ref
       if (polygonButton) {
         polygonButton.setAttribute('data-tour-id', 'draw-polygon');
       }
+      
+      // Add tour ID to trash button for undo/clear functionality
+      const trashButton = container.querySelector('.mapbox-gl-draw_trash');
+      if (trashButton) {
+        trashButton.setAttribute('data-tour-id', 'draw-trash');
+      }
     }
   }, [ctrl]);
 

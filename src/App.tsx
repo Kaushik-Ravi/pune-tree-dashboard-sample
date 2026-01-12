@@ -8,7 +8,7 @@ import { ArchetypeData, useTreeStore } from './store/TreeStore';
 import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl';
 import { ShadowQuality } from './components/sidebar/tabs/MapLayers';
 import TourGuide, { TourControlAction } from './components/tour/TourGuide';
-import { TourSteps } from './components/tour/tourSteps'; // CORRECTED: Added this import
+import { getStepRequirements } from './components/tour/tourConfig';
 
 const LoadingOverlay: React.FC = () => (
   <div className="fixed inset-0 bg-white bg-opacity-90 z-[20000] flex flex-col items-center justify-center">
@@ -26,70 +26,117 @@ function App() {
   
   const [is3D, setIs3D] = useState(false);
   const [lightConfig, setLightConfig] = useState<LightConfig | null>(null);
-  const [shadowsEnabled, setShadowsEnabled] = useState(true);
+  // Shadow system disabled - requires MapTiler Buildings tileset (paid feature)
+  const [shadowsEnabled, setShadowsEnabled] = useState(false);
   const [shadowQuality, setShadowQuality] = useState<ShadowQuality>('high');
-  const [showTreeShadows, setShowTreeShadows] = useState(true);
-  const [showBuildingShadows, setShowBuildingShadows] = useState(true);
+  const [showTreeShadows, setShowTreeShadows] = useState(false);
+  const [showBuildingShadows, setShowBuildingShadows] = useState(false);
 
   const { cityStats } = useTreeStore();
   const [isLoading, setIsLoading] = useState(true);
   const [runTour, setRunTour] = useState(false);
   const [tourStepIndex, setTourStepIndex] = useState(0);
+  const [isPreparingStep, setIsPreparingStep] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const tourAdvancementRef = useRef<{ nextStep: number | null }>({ nextStep: null });
+  const mapReadyRef = useRef(false);
 
+  // Improved tour initialization - wait for map to be ready
   useEffect(() => {
     const hasCompletedTour = localStorage.getItem('hasCompletedTour');
     if (cityStats) {
       setIsLoading(false);
+      // Delay tour start to ensure map and controls are mounted
       if (!hasCompletedTour) {
-        setRunTour(true);
+        setTimeout(() => {
+          mapReadyRef.current = true;
+          setRunTour(true);
+        }, 1500); // Give map time to load
       }
     }
   }, [cityStats]);
 
-  const handleTourControl = useCallback((action: TourControlAction, payload?: any) => {
-    const nextStepIndex = tourStepIndex + 1;
-    const nextStepKey = payload;
-    let sidebarActionRequired: 'open' | 'close' | 'none' = 'none';
+  // Helper function to wait for sidebar transition
+  const waitForSidebarTransition = useCallback((): Promise<void> => {
+    return new Promise((resolve) => {
+      const sidebarElement = sidebarRef.current;
+      if (!sidebarElement) {
+        resolve();
+        return;
+      }
+
+      const handleTransitionEnd = () => {
+        sidebarElement.removeEventListener('transitionend', handleTransitionEnd);
+        // Small delay to ensure content is rendered
+        setTimeout(resolve, 100);
+      };
+
+      sidebarElement.addEventListener('transitionend', handleTransitionEnd);
+      // Fallback in case transition doesn't fire
+      setTimeout(resolve, 500);
+    });
+  }, []);
+
+  // Pre-step orchestration: prepare UI state before advancing tour
+  const executePreStepActions = useCallback(async (stepKey: string): Promise<void> => {
+    const requirements = getStepRequirements(stepKey);
+    if (!requirements) return;
+
+    setIsPreparingStep(true);
+
+    try {
+      // Handle sidebar state
+      if (requirements.requiresSidebar === 'open' && !sidebarOpen) {
+        setSidebarOpen(true);
+        await waitForSidebarTransition();
+      } else if (requirements.requiresSidebar === 'closed' && sidebarOpen) {
+        setSidebarOpen(false);
+        await waitForSidebarTransition();
+      }
+
+      // Handle tab switching (after sidebar is in correct state)
+      if (requirements.requiresTab !== undefined && sidebarOpen) {
+        setActiveTabIndex(requirements.requiresTab);
+        // Small delay to let tab content render
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      // Handle 3D mode if needed
+      if (requirements.requires3D && !is3D) {
+        setIs3D(true);
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    } finally {
+      setIsPreparingStep(false);
+    }
+  }, [sidebarOpen, is3D, waitForSidebarTransition]);
+
+  const handleTourControl = useCallback(async (action: TourControlAction, payload?: any) => {
+    const stepKey = payload;
 
     switch (action) {
       case 'NEXT_STEP': {
-        if (
-          (nextStepKey === 'dashboardTabs' ||
-           nextStepKey === 'knowYourNeighbourhood' ||
-           nextStepKey === 'plantingAdvisor' ||
-           nextStepKey === 'mapLayers') && !sidebarOpen
-        ) {
-          sidebarActionRequired = 'open';
-        } else if (
-          (nextStepKey === 'drawingTools' || nextStepKey === 'threeDMode') && sidebarOpen
-        ) {
-          sidebarActionRequired = 'close';
+        if (stepKey) {
+          // Execute pre-step actions BEFORE advancing step index
+          await executePreStepActions(stepKey);
         }
-        
-        if (sidebarActionRequired !== 'none') {
-          tourAdvancementRef.current.nextStep = nextStepIndex;
-          setSidebarOpen(sidebarActionRequired === 'open');
-        } else {
-          setTourStepIndex(nextStepIndex);
-        }
-
-        // Set active tab immediately if sidebar is already in the correct state
-        if (sidebarActionRequired === 'none' || (sidebarActionRequired === 'open' && sidebarOpen) || (sidebarActionRequired === 'close' && !sidebarOpen)) {
-            if (nextStepKey === 'plantingAdvisor') setActiveTabIndex(2);
-            else if (nextStepKey === 'mapLayers') setActiveTabIndex(3);
-            else if (nextStepKey === 'knowYourNeighbourhood') setActiveTabIndex(0);
-        }
+        setTourStepIndex(prev => prev + 1);
         break;
       }
       case 'PREV_STEP': {
-        setTourStepIndex(tourStepIndex - 1);
+        if (stepKey) {
+          await executePreStepActions(stepKey);
+        }
+        setTourStepIndex(prev => Math.max(0, prev - 1));
+        break;
+      }
+      case 'SKIP_STEP': {
+        setTourStepIndex(prev => prev + 1);
         break;
       }
       case 'RESTART': {
         setTourStepIndex(0);
         setRunTour(false);
+        setIsPreparingStep(false);
         localStorage.setItem('hasCompletedTour', 'true');
         setSidebarOpen(false);
         break;
@@ -97,44 +144,7 @@ function App() {
       default:
         break;
     }
-  }, [tourStepIndex, sidebarOpen]);
-
-  useEffect(() => {
-    const sidebarElement = sidebarRef.current;
-    if (!sidebarElement) return;
-
-    const handleTransitionEnd = () => {
-      if (tourAdvancementRef.current.nextStep !== null) {
-        // Unused variable kept for potential future debugging
-        // const nextStepKey = (Object.entries(TourSteps).find(([, step]) => 
-        //     step === (window.innerWidth < 768 ? TourSteps.openDashboardMobile : TourSteps.openDashboardDesktop)
-        // ) || [])[0];
-
-        // Set active tab after transition, right before showing the step
-        const stepToAdvanceTo = tourAdvancementRef.current.nextStep;
-        if (stepToAdvanceTo !== null) {
-            const steps = window.innerWidth < 768
-                ? [TourSteps.welcome, TourSteps.openDashboardMobile, TourSteps.dashboardTabs, TourSteps.drawingTools, TourSteps.knowYourNeighbourhood, TourSteps.plantingAdvisor, TourSteps.mapLayers, TourSteps.threeDMode, TourSteps.finish]
-                : [TourSteps.welcome, TourSteps.openDashboardDesktop, TourSteps.dashboardTabs, TourSteps.drawingTools, TourSteps.knowYourNeighbourhood, TourSteps.plantingAdvisor, TourSteps.mapLayers, TourSteps.threeDMode, TourSteps.finish];
-            
-            const nextStepDetails = steps[stepToAdvanceTo];
-            const nextStepTarget = nextStepDetails.target;
-
-            if (nextStepTarget === '[data-tour-id="tab-planting-advisor"]') setActiveTabIndex(2);
-            else if (nextStepTarget === '[data-tour-id="tab-map-layers"]') setActiveTabIndex(3);
-            else if (nextStepTarget === '[data-tour-id="know-your-neighbourhood"]') setActiveTabIndex(0);
-        }
-
-        setTourStepIndex(tourAdvancementRef.current.nextStep);
-        tourAdvancementRef.current.nextStep = null;
-      }
-    };
-
-    sidebarElement.addEventListener('transitionend', handleTransitionEnd);
-    return () => {
-      sidebarElement.removeEventListener('transitionend', handleTransitionEnd);
-    };
-  }, []);
+  }, [executePreStepActions]);
 
   const handleLightChange = useCallback((newLightConfig: LightConfig | null) => {
     setLightConfig(newLightConfig);
@@ -185,6 +195,7 @@ function App() {
         run={runTour}
         stepIndex={tourStepIndex}
         handleTourControl={handleTourControl}
+        isPreparingStep={isPreparingStep}
       />
 
       <Header />
