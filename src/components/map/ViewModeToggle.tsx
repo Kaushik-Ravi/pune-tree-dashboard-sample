@@ -22,6 +22,7 @@ const ViewModeToggle: React.FC<ViewModeToggleProps> = ({ is3D, onToggle, zoom })
     // MODIFIED: Changed positioning from top-right to top-left, below other controls.
     <div className="absolute top-[170px] left-[10px] z-10">
       <button
+        data-tour-id="view-mode-toggle"
         onClick={onToggle}
         className={`bg-white shadow-md rounded-md flex items-center justify-center w-10 h-10 transition-colors
           ${isEnabled ? 'hover:bg-gray-100 cursor-pointer' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}

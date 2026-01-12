@@ -22,8 +22,8 @@ export function waitForTourTarget(
   options: WaitForTargetOptions = {}
 ): Promise<WaitForTargetResult> {
   const {
-    timeout = 8000, // Increased from 4s to 8s for slower devices
-    retries = 2
+    timeout = 5000, // Reduced from 8s to 5s
+    retries = 1 // Reduced from 2 to 1 to prevent excessive retries
   } = options;
 
   return new Promise((resolve) => {
@@ -57,7 +57,7 @@ export function waitForTourTarget(
             setTimeout(() => attemptFind(), 500); // Wait 500ms before retry
           } else {
             const error = `Tour target "${selector}" not found after ${totalAttempts} attempts (${timeout * (retries + 1)}ms total)`;
-            console.error(`❌ ${error}`);
+            console.warn(`⚠️ ${error} - will auto-skip`);
             resolve({
               success: false,
               error,

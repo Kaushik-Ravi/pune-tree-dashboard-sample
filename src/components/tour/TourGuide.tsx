@@ -27,11 +27,12 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
       advancingStep.current = true;
       setTargetError(null);
       
-      waitForTourTarget(selector, { timeout: 8000, retries: 2 })
+      waitForTourTarget(selector, { timeout: 5000, retries: 1 })
         .then((result) => {
           if (!result.success) {
-            setTargetError(result.error || 'Target element not found');
-            console.error('Tour target failed:', result);
+            console.warn('Tour target not found, auto-skipping step:', result);
+            // Auto-skip missing steps instead of showing error
+            handleTourControl('SKIP_STEP');
           }
         })
         .finally(() => {
@@ -41,7 +42,7 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
       advancingStep.current = false;
       setTargetError(null);
     }
-  }, [run, stepIndex, steps]);
+  }, [run, stepIndex, steps, handleTourControl]);
 
   const handleJoyrideCallback = (data: CallBackProps) => {
     const { status, action, type, index } = data;

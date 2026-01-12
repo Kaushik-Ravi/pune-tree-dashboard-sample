@@ -508,9 +508,7 @@ const MapView: React.FC<MapViewProps> = ({
         <NavigationControl position="top-left" showCompass={true} />
       </Map>
       
-      <div data-tour-id="view-mode-toggle">
-        <ViewModeToggle is3D={is3D} onToggle={handleToggle3D} zoom={zoom} />
-      </div>
+      <ViewModeToggle is3D={is3D} onToggle={handleToggle3D} zoom={zoom} />
       
       {/* Loading indicator for 3D trees and shadows */}
       {(isLoading3DTrees || isLoadingShadows || loadingMessage) && (
