@@ -98,6 +98,12 @@ function App() {
         setActiveTabIndex(requirements.requiresTab);
         // Small delay to let tab content render
         await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Scroll sidebar content to top for better tooltip positioning
+        const sidebarContent = document.querySelector('.sidebar-content-area');
+        if (sidebarContent) {
+          sidebarContent.scrollTop = 0;
+        }
       }
 
       // Handle 3D mode if needed

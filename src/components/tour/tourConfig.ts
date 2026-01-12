@@ -20,6 +20,27 @@ const tourStyles = {
     textColor: '#212529',
     arrowColor: '#FFFFFF',
     backgroundColor: '#FFFFFF',
+    overlayColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 10000,
+  },
+  tooltip: {
+    maxWidth: '380px',
+    padding: '16px',
+  },
+  tooltipContainer: {
+    textAlign: 'left',
+  },
+  buttonNext: {
+    backgroundColor: '#2E7D32',
+    padding: '8px 16px',
+    borderRadius: '4px',
+  },
+  buttonBack: {
+    color: '#2E7D32',
+    marginRight: '8px',
+  },
+  buttonSkip: {
+    color: '#666',
   },
 };
 
@@ -63,10 +84,11 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     key: 'dashboardTabs',
     target: '[data-tour-id="sidebar-tabs"]',
     content: 'The dashboard is organized into four main tabs: City Overview, Tree Details, Planting Advisor, and Map Layers.',
-    placement: 'top',
+    placement: 'bottom',
     styles: tourStyles,
     floaterProps: {
-      disableAnimation: true,
+      disableAnimation: false,
+      offset: 10,
     },
     requirements: {
       requiresSidebar: 'open',
@@ -87,8 +109,12 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     key: 'knowYourNeighbourhood',
     target: '[data-tour-id="know-your-neighbourhood"]',
     content: 'After drawing an area, this section will show you detailed statistics like tree count and CO₂ sequestration for that specific zone.',
-    placement: 'top',
+    placement: 'bottom',
     styles: tourStyles,
+    floaterProps: {
+      disableAnimation: false,
+      offset: 15,
+    },
     requirements: {
       requiresSidebar: 'open',
       requiresTab: 0,

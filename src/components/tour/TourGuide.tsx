@@ -167,8 +167,29 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
         showSkipButton
         disableOverlayClose
         disableCloseOnEsc
-        disableScrolling
-        styles={{ options: { zIndex: 10000 } }}
+        disableScrolling={false}
+        scrollOffset={120}
+        disableScrollParentFix={false}
+        spotlightPadding={10}
+        styles={{
+          options: {
+            zIndex: 10000,
+          },
+          tooltip: {
+            maxWidth: '380px',
+          },
+          tooltipContainer: {
+            textAlign: 'left',
+          },
+        }}
+        floaterProps={{
+          disableAnimation: false,
+          styles: {
+            floater: {
+              filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))',
+            },
+          },
+        }}
         tooltipComponent={targetError ? () => tooltipComponent : undefined}
       />
       <style>{`
