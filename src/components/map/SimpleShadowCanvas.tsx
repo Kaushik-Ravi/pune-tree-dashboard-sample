@@ -1,6 +1,6 @@
 /**
- * SimpleShadowCanvas - Ultra-simple shadow implementation
- * No refs, no state, just pure canvas rendering
+ * SimpleShadowCanvas - Shadow overlay with proper camera sync
+ * Based on deck.gl/kepler.gl patterns for MapLibre + Three.js integration
  */
 
 import { useEffect } from 'react';
@@ -11,17 +11,6 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 interface SimpleShadowCanvasProps {
   map: MapLibreMap;
   enabled: boolean;
-}
-
-/**
- * Convert lng/lat to Three.js world coordinates
- */
-function lngLatToWorld(lng: number, lat: number, worldSize: number = 2000): { x: number, z: number } {
-  const mercator = MercatorCoordinate.fromLngLat([lng, lat], 0);
-  return {
-    x: (mercator.x - 0.5) * worldSize,
-    z: (mercator.y - 0.5) * worldSize,
-  };
 }
 
 export function SimpleShadowCanvas({ map, enabled }: SimpleShadowCanvasProps) {
@@ -45,7 +34,6 @@ export function SimpleShadowCanvas({ map, enabled }: SimpleShadowCanvasProps) {
     canvas.style.height = '100%';
     canvas.style.pointerEvents = 'none';
     canvas.style.zIndex = '1';
-    canvas.style.border = '2px solid rgba(0,255,0,0.3)'; // DEBUG: Subtle green border
 
     // Append to map container
     const mapContainer = map.getContainer();
@@ -63,9 +51,14 @@ export function SimpleShadowCanvas({ map, enabled }: SimpleShadowCanvasProps) {
 
     // Create Three.js scene
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 5000);
-    camera.position.set(0, 200, 200);
-    camera.lookAt(0, 0, 0);
+    
+    // Create camera - will be synced with MapLibre
+    const camera = new THREE.PerspectiveCamera(
+      map.transform.fov * (180 / Math.PI), // Convert radians to degrees
+      width / height,
+      0.1,
+      1e6 // Far plane - very large for map scale
+    );
 
     const renderer = new THREE.WebGLRenderer({
       canvas,
@@ -79,139 +72,229 @@ export function SimpleShadowCanvas({ map, enabled }: SimpleShadowCanvasProps) {
 
     console.log('✅ [SimpleShadowCanvas] Three.js renderer created');
 
-    // Add lights
-    const sunLight = new THREE.DirectionalLight(0xffffff, 2);
-    sunLight.position.set(200, 300, 200);
+    // Add sun light (will be positioned based on time)
+    const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    sunLight.position.set(1000, 2000, 1000);
     sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 2048;
-    sunLight.shadow.mapSize.height = 2048;
-    sunLight.shadow.camera.left = -400;
-    sunLight.shadow.camera.right = 400;
-    sunLight.shadow.camera.top = 400;
-    sunLight.shadow.camera.bottom = -400;
+    sunLight.shadow.mapSize.width = 4096; // High quality
+    sunLight.shadow.mapSize.height = 4096;
+    sunLight.shadow.camera.left = -2000;
+    sunLight.shadow.camera.right = 2000;
+    sunLight.shadow.camera.top = 2000;
+    sunLight.shadow.camera.bottom = -2000;
     sunLight.shadow.camera.near = 0.5;
-    sunLight.shadow.camera.far = 1000;
+    sunLight.shadow.camera.far = 10000;
     scene.add(sunLight);
-    scene.add(new THREE.AmbientLight(0x404040, 0.3));
+    scene.add(new THREE.AmbientLight(0x404040, 0.2));
 
     console.log('☀️ [SimpleShadowCanvas] Lights added');
 
-    // Add ground plane
-    const groundGeometry = new THREE.PlaneGeometry(3000, 3000);
-    const groundMaterial = new THREE.ShadowMaterial({ opacity: 0.6 });
+    // Add ground plane to receive shadows
+    const groundGeometry = new THREE.PlaneGeometry(1e6, 1e6);
+    const groundMaterial = new THREE.ShadowMaterial({ opacity: 0.4 });
     const ground = new THREE.Mesh(groundGeometry, groundMaterial);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
+    ground.position.y = -0.1; // Slightly below ground to avoid z-fighting
     scene.add(ground);
 
     console.log('🌍 [SimpleShadowCanvas] Ground plane added');
 
-    // Fetch building data from map
+    // Fetch buildings from map
+    const buildingGroup = new THREE.Group();
+    scene.add(buildingGroup);
+
     const fetchBuildings = () => {
       console.log('🏢 [SimpleShadowCanvas] Fetching building data...');
       
-      const bounds = map.getBounds();
-      const features = map.queryRenderedFeatures(undefined, {
-        layers: ['building', 'building-3d'], // Common building layer IDs
-      });
+      try {
+        // Get all style layers to find building layers
+        const layers = map.getStyle().layers || [];
+        const buildingLayers = layers
+          .filter((l: any) => 
+            l.type === 'fill-extrusion' || 
+            l.id.includes('building') ||
+            l['source-layer'] === 'building'
+          )
+          .map((l: any) => l.id);
 
-      console.log(`📊 [SimpleShadowCanvas] Found ${features.length} building features`);
+        console.log('🔍 [SimpleShadowCanvas] Found building layers:', buildingLayers);
 
-      let buildingsAdded = 0;
+        if (buildingLayers.length === 0) {
+          console.warn('⚠️ [SimpleShadowCanvas] No building layers found, using default query');
+        }
 
-      features.forEach((feature, index) => {
-        if (!feature.geometry || feature.geometry.type !== 'Polygon') return;
+        // Query buildings (try with layers if found, otherwise all features)
+        const features = buildingLayers.length > 0
+          ? map.queryRenderedFeatures(undefined, { layers: buildingLayers })
+          : map.queryRenderedFeatures();
 
-        const coordinates = feature.geometry.coordinates[0]; // Outer ring
-        if (!coordinates || coordinates.length < 3) return;
-
-        // Get building height from properties
-        const height = feature.properties?.height || 
-                      feature.properties?.render_height || 
-                      feature.properties?.building_height || 
-                      15; // Default 15m
-
-        // Calculate center of polygon
-        let centerLng = 0, centerLat = 0;
-        coordinates.forEach((coord: number[]) => {
-          centerLng += coord[0];
-          centerLat += coord[1];
-        });
-        centerLng /= coordinates.length;
-        centerLat /= coordinates.length;
-
-        // Convert to world coordinates
-        const worldPos = lngLatToWorld(centerLng, centerLat);
-
-        // Create simple box geometry for shadow casting
-        // Width/depth approximation from polygon bounds
-        const lngs = coordinates.map((c: number[]) => c[0]);
-        const lats = coordinates.map((c: number[]) => c[1]);
-        const minLng = Math.min(...lngs);
-        const maxLng = Math.max(...lngs);
-        const minLat = Math.min(...lats);
-        const maxLat = Math.max(...lats);
-        
-        const widthWorld = lngLatToWorld(maxLng, centerLat).x - lngLatToWorld(minLng, centerLat).x;
-        const depthWorld = lngLatToWorld(centerLng, maxLat).z - lngLatToWorld(centerLng, minLat).z;
-
-        // Create invisible building mesh that casts shadows
-        const buildingGeometry = new THREE.BoxGeometry(
-          Math.abs(widthWorld),
-          height,
-          Math.abs(depthWorld)
+        // Filter for building-like features
+        const buildingFeatures = features.filter((f: any) => 
+          f.geometry?.type === 'Polygon' &&
+          (f.properties?.height || f.properties?.render_height || f.layer?.type === 'fill-extrusion')
         );
-        
-        const buildingMaterial = new THREE.MeshStandardMaterial({
-          color: 0x808080,
-          transparent: true,
-          opacity: 0.01, // Almost invisible - just shadows
-          wireframe: false,
+
+        console.log(`📊 [SimpleShadowCanvas] Found ${buildingFeatures.length} building features`);
+
+        // Clear previous buildings
+        buildingGroup.clear();
+
+        let buildingsAdded = 0;
+        const center = map.getCenter();
+        const centerMercator = MercatorCoordinate.fromLngLat([center.lng, center.lat], 0);
+
+        buildingFeatures.forEach((feature: any) => {
+          if (!feature.geometry || feature.geometry.type !== 'Polygon') return;
+
+          const coordinates = feature.geometry.coordinates[0];
+          if (!coordinates || coordinates.length < 3) return;
+
+          const height = feature.properties?.height || 
+                        feature.properties?.render_height || 
+                        feature.properties?.building_height || 
+                        20; // Default 20m
+
+          // Calculate polygon center
+          let sumLng = 0, sumLat = 0;
+          coordinates.forEach((coord: number[]) => {
+            sumLng += coord[0];
+            sumLat += coord[1];
+          });
+          const centerLng = sumLng / coordinates.length;
+          const centerLat = sumLat / coordinates.length;
+
+          // Convert to Mercator space
+          const posMercator = MercatorCoordinate.fromLngLat([centerLng, centerLat], 0);
+          
+          // Calculate world position relative to map center (in meters)
+          const worldX = (posMercator.x - centerMercator.x) * 40075016.686; // Earth circumference at equator
+          const worldZ = (posMercator.y - centerMercator.y) * 40075016.686;
+
+          // Calculate building footprint size
+          const lngs = coordinates.map((c: number[]) => c[0]);
+          const lats = coordinates.map((c: number[]) => c[1]);
+          const minMerc = MercatorCoordinate.fromLngLat([Math.min(...lngs), Math.min(...lats)], 0);
+          const maxMerc = MercatorCoordinate.fromLngLat([Math.max(...lngs), Math.max(...lats)], 0);
+          
+          const widthWorld = (maxMerc.x - minMerc.x) * 40075016.686;
+          const depthWorld = (maxMerc.y - minMerc.y) * 40075016.686;
+
+          if (widthWorld > 0 && depthWorld > 0 && height > 0) {
+            // Create invisible box that casts shadows
+            const buildingGeometry = new THREE.BoxGeometry(widthWorld, height, depthWorld);
+            const buildingMaterial = new THREE.MeshStandardMaterial({
+              color: 0x808080,
+              transparent: true,
+              opacity: 0.0, // Completely invisible - only shadows
+            });
+
+            const buildingMesh = new THREE.Mesh(buildingGeometry, buildingMaterial);
+            buildingMesh.position.set(worldX, height / 2, worldZ);
+            buildingMesh.castShadow = true;
+            buildingMesh.receiveShadow = true;
+
+            buildingGroup.add(buildingMesh);
+            buildingsAdded++;
+          }
         });
 
-        const buildingMesh = new THREE.Mesh(buildingGeometry, buildingMaterial);
-        buildingMesh.position.set(worldPos.x, height / 2, worldPos.z);
-        buildingMesh.castShadow = true;
-        buildingMesh.receiveShadow = true;
-
-        scene.add(buildingMesh);
-        buildingsAdded++;
-      });
-
-      console.log(`🏗️ [SimpleShadowCanvas] Added ${buildingsAdded} buildings to shadow scene`);
+        console.log(`🏗️ [SimpleShadowCanvas] Added ${buildingsAdded} buildings to shadow scene`);
+      } catch (error) {
+        console.error('❌ [SimpleShadowCanvas] Error fetching buildings:', error);
+      }
     };
 
-    // Fetch buildings after a short delay to ensure map is loaded
-    setTimeout(fetchBuildings, 1000);
+    // Sync camera with MapLibre using transform matrix
+    const syncCamera = () => {
+      const center = map.getCenter();
+      const zoom = map.getZoom();
+      const pitch = map.getPitch() * Math.PI / 180;
+      const bearing = -map.getBearing() * Math.PI / 180;
 
-    // Render
-    renderer.render(scene, camera);
+      // Camera altitude based on zoom (closer at high zoom)
+      const altitude = 10000 / Math.pow(2, zoom - 10);
+
+      // Position camera above map center
+      camera.position.set(0, altitude, 0);
+      camera.lookAt(0, 0, 0);
+      
+      // Apply pitch
+      camera.rotation.x = -pitch;
+      
+      // Apply bearing
+      camera.rotation.z = bearing;
+
+      camera.updateMatrixWorld();
+    };
+
+    // Render function
+    const render = () => {
+      syncCamera();
+      renderer.render(scene, camera);
+    };
+
+    // Handle map events
+    const handleMapMove = () => {
+      render();
+    };
+
+    const handleMapResize = () => {
+      const newWidth = mapContainer.offsetWidth;
+      const newHeight = mapContainer.offsetHeight;
+      canvas.width = newWidth;
+      canvas.height = newHeight;
+      renderer.setSize(newWidth, newHeight);
+      camera.aspect = newWidth / newHeight;
+      camera.updateProjectionMatrix();
+      render();
+    };
+
+    map.on('move', handleMapMove);
+    map.on('zoom', handleMapMove);
+    map.on('rotate', handleMapMove);
+    map.on('pitch', handleMapMove);
+    map.on('resize', handleMapResize);
+
+    // Fetch buildings after map is fully loaded
+    if (map.loaded()) {
+      setTimeout(fetchBuildings, 500);
+    } else {
+      map.once('load', () => setTimeout(fetchBuildings, 500));
+    }
+
+    // Initial render
+    render();
     console.log('🎬 [SimpleShadowCanvas] FIRST FRAME RENDERED');
 
-    // Animation loop
+    // Animation loop for smooth rendering
     let frameCount = 0;
     const animate = () => {
       frameCount++;
+      render();
       
-      renderer.render(scene, camera);
-      
-      if (frameCount === 1 || frameCount % 60 === 0) {
-        console.log(`🔄 [SimpleShadowCanvas] Frame ${frameCount} rendered`);
+      if (frameCount % 300 === 0) {
+        console.log(`🔄 [SimpleShadowCanvas] Frame ${frameCount}`);
       }
       
       requestAnimationFrame(animate);
     };
     animate();
 
-    console.log('✅✅✅ [SimpleShadowCanvas] FULLY INITIALIZED AND ANIMATING');
+    console.log('✅✅✅ [SimpleShadowCanvas] FULLY INITIALIZED');
 
     // Cleanup
     return () => {
       console.log('🧹 [SimpleShadowCanvas] Cleaning up');
+      map.off('move', handleMapMove);
+      map.off('zoom', handleMapMove);
+      map.off('rotate', handleMapMove);
+      map.off('pitch', handleMapMove);
+      map.off('resize', handleMapResize);
       canvas.remove();
       renderer.dispose();
     };
   }, [map, enabled]);
 
-  return null; // No JSX - we create canvas manually
+  return null;
 }
