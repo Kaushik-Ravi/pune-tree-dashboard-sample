@@ -100,7 +100,6 @@ const MapView: React.FC<MapViewProps> = ({
   const isDraggingRef = useRef(false);
   const [isLoading3DTrees, setIsLoading3DTrees] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
-  const [shadowTreeData, setShadowTreeData] = useState<any[] | null>(null);
 
   const mapTilerKey = import.meta.env.VITE_MAPTILER_KEY;
   const getMapStyle = (style: string) => {
@@ -231,39 +230,6 @@ const MapView: React.FC<MapViewProps> = ({
       map.off('moveend', updateBounds);
     };
   }, [is3D]);
-  
-  // Fetch tree data for shadow rendering
-  useEffect(() => {
-    if (!is3D || !shadowsEnabled || !viewBounds || zoom < 14) {
-      setShadowTreeData(null);
-      return;
-    }
-
-    const fetchShadowTrees = async () => {
-      try {
-        const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
-        const maxTrees = zoom >= 18 ? 500 : zoom >= 16 ? 300 : 150;
-        
-        const response = await fetch(`${API_BASE_URL}/api/trees-in-bounds`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bounds: viewBounds, limit: maxTrees })
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setShadowTreeData(data.features || []);
-          console.log(`🌳 [MapView] Fetched ${data.features?.length || 0} trees for shadows`);
-        }
-      } catch (error) {
-        console.error('❌ [MapView] Failed to fetch shadow trees:', error);
-        setShadowTreeData(null);
-      }
-    };
-
-    const timeoutId = setTimeout(fetchShadowTrees, 500);
-    return () => clearTimeout(timeoutId);
-  }, [is3D, shadowsEnabled, viewBounds, zoom]);
   
   const handleLoading3DChange = useCallback((loading: boolean) => {
     setIsLoading3DTrees(loading);
@@ -406,14 +372,6 @@ const MapView: React.FC<MapViewProps> = ({
           <SimpleShadowCanvas
             map={mapRef.current.getMap()}
             enabled={is3D && shadowsEnabled}
-            latitude={18.5204}
-            longitude={73.8567}
-            dateTime={lightConfig?.dateTime || (() => {
-              const date = new Date();
-              date.setHours(10, 0, 0, 0);
-              return date;
-            })()}
-            treeData={shadowTreeData}
           />
         )}
 

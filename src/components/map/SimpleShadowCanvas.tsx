@@ -1,33 +1,31 @@
 /**
- * SimpleShadowCanvas - Working shadow implementation with real trees and time-synced sun
+ * SimpleShadowCanvas - Ultra-simple shadow implementation
+ * No refs, no state, just pure canvas rendering
  */
 
 import { useEffect } from 'react';
 import * as THREE from 'three';
-import * as SunCalc from 'suncalc';
+import { MercatorCoordinate } from 'maplibre-gl';
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import type { Feature, Point } from 'geojson';
-
-interface TreeFeature extends Feature<Point> {
-  properties: {
-    id: string;
-    height_m: number;
-    girth_cm: number;
-    canopy_dia_m: number;
-  };
-}
 
 interface SimpleShadowCanvasProps {
   map: MapLibreMap;
   enabled: boolean;
-  latitude?: number;
-  longitude?: number;
-  dateTime?: Date;
-  treeData?: TreeFeature[] | null;
 }
 
-export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude = 73.8567, dateTime, treeData }: SimpleShadowCanvasProps) {
-  console.log('🎯 [SimpleShadowCanvas] Render - enabled:', enabled, 'trees:', treeData?.length || 0);
+/**
+ * Convert lng/lat to Three.js world coordinates
+ */
+function lngLatToWorld(lng: number, lat: number, worldSize: number = 2000): { x: number, z: number } {
+  const mercator = MercatorCoordinate.fromLngLat([lng, lat], 0);
+  return {
+    x: (mercator.x - 0.5) * worldSize,
+    z: (mercator.y - 0.5) * worldSize,
+  };
+}
+
+export function SimpleShadowCanvas({ map, enabled }: SimpleShadowCanvasProps) {
+  console.log('🎯 [SimpleShadowCanvas] Render - enabled:', enabled);
 
   useEffect(() => {
     if (!enabled) {
@@ -47,7 +45,7 @@ export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude
     canvas.style.height = '100%';
     canvas.style.pointerEvents = 'none';
     canvas.style.zIndex = '1';
-    // canvas.style.border = '3px solid lime'; // DEBUG: Bright green border (REMOVED - working now)
+    canvas.style.border = '2px solid rgba(0,255,0,0.3)'; // DEBUG: Subtle green border
 
     // Append to map container
     const mapContainer = map.getContainer();
@@ -81,26 +79,9 @@ export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude
 
     console.log('✅ [SimpleShadowCanvas] Three.js renderer created');
 
-    // Calculate sun position BEFORE creating lights
-    const currentDateTime = dateTime || new Date();
-    const sunCalcPos = SunCalc.getPosition(currentDateTime, latitude, longitude);
-    
-    const altitude = sunCalcPos.altitude;
-    const azimuth = sunCalcPos.azimuth;
-    
-    // Calculate intensity
-    const naturalIntensity = Math.max(0, Math.min(1, (Math.sin(altitude) + 0.5) / 1.5));
-    const intensity = altitude > 0 ? naturalIntensity : Math.max(0.3, naturalIntensity);
-    
-    // Convert to Three.js position
-    const sunDistance = 300;
-    const sunX = sunDistance * Math.cos(altitude) * Math.sin(azimuth);
-    const sunY = sunDistance * Math.sin(altitude);
-    const sunZ = sunDistance * Math.cos(altitude) * Math.cos(azimuth);
-
     // Add lights
-    const sunLight = new THREE.DirectionalLight(0xffffff, Math.max(intensity, 0.5));
-    sunLight.position.set(sunX, sunY, sunZ);
+    const sunLight = new THREE.DirectionalLight(0xffffff, 2);
+    sunLight.position.set(200, 300, 200);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
@@ -113,12 +94,7 @@ export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude
     scene.add(sunLight);
     scene.add(new THREE.AmbientLight(0x404040, 0.3));
 
-    console.log('☀️ [SimpleShadowCanvas] Sun synced:', {
-      time: currentDateTime.toLocaleTimeString(),
-      altitude: (altitude * 180 / Math.PI).toFixed(1) + '°',
-      intensity: sunLight.intensity.toFixed(2),
-      position: [sunX.toFixed(0), sunY.toFixed(0), sunZ.toFixed(0)]
-    });
+    console.log('☀️ [SimpleShadowCanvas] Lights added');
 
     // Add ground plane
     const groundGeometry = new THREE.PlaneGeometry(3000, 3000);
@@ -130,154 +106,83 @@ export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude
 
     console.log('🌍 [SimpleShadowCanvas] Ground plane added');
 
-    // Add real tree data if available, otherwise demo grid
-    if (treeData && treeData.length > 0) {
-      console.log(`🌳 [SimpleShadowCanvas] Adding ${treeData.length} real trees`);
+    // Fetch building data from map
+    const fetchBuildings = () => {
+      console.log('🏢 [SimpleShadowCanvas] Fetching building data...');
       
-      treeData.forEach((tree) => {
-        const { height_m, girth_cm, canopy_dia_m } = tree.properties;
-        const [lng, lat] = tree.geometry.coordinates;
-        
-        if (!height_m || !girth_cm || !canopy_dia_m || height_m <= 0) return;
-        
-        // Convert lat/lng to scene coordinates (simplified - just use relative positioning)
-        // For more accurate projection, we'd need to match MapLibre's projection
-        const x = (lng - longitude) * 111320 * Math.cos(latitude * Math.PI / 180); // meters
-        const z = -(lat - latitude) * 110540; // meters (negative Z = north)
-        
-        // Skip trees too far from center
-        if (Math.abs(x) > 500 || Math.abs(z) > 500) return;
-        
-        // Tree trunk
-        const trunkRadiusM = Math.max(0.15, (girth_cm / 100) / (2 * Math.PI));
-        const trunkHeight = Math.min(height_m * 0.3, 4);
-        
-        const trunkGeometry = new THREE.CylinderGeometry(trunkRadiusM, trunkRadiusM, trunkHeight, 8);
-        const trunkMaterial = new THREE.MeshStandardMaterial({ 
-          color: 0x4a3520,
-          metalness: 0,
-          roughness: 0.9
-        });
-        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-        trunk.position.set(x, trunkHeight / 2, z);
-        trunk.castShadow = true;
-        scene.add(trunk);
-        
-        // Tree canopy
-        const canopyRadiusM = canopy_dia_m / 2;
-        const canopyHeight = height_m - trunkHeight;
-        
-        const canopyGeometry = new THREE.SphereGeometry(canopyRadiusM, 16, 16);
-        const canopyMaterial = new THREE.MeshStandardMaterial({
-          color: 0x228b22,
-          metalness: 0,
-          roughness: 0.8
-        });
-        const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
-        canopy.position.set(x, trunkHeight + canopyHeight * 0.5, z);
-        canopy.castShadow = true;
-        scene.add(canopy);
+      const bounds = map.getBounds();
+      const features = map.queryRenderedFeatures(undefined, {
+        layers: ['building', 'building-3d'], // Common building layer IDs
       });
-      
-      console.log(`✅ [SimpleShadowCanvas] ${treeData.length} real trees added`);
-    } else {
-      // Fallback demo grid if no tree data
-      console.log('🌳 [SimpleShadowCanvas] No tree data - adding demo grid');
-      
-      for (let x = -100; x <= 100; x += 30) {
-        for (let z = -100; z <= 100; z += 30) {
-          // Tree trunk
-          const trunkGeometry = new THREE.CylinderGeometry(2, 2, 15, 8);
-          const trunkMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x4a3520,
-            metalness: 0,
-            roughness: 0.9
-          });
-          const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-          trunk.position.set(x, 7.5, z);
-          trunk.castShadow = true;
-          scene.add(trunk);
-          
-          // Tree canopy
-          const canopyGeometry = new THREE.SphereGeometry(8, 16, 16);
-          const canopyMaterial = new THREE.MeshStandardMaterial({
-            color: 0x228b22,
-            metalness: 0,
-            roughness: 0.8
-          });
-          const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
-          canopy.position.set(x, 18, z);
-          canopy.castShadow = true;
-          scene.add(canopy);
-        }
-      }
-      
-      console.log('🌳 [SimpleShadowCanvas] Added demo tree grid');
-    }
 
-    // Skip API fetch for now - API endpoint doesn't exist
-    /*
-    // Fetch and add real trees
-    const fetchTrees = async () => {
-      try {
-        const bounds = map.getBounds();
-        const sw = bounds.getSouthWest();
-        const ne = bounds.getNorthEast();
+      console.log(`📊 [SimpleShadowCanvas] Found ${features.length} building features`);
+
+      let buildingsAdded = 0;
+
+      features.forEach((feature, index) => {
+        if (!feature.geometry || feature.geometry.type !== 'Polygon') return;
+
+        const coordinates = feature.geometry.coordinates[0]; // Outer ring
+        if (!coordinates || coordinates.length < 3) return;
+
+        // Get building height from properties
+        const height = feature.properties?.height || 
+                      feature.properties?.render_height || 
+                      feature.properties?.building_height || 
+                      15; // Default 15m
+
+        // Calculate center of polygon
+        let centerLng = 0, centerLat = 0;
+        coordinates.forEach((coord: number[]) => {
+          centerLng += coord[0];
+          centerLat += coord[1];
+        });
+        centerLng /= coordinates.length;
+        centerLat /= coordinates.length;
+
+        // Convert to world coordinates
+        const worldPos = lngLatToWorld(centerLng, centerLat);
+
+        // Create simple box geometry for shadow casting
+        // Width/depth approximation from polygon bounds
+        const lngs = coordinates.map((c: number[]) => c[0]);
+        const lats = coordinates.map((c: number[]) => c[1]);
+        const minLng = Math.min(...lngs);
+        const maxLng = Math.max(...lngs);
+        const minLat = Math.min(...lats);
+        const maxLat = Math.max(...lats);
         
-        const response = await fetch(`/api/trees?swLng=${sw.lng}&swLat=${sw.lat}&neLng=${ne.lng}&neLat=${ne.lat}`);
-        const data = await response.json();
+        const widthWorld = lngLatToWorld(maxLng, centerLat).x - lngLatToWorld(minLng, centerLat).x;
+        const depthWorld = lngLatToWorld(centerLng, maxLat).z - lngLatToWorld(centerLng, minLat).z;
+
+        // Create invisible building mesh that casts shadows
+        const buildingGeometry = new THREE.BoxGeometry(
+          Math.abs(widthWorld),
+          height,
+          Math.abs(depthWorld)
+        );
         
-        console.log(`🌳 [SimpleShadowCanvas] Fetched ${data.features?.length || 0} trees`);
-        
-        if (data.features && data.features.length > 0) {
-          // Create instanced tree geometry
-          const treeGeometry = new THREE.CylinderGeometry(0.5, 0.5, 10, 8);
-          const treeMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x2d5016,
-            metalness: 0,
-            roughness: 0.9
-          });
-          
-          const canopyGeometry = new THREE.SphereGeometry(5, 16, 16);
-          const canopyMaterial = new THREE.MeshStandardMaterial({
-            color: 0x228b22,
-            metalness: 0,
-            roughness: 0.8
-          });
-          
-          // Add trees (limit to 500 for performance)
-          const treesToAdd = data.features.slice(0, 500);
-          treesToAdd.forEach((feature: any) => {
-            const [lng, lat] = feature.geometry.coordinates;
-            
-            // Convert to world coordinates (simplified - centered around map)
-            const x = (lng - longitude) * 111320; // meters
-            const z = -(lat - latitude) * 110540; // meters (negative for Three.js Z)
-            
-            // Tree trunk
-            const trunk = new THREE.Mesh(treeGeometry, treeMaterial);
-            trunk.position.set(x, 5, z);
-            trunk.castShadow = true;
-            scene.add(trunk);
-            
-            // Tree canopy
-            const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
-            canopy.position.set(x, 12, z);
-            canopy.castShadow = true;
-            scene.add(canopy);
-          });
-          
-          console.log(`✅ [SimpleShadowCanvas] Added ${treesToAdd.length} trees to shadow scene`);
-        }
-      } catch (error) {
-        console.error('❌ [SimpleShadowCanvas] Failed to fetch trees:', error);
-      }
+        const buildingMaterial = new THREE.MeshStandardMaterial({
+          color: 0x808080,
+          transparent: true,
+          opacity: 0.01, // Almost invisible - just shadows
+          wireframe: false,
+        });
+
+        const buildingMesh = new THREE.Mesh(buildingGeometry, buildingMaterial);
+        buildingMesh.position.set(worldPos.x, height / 2, worldPos.z);
+        buildingMesh.castShadow = true;
+        buildingMesh.receiveShadow = true;
+
+        scene.add(buildingMesh);
+        buildingsAdded++;
+      });
+
+      console.log(`🏗️ [SimpleShadowCanvas] Added ${buildingsAdded} buildings to shadow scene`);
     };
-    
-    fetchTrees();
 
-    // Remove test cube - we have real trees now!
-    */
+    // Fetch buildings after a short delay to ensure map is loaded
+    setTimeout(fetchBuildings, 1000);
 
     // Render
     renderer.render(scene, camera);
@@ -287,9 +192,6 @@ export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude
     let frameCount = 0;
     const animate = () => {
       frameCount++;
-      
-      // No rotation needed for real trees
-      // cube.rotation.y += 0.01;
       
       renderer.render(scene, camera);
       
@@ -309,7 +211,7 @@ export function SimpleShadowCanvas({ map, enabled, latitude = 18.5204, longitude
       canvas.remove();
       renderer.dispose();
     };
-  }, [map, enabled, latitude, longitude, dateTime, treeData]);
+  }, [map, enabled]);
 
   return null; // No JSX - we create canvas manually
 }
