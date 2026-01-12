@@ -17,8 +17,7 @@ import DrawControl, { DrawEvent, DrawActionEvent } from './DrawControl';
 import MapboxDraw from 'maplibre-gl-draw';
 import ViewModeToggle from './ViewModeToggle';
 import ThreeDTreesLayer from './ThreeDTreesLayer';
-// import { ShadowOverlay } from './ShadowOverlay'; // COMMENTED OUT - OLD APPROACH WITH REF ISSUES
-import { SimpleShadowCanvas } from './SimpleShadowCanvas'; // NEW: Simple, working shadow implementation
+import { RealisticShadowsLayer } from './RealisticShadowsLayer';
 import { LightConfig } from '../sidebar/tabs/LightAndShadowControl';
 import { ShadowQuality } from '../sidebar/tabs/MapLayers';
 
@@ -95,10 +94,12 @@ const MapView: React.FC<MapViewProps> = ({
   const mapRef = useRef<MapRef | null>(null);
   const { setSelectedArea } = useTreeStore();
   const drawControlRef = useRef<{ draw: MapboxDraw } | null>(null);
+  const shadowLayerRef = useRef<RealisticShadowsLayer | null>(null);
   const [zoom, setZoom] = useState(11.5);
   const [viewBounds, setViewBounds] = useState(null);
   const isDraggingRef = useRef(false);
   const [isLoading3DTrees, setIsLoading3DTrees] = useState(false);
+  const [isLoadingShadows, setIsLoadingShadows] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
 
   const mapTilerKey = import.meta.env.VITE_MAPTILER_KEY;
@@ -179,6 +180,97 @@ const MapView: React.FC<MapViewProps> = ({
 
   }, [is3D, lightConfig, mapTilerKey]);
 
+  // Initialize shadow layer
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !is3D || !shadowsEnabled) {
+      // Remove shadow layer if exists
+      if (shadowLayerRef.current && map) {
+        try {
+          map.removeLayer('realistic-shadows');
+        } catch (e) {
+          // Layer might not exist
+        }
+        shadowLayerRef.current = null;
+      }
+      return;
+    }
+
+    // Only initialize if style is loaded
+    if (!map.isStyleLoaded()) {
+      const onStyleLoad = () => {
+        // Retry initialization after style loads
+        setTimeout(() => {
+          if (is3D && shadowsEnabled) {
+            initShadowLayer();
+          }
+        }, 100);
+      };
+      map.once('styledata', onStyleLoad);
+      return;
+    }
+
+    const initShadowLayer = () => {
+      try {
+        // Remove existing layer if present
+        if (map.getLayer('realistic-shadows')) {
+          map.removeLayer('realistic-shadows');
+        }
+
+        // Create shadow layer
+        const shadowLayer = new RealisticShadowsLayer({
+          id: 'realistic-shadows',
+          lightConfig,
+          shadowQuality,
+          showTreeShadows: _showTreeShadows,
+          showBuildingShadows: _showBuildingShadows,
+          onLoadingChange: setIsLoadingShadows,
+        });
+
+        // Add to map
+        map.addLayer(shadowLayer as any);
+        shadowLayerRef.current = shadowLayer;
+
+        // Handle map move/zoom
+        const handleMapMove = () => {
+          shadowLayer.onMapMove();
+        };
+
+        map.on('moveend', handleMapMove);
+        map.on('zoomend', handleMapMove);
+
+        console.log('✅ [MapView] Shadow layer added to map');
+      } catch (error) {
+        console.error('❌ [MapView] Failed to add shadow layer:', error);
+      }
+    };
+
+    initShadowLayer();
+
+    return () => {
+      if (shadowLayerRef.current && map) {
+        try {
+          map.removeLayer('realistic-shadows');
+        } catch (e) {
+          // Layer might already be removed
+        }
+        shadowLayerRef.current = null;
+      }
+    };
+  }, [is3D, shadowsEnabled, lightConfig, shadowQuality, _showTreeShadows, _showBuildingShadows]);
+
+  // Update shadow layer options when they change
+  useEffect(() => {
+    if (shadowLayerRef.current) {
+      shadowLayerRef.current.updateOptions({
+        lightConfig,
+        shadowQuality,
+        showTreeShadows: _showTreeShadows,
+        showBuildingShadows: _showBuildingShadows,
+      });
+    }
+  }, [lightConfig, shadowQuality, _showTreeShadows, _showBuildingShadows]);
+
   const handleToggle3D = useCallback(async () => {
     const map = mapRef.current;
     if (!map) return;
@@ -245,6 +337,15 @@ const MapView: React.FC<MapViewProps> = ({
       setTimeout(() => setLoadingMessage(''), 500);
     }
   }, []);
+
+  // Update loading message when shadows are loading
+  useEffect(() => {
+    if (isLoadingShadows) {
+      setLoadingMessage('🌤️ Calculating realistic shadows...');
+    } else if (!isLoading3DTrees) {
+      setLoadingMessage('');
+    }
+  }, [isLoadingShadows, isLoading3DTrees]);
 
   const onDrawCreate = useCallback((evt: DrawEvent) => {
     const feature = evt.features[0];
@@ -367,29 +468,7 @@ const MapView: React.FC<MapViewProps> = ({
           />
         )}
         
-        {/* NEW SIMPLE SHADOW IMPLEMENTATION - Creates canvas directly in DOM, bypasses all React issues */}
-        {mapRef.current && (
-          <SimpleShadowCanvas
-            map={mapRef.current.getMap()}
-            enabled={is3D && shadowsEnabled}
-          />
-        )}
-
-        {/* OLD SHADOW OVERLAY - COMMENTED OUT DUE TO REF PERSISTENCE ISSUES */}
-        {/* {mapRef.current && (
-          <ShadowOverlay
-            map={mapRef.current.getMap()}
-            enabled={is3D && shadowsEnabled}
-            shadowQuality={shadowQuality === 'ultra' ? 'high' : (shadowQuality as 'low' | 'medium' | 'high' || 'high')}
-            latitude={18.5204}
-            longitude={73.8567}
-            dateTime={lightConfig?.dateTime || (() => {
-              const date = new Date();
-              date.setHours(10, 0, 0, 0);
-              return date;
-            })()}
-          />
-        )} */}
+        {/* Shadow layer is managed via Custom Layer API in useEffect above */}
 
         <DrawControl
           ref={drawControlRef as any}
@@ -409,8 +488,8 @@ const MapView: React.FC<MapViewProps> = ({
         <ViewModeToggle is3D={is3D} onToggle={handleToggle3D} zoom={zoom} />
       </div>
       
-      {/* Loading indicator for 3D trees */}
-      {(isLoading3DTrees || loadingMessage) && (
+      {/* Loading indicator for 3D trees and shadows */}
+      {(isLoading3DTrees || isLoadingShadows || loadingMessage) && (
         <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-30 bg-primary-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center space-x-2 animate-fade-in">
           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
           <span className="font-medium">{loadingMessage}</span>
