@@ -27,11 +27,10 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
       advancingStep.current = true;
       setTargetError(null);
       
-      waitForTourTarget(selector, { timeout: 5000, retries: 1 })
+      waitForTourTarget(selector, { timeout: 2000, retries: 0 })
         .then((result) => {
           if (!result.success) {
-            console.warn('Tour target not found, auto-skipping step:', result);
-            // Auto-skip missing steps instead of showing error
+            // Element not found, just skip silently
             handleTourControl('SKIP_STEP');
           }
         })

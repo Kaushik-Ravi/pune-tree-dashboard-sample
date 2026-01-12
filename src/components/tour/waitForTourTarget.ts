@@ -22,8 +22,8 @@ export function waitForTourTarget(
   options: WaitForTargetOptions = {}
 ): Promise<WaitForTargetResult> {
   const {
-    timeout = 5000, // Reduced from 8s to 5s
-    retries = 1 // Reduced from 2 to 1 to prevent excessive retries
+    timeout = 2000, // Quick check only
+    retries = 0 // No retries
   } = options;
 
   return new Promise((resolve) => {
@@ -51,16 +51,13 @@ export function waitForTourTarget(
         
         const elapsed = Date.now() - start;
         if (elapsed > timeout) {
-          // Timeout reached for this attempt
+          // Timeout reached
           if (attemptCount <= retries) {
-            console.warn(`⚠️ Tour target "${selector}" not found in ${timeout}ms. Retrying... (${attemptCount}/${retries})`);
-            setTimeout(() => attemptFind(), 500); // Wait 500ms before retry
+            setTimeout(() => attemptFind(), 500);
           } else {
-            const error = `Tour target "${selector}" not found after ${totalAttempts} attempts (${timeout * (retries + 1)}ms total)`;
-            console.warn(`⚠️ ${error} - will auto-skip`);
             resolve({
               success: false,
-              error,
+              error: `Target not found: ${selector}`,
               attemptCount: totalAttempts
             });
           }
