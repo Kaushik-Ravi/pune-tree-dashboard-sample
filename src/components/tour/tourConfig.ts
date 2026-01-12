@@ -24,11 +24,15 @@ const tourStyles = {
     zIndex: 10000,
   },
   tooltip: {
-    maxWidth: '380px',
+    maxWidth: '90vw',
+    width: '360px',
     padding: '16px',
   },
   tooltipContainer: {
     textAlign: 'left',
+  },
+  tooltipContent: {
+    padding: '12px 0',
   },
   buttonNext: {
     backgroundColor: '#2E7D32',
@@ -84,12 +88,8 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     key: 'dashboardTabs',
     target: '[data-tour-id="sidebar-tabs"]',
     content: 'The dashboard is organized into four main tabs: City Overview, Tree Details, Planting Advisor, and Map Layers.',
-    placement: 'bottom',
+    placement: 'auto',
     styles: tourStyles,
-    floaterProps: {
-      disableAnimation: false,
-      offset: 10,
-    },
     requirements: {
       requiresSidebar: 'open',
       requiresTab: 0,
@@ -109,12 +109,8 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     key: 'knowYourNeighbourhood',
     target: '[data-tour-id="know-your-neighbourhood"]',
     content: 'After drawing an area, this section will show you detailed statistics like tree count and CO₂ sequestration for that specific zone.',
-    placement: 'bottom',
+    placement: 'auto',
     styles: tourStyles,
-    floaterProps: {
-      disableAnimation: false,
-      offset: 15,
-    },
     requirements: {
       requiresSidebar: 'open',
       requiresTab: 0,
@@ -124,7 +120,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     key: 'plantingAdvisor',
     target: '[data-tour-id="tab-planting-advisor"]',
     content: 'The Planting Advisor helps you choose the best tree species for a selected area and simulate how many can be planted.',
-    placement: 'top',
+    placement: 'left',
     styles: tourStyles,
     requirements: {
       requiresSidebar: 'open',
@@ -135,7 +131,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     key: 'mapLayers',
     target: '[data-tour-id="tab-map-layers"]',
     content: 'Here you can change the basemap style and toggle data overlays, like the Land Surface Temperature layer.',
-    placement: 'top',
+    placement: 'left',
     styles: tourStyles,
     requirements: {
       requiresSidebar: 'open',

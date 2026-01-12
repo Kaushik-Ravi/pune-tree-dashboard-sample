@@ -162,24 +162,26 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
         stepIndex={stepIndex}
         callback={handleJoyrideCallback}
         continuous
-        scrollToFirstStep
+        scrollToFirstStep={false}
         showProgress
         showSkipButton
         disableOverlayClose
         disableCloseOnEsc
-        disableScrolling={false}
-        scrollOffset={120}
-        disableScrollParentFix={false}
+        disableScrolling
         spotlightPadding={10}
         styles={{
           options: {
             zIndex: 10000,
           },
           tooltip: {
-            maxWidth: '380px',
+            maxWidth: '90vw',
+            width: 'auto',
           },
           tooltipContainer: {
             textAlign: 'left',
+          },
+          tooltipContent: {
+            padding: '16px',
           },
         }}
         floaterProps={{
@@ -189,12 +191,37 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
               filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))',
             },
           },
+          options: {
+            preventOverflow: {
+              boundariesElement: 'viewport',
+            },
+          },
         }}
         tooltipComponent={targetError ? () => tooltipComponent : undefined}
       />
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        
+        /* Prevent body scroll during tour */
+        body:has([data-test-id="button-primary"]) {
+          overflow: hidden !important;
+          position: fixed;
+          width: 100%;
+          height: 100%;
+        }
+        
+        /* Ensure tooltips stay within viewport */
+        .__floater__body {
+          max-width: 90vw !important;
+        }
+        
+        /* Fix for mobile devices */
+        @media (max-width: 768px) {
+          .__floater__body {
+            max-width: 95vw !important;
+          }
         }
       `}</style>
     </>
