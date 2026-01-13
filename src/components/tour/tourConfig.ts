@@ -62,6 +62,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     styles: tourStyles,
     requirements: {
       requiresSidebar: 'closed',
+      requires3D: false,
     },
   },
   {
@@ -72,6 +73,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     styles: tourStyles,
     requirements: {
       requiresSidebar: 'closed',
+      requires3D: false,
     },
   },
   {
@@ -82,6 +84,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     styles: tourStyles,
     requirements: {
       requiresSidebar: 'closed',
+      requires3D: false,
     },
   },
   {
@@ -93,6 +96,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     requirements: {
       requiresSidebar: 'open',
       requiresTab: 0,
+      requires3D: false,
     },
   },
   {
@@ -103,6 +107,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     styles: tourStyles,
     requirements: {
       requiresSidebar: 'closed',
+      requires3D: false, // Ensure 3D is off for drawing tools
     },
   },
   {
@@ -115,6 +120,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     requirements: {
       requiresSidebar: 'open',
       requiresTab: 0,
+      requires3D: false,
     },
   },
   {
@@ -126,6 +132,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     requirements: {
       requiresSidebar: 'open',
       requiresTab: 2,
+      requires3D: false,
     },
   },
   {
@@ -137,6 +144,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     requirements: {
       requiresSidebar: 'open',
       requiresTab: 3,
+      requires3D: false,
     },
   },
   {
@@ -147,6 +155,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     styles: tourStyles,
     requirements: {
       requiresSidebar: 'closed',
+      requires3D: false, // Don't auto-enable 3D, just point to the toggle
     },
   },
   {
@@ -158,6 +167,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     styles: tourStyles,
     requirements: {
       requiresSidebar: 'closed',
+      requires3D: false,
     },
   },
 ];

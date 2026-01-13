@@ -59,20 +59,35 @@ function App() {
   const waitForSidebarTransition = useCallback((): Promise<void> => {
     return new Promise((resolve) => {
       const sidebarElement = sidebarRef.current;
+      const isMobile = window.innerWidth < 768;
+      
       if (!sidebarElement) {
-        resolve();
+        // If no sidebar element, just use a fixed delay
+        setTimeout(resolve, isMobile ? 400 : 300);
         return;
       }
 
-      const handleTransitionEnd = () => {
-        sidebarElement.removeEventListener('transitionend', handleTransitionEnd);
-        // Small delay to ensure content is rendered
-        setTimeout(resolve, 100);
+      let transitionEnded = false;
+      
+      const handleTransitionEnd = (e: TransitionEvent) => {
+        // Only respond to transform or translate transitions (the main sidebar animation)
+        if (e.propertyName === 'transform' || e.propertyName === 'translate') {
+          transitionEnded = true;
+          sidebarElement.removeEventListener('transitionend', handleTransitionEnd);
+          // Small delay to ensure content is rendered
+          setTimeout(resolve, 150);
+        }
       };
 
       sidebarElement.addEventListener('transitionend', handleTransitionEnd);
-      // Fallback in case transition doesn't fire
-      setTimeout(resolve, 500);
+      
+      // Fallback timeout in case transition doesn't fire
+      setTimeout(() => {
+        if (!transitionEnded) {
+          sidebarElement.removeEventListener('transitionend', handleTransitionEnd);
+          resolve();
+        }
+      }, isMobile ? 600 : 500);
     });
   }, []);
 
@@ -84,27 +99,39 @@ function App() {
     setIsPreparingStep(true);
 
     try {
-      // Handle sidebar state
+      const isMobile = window.innerWidth < 768;
+      
+      // Handle sidebar state changes
       if (requirements.requiresSidebar === 'open' && !sidebarOpen) {
         setSidebarOpen(true);
         await waitForSidebarTransition();
       } else if (requirements.requiresSidebar === 'closed' && sidebarOpen) {
         setSidebarOpen(false);
+        // On mobile, give extra time for overlay to fade out
         await waitForSidebarTransition();
+        if (isMobile) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
       }
 
       // Handle tab switching (after sidebar is in correct state)
-      if (requirements.requiresTab !== undefined && sidebarOpen) {
+      if (requirements.requiresTab !== undefined && requirements.requiresSidebar === 'open') {
         setActiveTabIndex(requirements.requiresTab);
-        // Small delay to let tab content render before Joyride scrolls
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Wait for tab content to render
+        await new Promise(resolve => setTimeout(resolve, 400));
       }
 
       // Handle 3D mode if needed
       if (requirements.requires3D && !is3D) {
         setIs3D(true);
         await new Promise(resolve => setTimeout(resolve, 300));
+      } else if (requirements.requires3D === false && is3D) {
+        setIs3D(false);
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
+      
+      // Final delay to ensure everything is stable
+      await new Promise(resolve => setTimeout(resolve, 150));
     } finally {
       setIsPreparingStep(false);
     }
@@ -123,6 +150,7 @@ function App() {
         break;
       }
       case 'PREV_STEP': {
+        // For backward navigation, we need to prepare the PREVIOUS step's state
         if (stepKey) {
           await executePreStepActions(stepKey);
         }
@@ -217,10 +245,11 @@ function App() {
           showBuildingShadows={showBuildingShadows}
         />
 
-        {sidebarOpen && (
+        {/* Mobile overlay - only show when sidebar is open AND tour is not running or is preparing */}
+        {sidebarOpen && (!runTour || isPreparingStep) && (
           <div
             onClick={toggleSidebar}
-            className="fixed inset-0 bg-black bg-opacity-30 z-20 md:hidden"
+            className="fixed inset-0 bg-black bg-opacity-30 z-20 md:hidden transition-opacity duration-300"
             aria-hidden="true"
           />
         )}
