@@ -176,18 +176,25 @@ export function getTourSteps(isMobile: boolean): EnhancedTourStep[] {
       return null;
     }
     
-    // Adjust placements for mobile (bottom sheet needs top placement)
+    // Adjust placements for mobile (dynamic based on element position)
     if (isMobile) {
       const mobileStep = { ...step };
       
-      // For steps inside the bottom sheet, use 'top' or 'auto' placement
-      if (step.requirements?.requiresSidebar === 'open') {
-        // These elements are IN the bottom sheet, so tooltip should be ABOVE them
-        mobileStep.placement = 'top';
+      // For tabs and elements at the top of bottom sheet
+      if (step.key === 'dashboardTabs' || step.key === 'plantingAdvisor' || step.key === 'mapLayers') {
+        mobileStep.placement = 'bottom'; // Tooltip below tabs
       }
-      // For map controls and buttons, keep 'auto' or 'top'
-      else if (step.key === 'drawingTools' || step.key === 'threeDMode') {
-        mobileStep.placement = 'top-start';
+      // For elements in the middle/scrollable area of bottom sheet
+      else if (step.key === 'knowYourNeighbourhood') {
+        mobileStep.placement = 'top'; // Tooltip above scrollable content
+      }
+      // For map controls (drawing tools, 3D button) - elements on map itself
+      else if (step.key === 'drawingTools' || step.key === 'threeDMode' || step.key === 'openDashboardMobile') {
+        mobileStep.placement = 'bottom'; // Tooltip below map buttons
+      }
+      // For center modals
+      else {
+        mobileStep.placement = 'center';
       }
       
       return mobileStep;

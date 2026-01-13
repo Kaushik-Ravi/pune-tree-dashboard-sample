@@ -25,10 +25,10 @@ const ModernTooltip: React.FC<TooltipRenderProps> = ({
       {...tooltipProps}
       className="modern-tour-tooltip"
       style={{
-        maxWidth: isMobile ? 'calc(100vw - 32px)' : '420px',
-        width: '100%',
+        maxWidth: isMobile ? 'calc(100vw - 40px)' : '400px',
+        width: isMobile ? 'calc(100vw - 40px)' : 'auto',
         padding: 0,
-        margin: '8px',
+        margin: isMobile ? '10px' : '8px',
         background: 'rgba(255, 255, 255, 0.98)',
         backdropFilter: 'blur(12px)',
         borderRadius: isMobile ? '16px' : '12px',

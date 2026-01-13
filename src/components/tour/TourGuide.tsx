@@ -120,29 +120,31 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
         disableScrollParentFix={true}
         scrollOffset={isMobile ? 80 : 120}
         scrollDuration={300}
-        spotlightPadding={isMobile ? 8 : 12}
+        spotlightPadding={isMobile ? 4 : 8}
         spotlightClicks={false}
         tooltipComponent={ModernTooltip}
         styles={{
           options: {
             zIndex: 10000,
-            overlayColor: 'rgba(0, 0, 0, 0.6)',
+            overlayColor: 'rgba(0, 0, 0, 0.4)',
+            arrowColor: '#2E7D32',
           },
           overlay: {
             mixBlendMode: 'normal',
           },
           spotlight: {
             borderRadius: isMobile ? '12px' : '8px',
+            boxShadow: '0 0 0 4px rgba(46, 125, 50, 0.4), 0 0 0 9999px rgba(0, 0, 0, 0.4)',
           },
         }}
         floaterProps={{
           disableAnimation: false,
-          offset: isMobile ? 12 : 15,
+          offset: isMobile ? 16 : 20,
           disableFlip: false,
           options: {
             preventOverflow: {
               boundariesElement: 'viewport',
-              padding: isMobile ? 16 : 8,
+              padding: isMobile ? 20 : 12,
             },
           },
         }}
