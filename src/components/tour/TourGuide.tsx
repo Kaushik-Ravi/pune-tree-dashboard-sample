@@ -27,12 +27,16 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
       advancingStep.current = true;
       setTargetError(null);
       
-      waitForTourTarget(selector, { timeout: 2000, retries: 0 })
+      waitForTourTarget(selector, { timeout: 3000, retries: 1 })
         .then((result) => {
           if (!result.success) {
-            // Element not found, just skip silently
+            console.warn(`Tour target not found: ${selector}`);
+            // Element not found, skip silently
             handleTourControl('SKIP_STEP');
           }
+        })
+        .catch((error) => {
+          console.error('Error waiting for tour target:', error);
         })
         .finally(() => {
           advancingStep.current = false;
@@ -47,22 +51,26 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
     const { status, action, type, index } = data;
     const finishedStatuses: string[] = [STATUS.FINISHED, STATUS.SKIPPED];
 
+    // Handle tour completion or manual close
     if (finishedStatuses.includes(status) || action === ACTIONS.CLOSE) {
       handleTourControl('RESTART');
       return;
     }
     
     // Only process STEP_AFTER events, and only when not already waiting for a target.
-    if (type === EVENTS.STEP_AFTER) {
-      if (advancingStep.current) return; // Prevent double-advancement
-
+    if (type === EVENTS.STEP_AFTER && !advancingStep.current) {
       if (action === ACTIONS.NEXT) {
         // Pass the key of the *next* step to the orchestrator
         const nextStep = steps[index + 1];
-        handleTourControl('NEXT_STEP', nextStep?.key);
+        if (nextStep) {
+          handleTourControl('NEXT_STEP', nextStep.key);
+        }
       } else if (action === ACTIONS.PREV) {
+        // Pass the key of the *previous* step to restore its state
         const prevStep = steps[index - 1];
-        handleTourControl('PREV_STEP', prevStep?.key);
+        if (prevStep) {
+          handleTourControl('PREV_STEP', prevStep.key);
+        }
       }
     }
   };
@@ -162,22 +170,28 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
         stepIndex={stepIndex}
         callback={handleJoyrideCallback}
         continuous
-        scrollToFirstStep={false}
+        scrollToFirstStep={true}
         showProgress
         showSkipButton
         disableOverlayClose
         disableCloseOnEsc
         disableScrolling={false}
-        disableScrollParentFix={false}
-        scrollOffset={100}
-        scrollDuration={300}
-        spotlightPadding={10}
+        disableScrollParentFix={true}
+        scrollOffset={120}
+        scrollDuration={400}
+        spotlightPadding={isMobile ? 5 : 10}
+        spotlightClicks={false}
         styles={{
           options: {
             zIndex: 10000,
+            arrowColor: '#fff',
+            backgroundColor: '#fff',
+            primaryColor: '#2E7D32',
+            textColor: '#212529',
+            overlayColor: 'rgba(0, 0, 0, 0.5)',
           },
           tooltip: {
-            maxWidth: 'min(400px, 90vw)',
+            maxWidth: isMobile ? '95vw' : 'min(400px, 90vw)',
             width: 'auto',
           },
           tooltipContainer: {
@@ -185,6 +199,21 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
           },
           tooltipContent: {
             padding: '16px',
+          },
+          buttonNext: {
+            backgroundColor: '#2E7D32',
+            padding: '8px 16px',
+            borderRadius: '4px',
+            fontSize: '14px',
+          },
+          buttonBack: {
+            color: '#2E7D32',
+            marginRight: '8px',
+            fontSize: '14px',
+          },
+          buttonSkip: {
+            color: '#666',
+            fontSize: '14px',
           },
         }}
         floaterProps={{
