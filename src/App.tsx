@@ -55,7 +55,7 @@ function App() {
     }
   }, [cityStats]);
 
-  // Helper function to wait for sidebar transition
+  // Helper function to wait for sidebar transition (trigger-based, not timeout)
   const waitForSidebarTransition = useCallback((): Promise<void> => {
     return new Promise((resolve) => {
       const sidebarElement = sidebarRef.current;
@@ -64,19 +64,31 @@ function App() {
         return;
       }
 
-      const handleTransitionEnd = () => {
-        sidebarElement.removeEventListener('transitionend', handleTransitionEnd);
-        // Small delay to ensure content is rendered
-        setTimeout(resolve, 100);
+      let transitionEnded = false;
+
+      const handleTransitionEnd = (e: TransitionEvent) => {
+        // Only respond to transform or visibility transitions on the sidebar itself
+        if (e.target === sidebarElement && (e.propertyName === 'transform' || e.propertyName === 'visibility')) {
+          transitionEnded = true;
+          sidebarElement.removeEventListener('transitionend', handleTransitionEnd);
+          // One frame delay to ensure rendering complete
+          requestAnimationFrame(() => setTimeout(resolve, 50));
+        }
       };
 
       sidebarElement.addEventListener('transitionend', handleTransitionEnd);
-      // Fallback in case transition doesn't fire
-      setTimeout(resolve, 500);
+      
+      // Fallback: if transitionend doesn't fire within reasonable time
+      setTimeout(() => {
+        if (!transitionEnded) {
+          sidebarElement.removeEventListener('transitionend', handleTransitionEnd);
+          resolve();
+        }
+      }, 800);
     });
   }, []);
 
-  // Pre-step orchestration: prepare UI state before advancing tour
+  // Pre-step orchestration: prepare UI state before advancing tour (trigger-based)
   const executePreStepActions = useCallback(async (stepKey: string): Promise<void> => {
     const requirements = getStepRequirements(stepKey);
     if (!requirements) return;
@@ -84,31 +96,38 @@ function App() {
     setIsPreparingStep(true);
 
     try {
-      // Handle sidebar state FIRST
+      // Handle sidebar state FIRST (with proper transition waiting)
       if (requirements.requiresSidebar === 'open' && !sidebarOpen) {
         setSidebarOpen(true);
         await waitForSidebarTransition();
-        // Additional delay to ensure content is rendered
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Additional frame to ensure DOM is settled
+        await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)));
       } else if (requirements.requiresSidebar === 'closed' && sidebarOpen) {
         setSidebarOpen(false);
         await waitForSidebarTransition();
-        // Additional delay for mobile sheet animation
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Extra frame for mobile bottom sheet
+        await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)));
       }
 
       // Handle tab switching (after sidebar is in correct state)
-      // Set tab even if sidebar is already open to ensure correct tab is shown
       if (requirements.requiresTab !== undefined) {
         setActiveTabIndex(requirements.requiresTab);
-        // Delay to let tab content render before Joyride scrolls
-        await new Promise(resolve => setTimeout(resolve, 400));
+        // Wait for tab content to render
+        await new Promise(resolve => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setTimeout(resolve, 200);
+            });
+          });
+        });
       }
 
       // Handle 3D mode if needed
       if (requirements.requires3D && !is3D) {
         setIs3D(true);
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => {
+          requestAnimationFrame(() => setTimeout(resolve, 150));
+        });
       }
     } finally {
       setIsPreparingStep(false);

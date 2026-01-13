@@ -29,7 +29,7 @@ const tourStyles = {
     padding: '16px',
   },
   tooltipContainer: {
-    textAlign: 'left',
+    textAlign: 'left' as const,
   },
   tooltipContent: {
     padding: '12px 0',
@@ -164,16 +164,35 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
 
 /**
  * Get tour steps filtered and adjusted for the current device.
+ * Mobile gets different placements optimized for bottom sheet.
  */
 export function getTourSteps(isMobile: boolean): EnhancedTourStep[] {
   return TOUR_STEPS_CONFIG.map(step => {
-    // Replace desktop/mobile specific steps
+    // Filter out device-specific steps
     if (isMobile && step.key === 'openDashboardDesktop') {
-      return null; // Will be filtered out
+      return null;
     }
     if (!isMobile && step.key === 'openDashboardMobile') {
-      return null; // Will be filtered out
+      return null;
     }
+    
+    // Adjust placements for mobile (bottom sheet needs top placement)
+    if (isMobile) {
+      const mobileStep = { ...step };
+      
+      // For steps inside the bottom sheet, use 'top' or 'auto' placement
+      if (step.requirements?.requiresSidebar === 'open') {
+        // These elements are IN the bottom sheet, so tooltip should be ABOVE them
+        mobileStep.placement = 'top';
+      }
+      // For map controls and buttons, keep 'auto' or 'top'
+      else if (step.key === 'drawingTools' || step.key === 'threeDMode') {
+        mobileStep.placement = 'top-start';
+      }
+      
+      return mobileStep;
+    }
+    
     return step;
   }).filter(Boolean) as EnhancedTourStep[];
 }

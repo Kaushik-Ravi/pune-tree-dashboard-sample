@@ -14,16 +14,17 @@ export interface WaitForTargetResult {
 }
 
 /**
- * Enhanced function to wait for a tour target element to be available and visible.
- * Includes retry logic, better timeout handling, and detailed error reporting.
+ * Enhanced trigger-based function to wait for a tour target element.
+ * Uses MutationObserver for real-time detection instead of polling.
+ * Waits for element to be fully rendered, visible, and interactable.
  */
 export function waitForTourTarget(
   selector: string,
   options: WaitForTargetOptions = {}
 ): Promise<WaitForTargetResult> {
   const {
-    timeout = 2000, // Quick check only
-    retries = 0 // No retries
+    timeout = 10000, // Generous timeout - we're trigger-based now
+    retries = 0
   } = options;
 
   return new Promise((resolve) => {
@@ -33,43 +34,59 @@ export function waitForTourTarget(
     const attemptFind = () => {
       attemptCount++;
       totalAttempts++;
-      const start = Date.now();
       
-      const check = () => {
+      // First, check if element already exists
+      const checkElement = () => {
         const el = document.querySelector(selector) as HTMLElement | null;
         
-        // Check if element exists, is visible, and is interactable
         if (el && el.offsetParent !== null) {
-          // Additional check: ensure element has dimensions
           const rect = el.getBoundingClientRect();
           if (rect.width > 0 && rect.height > 0) {
             console.log(`✅ Tour target found: "${selector}" (attempt ${totalAttempts})`);
             resolve({ success: true, element: el, attemptCount: totalAttempts });
-            return;
+            return true;
           }
         }
-        
-        const elapsed = Date.now() - start;
-        if (elapsed > timeout) {
-          // Timeout reached
-          if (attemptCount <= retries) {
-            setTimeout(() => attemptFind(), 500);
-          } else {
-            resolve({
-              success: false,
-              error: `Target not found: ${selector}`,
-              attemptCount: totalAttempts
-            });
-          }
-        } else {
-          // Continue checking
-          requestAnimationFrame(check);
-        }
+        return false;
       };
-      
-      check();
+
+      // Quick initial check
+      if (checkElement()) return;
+
+      // Set up MutationObserver to watch for DOM changes
+      const observer = new MutationObserver(() => {
+        if (checkElement()) {
+          observer.disconnect();
+          clearTimeout(timeoutId);
+        }
+      });
+
+      // Observe the entire document for changes
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'style', 'data-tour-id']
+      });
+
+      // Timeout fallback
+      const timeoutId = setTimeout(() => {
+        observer.disconnect();
+        
+        if (attemptCount <= retries) {
+          console.warn(`⚠️ Retrying target: "${selector}" (attempt ${attemptCount}/${retries + 1})`);
+          setTimeout(() => attemptFind(), 500);
+        } else {
+          console.warn(`❌ Tour target not found after ${totalAttempts} attempts: "${selector}"`);
+          resolve({
+            success: false,
+            error: `Target not found: ${selector}`,
+            attemptCount: totalAttempts
+          });
+        }
+      }, timeout);
     };
-    
+
     attemptFind();
   });
 }

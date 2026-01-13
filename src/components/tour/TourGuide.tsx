@@ -1,8 +1,9 @@
 // src/components/tour/TourGuide.tsx
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import Joyride, { CallBackProps, STATUS, ACTIONS, EVENTS } from 'react-joyride';
 import { getTourSteps, EnhancedTourStep } from './tourConfig';
 import { waitForTourTarget } from './waitForTourTarget';
+import ModernTooltip from './ModernTooltip';
 
 export type TourControlAction = 'NEXT_STEP' | 'PREV_STEP' | 'RESTART' | 'SKIP_STEP';
 
@@ -16,34 +17,33 @@ interface TourGuideProps {
 const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl, isPreparingStep }) => {
   const isMobile = window.innerWidth < 768;
   const steps: EnhancedTourStep[] = getTourSteps(isMobile);
-  const [targetError, setTargetError] = useState<string | null>(null);
   
   const advancingStep = useRef(false);
 
-  // This effect ensures the tour waits for the target to be ready before proceeding.
+  // This effect ensures the tour waits for the target to be ready (trigger-based).
   useEffect(() => {
     const selector = steps[stepIndex]?.target;
     if (run && typeof selector === 'string' && selector !== 'body') {
       advancingStep.current = true;
-      setTargetError(null);
       
-      waitForTourTarget(selector, { timeout: 3000, retries: 1 })
+      // Use generous timeout since we're trigger-based with MutationObserver
+      waitForTourTarget(selector, { timeout: 10000, retries: 2 })
         .then((result) => {
           if (!result.success) {
-            console.warn(`Tour target not found: ${selector}`);
-            // Element not found, skip silently
+            console.warn(`⚠️ Tour target not found: ${selector}`);
+            // Silently skip if element is truly not available
             handleTourControl('SKIP_STEP');
           }
         })
         .catch((error) => {
           console.error('Error waiting for tour target:', error);
+          handleTourControl('SKIP_STEP');
         })
         .finally(() => {
           advancingStep.current = false;
         });
     } else {
       advancingStep.current = false;
-      setTargetError(null);
     }
   }, [run, stepIndex, steps, handleTourControl]);
 
@@ -74,65 +74,6 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
       }
     }
   };
-
-  // Custom tooltip for error states
-  const tooltipComponent = targetError ? (
-    <div style={{
-      padding: '20px',
-      background: '#fff',
-      borderRadius: '8px',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-      maxWidth: '300px',
-    }}>
-      <div style={{ marginBottom: '12px', color: '#d32f2f', fontWeight: 'bold' }}>
-        ⚠️ Element Not Found
-      </div>
-      <div style={{ marginBottom: '16px', fontSize: '14px', color: '#666' }}>
-        {targetError}
-      </div>
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <button
-          onClick={() => handleTourControl('SKIP_STEP')}
-          style={{
-            flex: 1,
-            padding: '8px 16px',
-            background: '#f5f5f5',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          Skip Step
-        </button>
-        <button
-          onClick={() => {
-            setTargetError(null);
-            // Trigger re-check
-            const selector = steps[stepIndex]?.target;
-            if (typeof selector === 'string' && selector !== 'body') {
-              waitForTourTarget(selector, { timeout: 8000, retries: 2 })
-                .then((result) => {
-                  if (!result.success) {
-                    setTargetError(result.error || 'Target element not found');
-                  }
-                });
-            }
-          }}
-          style={{
-            flex: 1,
-            padding: '8px 16px',
-            background: '#2E7D32',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          Retry
-        </button>
-      </div>
-    </div>
-  ) : undefined;
 
   return (
     <>
@@ -171,67 +112,40 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
         callback={handleJoyrideCallback}
         continuous
         scrollToFirstStep={true}
-        showProgress
-        showSkipButton
+        showProgress={false}
+        showSkipButton={false}
         disableOverlayClose
         disableCloseOnEsc
         disableScrolling={false}
         disableScrollParentFix={true}
-        scrollOffset={120}
-        scrollDuration={400}
-        spotlightPadding={isMobile ? 5 : 10}
+        scrollOffset={isMobile ? 80 : 120}
+        scrollDuration={300}
+        spotlightPadding={isMobile ? 8 : 12}
         spotlightClicks={false}
+        tooltipComponent={ModernTooltip}
         styles={{
           options: {
             zIndex: 10000,
-            arrowColor: '#fff',
-            backgroundColor: '#fff',
-            primaryColor: '#2E7D32',
-            textColor: '#212529',
-            overlayColor: 'rgba(0, 0, 0, 0.5)',
+            overlayColor: 'rgba(0, 0, 0, 0.6)',
           },
-          tooltip: {
-            maxWidth: isMobile ? '95vw' : 'min(400px, 90vw)',
-            width: 'auto',
+          overlay: {
+            mixBlendMode: 'normal',
           },
-          tooltipContainer: {
-            textAlign: 'left',
-          },
-          tooltipContent: {
-            padding: '16px',
-          },
-          buttonNext: {
-            backgroundColor: '#2E7D32',
-            padding: '8px 16px',
-            borderRadius: '4px',
-            fontSize: '14px',
-          },
-          buttonBack: {
-            color: '#2E7D32',
-            marginRight: '8px',
-            fontSize: '14px',
-          },
-          buttonSkip: {
-            color: '#666',
-            fontSize: '14px',
+          spotlight: {
+            borderRadius: isMobile ? '12px' : '8px',
           },
         }}
         floaterProps={{
           disableAnimation: false,
-          offset: 15,
+          offset: isMobile ? 12 : 15,
           disableFlip: false,
           options: {
             preventOverflow: {
-              boundariesElement: 'window',
-            },
-          },
-          styles: {
-            floater: {
-              filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))',
+              boundariesElement: 'viewport',
+              padding: isMobile ? 16 : 8,
             },
           },
         }}
-        tooltipComponent={targetError ? () => tooltipComponent : undefined}
       />
       <style>{`
         @keyframes spin {
