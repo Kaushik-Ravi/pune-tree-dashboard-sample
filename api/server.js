@@ -14,7 +14,10 @@ const PORT = process.env.PORT || 3001;
 
 // --- Middleware ---
 app.use(cors({
-  origin: 'http://localhost:5173'
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://pune-tree-dashboard-sample.vercel.app', 'https://pune-tree-dashboard-sample-kaushik-ravis-projects.vercel.app']
+    : 'http://localhost:5173',
+  credentials: true
 }));
 app.use(express.json());
 
@@ -25,10 +28,10 @@ const pool = new Pool({
   database: process.env.DB_DATABASE,
   password: process.env.DB_PASSWORD,
   port: process.env.DB_PORT,
-  ssl: process.env.DB_CA_CERT ? {
-    rejectUnauthorized: false,
-    ca: process.env.DB_CA_CERT.replace(/\\n/g, '\n'),
-  } : false,
+  ssl: {
+    rejectUnauthorized: true,
+    ca: process.env.DB_CA_CERT ? process.env.DB_CA_CERT.replace(/\\n/g, '\n') : undefined,
+  },
 });
 
 pool.connect((err, client, release) => {
@@ -277,8 +280,11 @@ app.get('/api/sun-path', (req, res) => {
 
 
 // --- Start Server ---
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});
+// Only start server if not in Vercel serverless environment
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+  });
+}
 
-module.exports = app; // ADD THIS LINE
+module.exports = app;
