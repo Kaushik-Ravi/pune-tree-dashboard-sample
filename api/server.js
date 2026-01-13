@@ -14,8 +14,8 @@ const PORT = process.env.PORT || 3001;
 
 // --- Middleware ---
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://pune-tree-dashboard-sample.vercel.app', 'https://pune-tree-dashboard-sample-kaushik-ravis-projects.vercel.app']
+  origin: process.env.VERCEL === '1' 
+    ? true // Allow all origins in production (Vercel deployment)
     : 'http://localhost:5173',
   credentials: true
 }));
@@ -28,10 +28,10 @@ const pool = new Pool({
   database: process.env.DB_DATABASE,
   password: process.env.DB_PASSWORD,
   port: process.env.DB_PORT,
-  ssl: {
-    rejectUnauthorized: true,
-    ca: process.env.DB_CA_CERT ? process.env.DB_CA_CERT.replace(/\\n/g, '\n') : undefined,
-  },
+  ssl: process.env.DB_CA_CERT ? {
+    rejectUnauthorized: false,
+    ca: process.env.DB_CA_CERT.replace(/\\n/g, '\n'),
+  } : false,
 });
 
 pool.connect((err, client, release) => {
