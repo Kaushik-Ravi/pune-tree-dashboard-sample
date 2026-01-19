@@ -20,7 +20,7 @@ const tourStyles = {
     textColor: '#212529',
     arrowColor: '#FFFFFF',
     backgroundColor: '#FFFFFF',
-    overlayColor: 'rgba(0, 0, 0, 0.5)',
+    overlayColor: 'rgba(0, 0, 0, 0.15)',
     zIndex: 10000,
   },
   tooltip: {
@@ -175,11 +175,11 @@ export function getTourSteps(isMobile: boolean): EnhancedTourStep[] {
     if (!isMobile && step.key === 'openDashboardMobile') {
       return null;
     }
-    
+
     // Adjust placements for mobile (dynamic based on element position)
     if (isMobile) {
       const mobileStep = { ...step };
-      
+
       // For tabs and elements at the top of bottom sheet
       if (step.key === 'dashboardTabs' || step.key === 'plantingAdvisor' || step.key === 'mapLayers') {
         mobileStep.placement = 'bottom'; // Tooltip below tabs
@@ -196,10 +196,10 @@ export function getTourSteps(isMobile: boolean): EnhancedTourStep[] {
       else {
         mobileStep.placement = 'center';
       }
-      
+
       return mobileStep;
     }
-    
+
     return step;
   }).filter(Boolean) as EnhancedTourStep[];
 }

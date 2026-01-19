@@ -17,7 +17,7 @@ interface TourGuideProps {
 const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl, isPreparingStep }) => {
   const isMobile = window.innerWidth < 768;
   const steps: EnhancedTourStep[] = getTourSteps(isMobile);
-  
+
   const advancingStep = useRef(false);
 
   // This effect ensures the tour waits for the target to be ready (trigger-based).
@@ -25,7 +25,7 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
     const selector = steps[stepIndex]?.target;
     if (run && typeof selector === 'string' && selector !== 'body') {
       advancingStep.current = true;
-      
+
       // Use generous timeout since we're trigger-based with MutationObserver
       waitForTourTarget(selector, { timeout: 10000, retries: 2 })
         .then((result) => {
@@ -56,7 +56,7 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
       handleTourControl('RESTART');
       return;
     }
-    
+
     // Only process STEP_AFTER events, and only when not already waiting for a target.
     if (type === EVENTS.STEP_AFTER && !advancingStep.current) {
       if (action === ACTIONS.NEXT) {
@@ -126,7 +126,7 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
         styles={{
           options: {
             zIndex: 10000,
-            overlayColor: 'rgba(0, 0, 0, 0.4)',
+            overlayColor: 'rgba(0, 0, 0, 0.15)',
             arrowColor: '#2E7D32',
           },
           overlay: {
