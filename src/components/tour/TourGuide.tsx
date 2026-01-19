@@ -116,6 +116,7 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
         showSkipButton={false}
         disableOverlayClose
         disableCloseOnEsc
+        disableOverlay={true}
         disableScrolling={false}
         disableScrollParentFix={true}
         scrollOffset={isMobile ? 80 : 120}
