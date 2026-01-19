@@ -19,7 +19,7 @@ const ModernTooltip: React.FC<TooltipRenderProps> = ({
   size,
 }) => {
   const isMobile = window.innerWidth < 768;
-  
+
   return (
     <div
       {...tooltipProps}
@@ -32,8 +32,8 @@ const ModernTooltip: React.FC<TooltipRenderProps> = ({
         background: 'rgba(255, 255, 255, 0.98)',
         backdropFilter: 'blur(12px)',
         borderRadius: isMobile ? '16px' : '12px',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)',
-        border: '1px solid rgba(46, 125, 50, 0.1)',
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
+        border: 'none',
         overflow: 'hidden',
       }}
     >
@@ -47,11 +47,11 @@ const ModernTooltip: React.FC<TooltipRenderProps> = ({
           alignItems: 'center',
         }}
       >
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
           gap: '8px',
-          flex: 1 
+          flex: 1
         }}>
           <div style={{
             fontSize: isMobile ? '13px' : '12px',

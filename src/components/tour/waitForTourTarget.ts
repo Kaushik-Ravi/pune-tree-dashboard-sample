@@ -3,7 +3,6 @@
 export interface WaitForTargetOptions {
   timeout?: number;
   retries?: number;
-  checkInterval?: number;
 }
 
 export interface WaitForTargetResult {
@@ -14,79 +13,56 @@ export interface WaitForTargetResult {
 }
 
 /**
- * Enhanced trigger-based function to wait for a tour target element.
- * Uses MutationObserver for real-time detection instead of polling.
- * Waits for element to be fully rendered, visible, and interactable.
+ * Simplified function to wait for a tour target element.
+ * Scrolls element into view when found. Uses polling for reliability.
  */
 export function waitForTourTarget(
   selector: string,
   options: WaitForTargetOptions = {}
 ): Promise<WaitForTargetResult> {
-  const {
-    timeout = 10000, // Generous timeout - we're trigger-based now
-    retries = 0
-  } = options;
+  const { timeout = 5000 } = options;
 
   return new Promise((resolve) => {
-    let attemptCount = 0;
-    let totalAttempts = 0;
+    const startTime = Date.now();
 
-    const attemptFind = () => {
-      attemptCount++;
-      totalAttempts++;
-      
-      // First, check if element already exists
-      const checkElement = () => {
-        const el = document.querySelector(selector) as HTMLElement | null;
-        
-        if (el && el.offsetParent !== null) {
+    const checkElement = () => {
+      const el = document.querySelector(selector) as HTMLElement | null;
+
+      if (el) {
+        // Scroll element into view if it's inside a scrollable container
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Give a moment for scroll to complete, then verify visibility
+        setTimeout(() => {
           const rect = el.getBoundingClientRect();
           if (rect.width > 0 && rect.height > 0) {
-            console.log(`✅ Tour target found: "${selector}" (attempt ${totalAttempts})`);
-            resolve({ success: true, element: el, attemptCount: totalAttempts });
-            return true;
+            resolve({ success: true, element: el, attemptCount: 1 });
+            return;
           }
-        }
-        return false;
-      };
+          // Element exists but not visible, keep trying
+          scheduleNextCheck();
+        }, 100);
+        return;
+      }
 
-      // Quick initial check
-      if (checkElement()) return;
-
-      // Set up MutationObserver to watch for DOM changes
-      const observer = new MutationObserver(() => {
-        if (checkElement()) {
-          observer.disconnect();
-          clearTimeout(timeoutId);
-        }
-      });
-
-      // Observe the entire document for changes
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['class', 'style', 'data-tour-id']
-      });
-
-      // Timeout fallback
-      const timeoutId = setTimeout(() => {
-        observer.disconnect();
-        
-        if (attemptCount <= retries) {
-          console.warn(`⚠️ Retrying target: "${selector}" (attempt ${attemptCount}/${retries + 1})`);
-          setTimeout(() => attemptFind(), 500);
-        } else {
-          console.warn(`❌ Tour target not found after ${totalAttempts} attempts: "${selector}"`);
-          resolve({
-            success: false,
-            error: `Target not found: ${selector}`,
-            attemptCount: totalAttempts
-          });
-        }
-      }, timeout);
+      // Element not found yet
+      if (Date.now() - startTime < timeout) {
+        scheduleNextCheck();
+      } else {
+        // Timeout reached - silently fail (no noisy console logs)
+        resolve({
+          success: false,
+          error: `Target not found: ${selector}`,
+          attemptCount: 1
+        });
+      }
     };
 
-    attemptFind();
+    const scheduleNextCheck = () => {
+      requestAnimationFrame(() => setTimeout(checkElement, 50));
+    };
+
+    // Start checking
+    checkElement();
   });
 }

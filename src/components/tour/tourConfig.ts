@@ -90,7 +90,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     key: 'dashboardTabs',
     target: '[data-tour-id="sidebar-tabs"]',
     content: 'The dashboard is organized into four main tabs: City Overview, Tree Details, Planting Advisor, and Map Layers.',
-    placement: 'auto',
+    placement: 'bottom',
     styles: tourStyles,
     requirements: {
       requiresSidebar: 'open',
@@ -112,7 +112,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     key: 'knowYourNeighbourhood',
     target: '[data-tour-id="know-your-neighbourhood"]',
     content: 'After drawing an area, this section will show you detailed statistics like tree count and CO₂ sequestration for that specific zone.',
-    placement: 'auto',
+    placement: 'top',
     disableScrolling: false,
     styles: tourStyles,
     requirements: {
@@ -137,7 +137,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     key: 'mapLayers',
     target: '[data-tour-id="tab-map-layers"]',
     content: 'Here you can change the basemap style and toggle data overlays, like the Land Surface Temperature layer.',
-    placement: 'left',
+    placement: 'bottom',
     styles: tourStyles,
     requirements: {
       requiresSidebar: 'open',
