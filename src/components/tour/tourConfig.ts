@@ -7,6 +7,8 @@ export interface TourStepRequirements {
   requires3D?: boolean;
   skipOnMobile?: boolean;
   skipOnDesktop?: boolean;
+  /** True if target element is inside the sidebar (needs z-index boost during tour) */
+  insideSidebar?: boolean;
 }
 
 export interface EnhancedTourStep extends Step {
@@ -93,6 +95,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     requirements: {
       requiresSidebar: 'open',
       requiresTab: 0,
+      insideSidebar: true,
     },
   },
   {
@@ -115,6 +118,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     requirements: {
       requiresSidebar: 'open',
       requiresTab: 0,
+      insideSidebar: true,
     },
   },
   {
@@ -126,6 +130,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     requirements: {
       requiresSidebar: 'open',
       requiresTab: 2,
+      insideSidebar: true,
     },
   },
   {
@@ -137,6 +142,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     requirements: {
       requiresSidebar: 'open',
       requiresTab: 3,
+      insideSidebar: true,
     },
   },
   {

@@ -43,6 +43,8 @@ interface SidebarProps {
   onTreeShadowsToggle?: (enabled: boolean) => void;
   showBuildingShadows?: boolean;
   onBuildingShadowsToggle?: (enabled: boolean) => void;
+  /** When true, raises z-index above Joyride overlay so spotlight reveals this element */
+  tourFocusMode?: boolean;
 }
 
 const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
@@ -69,6 +71,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
   onTreeShadowsToggle,
   showBuildingShadows,
   onBuildingShadowsToggle,
+  tourFocusMode,
 }, ref) => {
   const tabs = [
     { id: 'city-overview', label: 'City Overview', icon: <BarChartBig size={18} /> },
@@ -92,9 +95,9 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
       case 1: return <TreeDetails treeId={selectedTreeId} />;
       case 2:
         return <PlantingAdvisor
-                  setShowTemperatureChart={setShowTemperatureChart}
-                  onSpeciesChangeForChart={onActiveSpeciesChangeForChart}
-               />;
+          setShowTemperatureChart={setShowTemperatureChart}
+          onSpeciesChangeForChart={onActiveSpeciesChangeForChart}
+        />;
       case 3: return (
         <MapLayers
           baseMap={baseMap}
@@ -120,7 +123,10 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
   };
 
   return (
-    <div ref={ref} className={`sidebar ${isOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
+    <div
+      ref={ref}
+      className={`sidebar ${isOpen ? 'sidebar-open' : 'sidebar-collapsed'} ${tourFocusMode ? 'z-[10001] !transform-none' : ''}`}
+    >
       {/* Mobile-only Grab Handle */}
       <div className="md:hidden w-full flex justify-center pt-3 pb-2">
         <div className="w-10 h-1.5 bg-gray-300 rounded-full"></div>
@@ -136,17 +142,17 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
           <X size={24} />
         </button>
       </div>
-      
+
       <div data-tour-id="sidebar-tabs" className="bg-gray-50 border-b border-gray-200 relative h-[var(--sidebar-tabs-height)] flex items-center">
         {/* Desktop-only scroll buttons */}
         <button onClick={() => scrollTabs('left')} className="hidden md:block absolute left-0 top-1/2 -translate-y-1/2 z-20 p-2 text-gray-500 hover:text-gray-800" aria-label="Scroll tabs left"><ChevronLeft size={20} /></button>
-        
+
         <div ref={tabContainerRef} className="flex overflow-x-auto hide-scrollbar mx-2 md:mx-8 flex-nowrap h-full">
           {tabs.map((tab, index) => (
             <button
               key={tab.id}
               data-tour-id={tab.tourId}
-              className={`flex-shrink-0 px-4 flex items-center space-x-2 whitespace-nowrap transition-colors focus:outline-none h-full ${ activeTabIndex === index ? 'bg-white text-primary-600 border-b-2 border-primary-600 font-medium' : 'text-gray-600 hover:bg-gray-100 hover:text-primary-500'}`}
+              className={`flex-shrink-0 px-4 flex items-center space-x-2 whitespace-nowrap transition-colors focus:outline-none h-full ${activeTabIndex === index ? 'bg-white text-primary-600 border-b-2 border-primary-600 font-medium' : 'text-gray-600 hover:bg-gray-100 hover:text-primary-500'}`}
               onClick={() => setActiveTabIndex(index)}
             >
               {tab.icon}<span>{tab.label}</span>
@@ -164,9 +170,9 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
       <div className="border-t border-gray-200 bg-gray-50 p-3 text-xs text-gray-500 flex justify-between items-center z-20">
         <div className="flex items-center space-x-1">
           <span>Built by</span>
-          <a 
-            href="https://www.kaushikravi.tech/" 
-            target="_blank" 
+          <a
+            href="https://www.kaushikravi.tech/"
+            target="_blank"
             rel="noopener noreferrer"
             className="font-medium text-gray-700 hover:text-primary-600 transition-colors flex items-center gap-1"
           >
@@ -174,20 +180,20 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
             <Globe size={12} className="inline opacity-0 md:group-hover:opacity-100 transition-opacity" />
           </a>
         </div>
-        
+
         <div className="flex items-center space-x-3">
-          <a 
-            href="https://github.com/Kaushik-Ravi" 
-            target="_blank" 
+          <a
+            href="https://github.com/Kaushik-Ravi"
+            target="_blank"
             rel="noopener noreferrer"
             className="text-gray-400 hover:text-gray-900 transition-colors"
             title="GitHub"
           >
             <Github size={14} />
           </a>
-          <a 
-            href="https://www.linkedin.com/in/kaushik2002/" 
-            target="_blank" 
+          <a
+            href="https://www.linkedin.com/in/kaushik2002/"
+            target="_blank"
             rel="noopener noreferrer"
             className="text-gray-400 hover:text-blue-600 transition-colors"
             title="LinkedIn"

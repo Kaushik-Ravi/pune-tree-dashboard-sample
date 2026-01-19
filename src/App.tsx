@@ -8,7 +8,7 @@ import { ArchetypeData, useTreeStore } from './store/TreeStore';
 import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl';
 import { ShadowQuality } from './components/sidebar/tabs/MapLayers';
 import TourGuide, { TourControlAction } from './components/tour/TourGuide';
-import { getStepRequirements } from './components/tour/tourConfig';
+import { getStepRequirements, getTourSteps } from './components/tour/tourConfig';
 
 const LoadingOverlay: React.FC = () => (
   <div className="fixed inset-0 bg-white bg-opacity-90 z-[20000] flex flex-col items-center justify-center">
@@ -23,7 +23,7 @@ function App() {
   const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [baseMap, setBaseMap] = useState('light');
   const [showLSTOverlay, setShowLSTOverlay] = useState(false);
-  
+
   const [is3D, setIs3D] = useState(false);
   const [lightConfig, setLightConfig] = useState<LightConfig | null>(null);
   // Shadow system disabled - requires MapTiler Buildings tileset (paid feature)
@@ -39,6 +39,13 @@ function App() {
   const [isPreparingStep, setIsPreparingStep] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const mapReadyRef = useRef(false);
+
+  // Compute whether the current tour step targets the sidebar (needs z-index boost)
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const tourSteps = getTourSteps(isMobile);
+  const currentStepKey = tourSteps[tourStepIndex]?.key;
+  const currentStepRequirements = currentStepKey ? getStepRequirements(currentStepKey) : undefined;
+  const sidebarNeedsTourFocus = runTour && !isPreparingStep && currentStepRequirements?.insideSidebar === true;
 
   // Improved tour initialization - wait for map to be ready
   useEffect(() => {
@@ -77,7 +84,7 @@ function App() {
       };
 
       sidebarElement.addEventListener('transitionend', handleTransitionEnd);
-      
+
       // Fallback: if transitionend doesn't fire within reasonable time
       setTimeout(() => {
         if (!transitionEnded) {
@@ -173,7 +180,7 @@ function App() {
   const handleLightChange = useCallback((newLightConfig: LightConfig | null) => {
     setLightConfig(newLightConfig);
   }, []);
-  
+
   const handleToggle3D = useCallback(() => {
     setIs3D(prev => !prev);
   }, []);
@@ -187,7 +194,7 @@ function App() {
   const [activeSpeciesCooling, setActiveSpeciesCooling] = useState<{ p90: number; p10: number; commonName: string } | null>(null);
 
   const toggleSidebar = useCallback(() => setSidebarOpen(prevOpen => !prevOpen), []);
-  
+
   const handleTreeSelect = useCallback((treeId: string) => {
     setSelectedTreeId(treeId);
     setActiveTabIndex(1);
@@ -197,15 +204,15 @@ function App() {
   const handleChangeBaseMap = useCallback((mapType: string) => {
     setBaseMap(mapType);
   }, []);
-  
+
   const handleToggleLSTOverlay = useCallback(() => setShowLSTOverlay(prev => !prev), []);
-  
+
   const handleActiveSpeciesChangeForChart = useCallback((archetypeDetails: ArchetypeData | null) => {
     if (archetypeDetails) {
-      setActiveSpeciesCooling({ 
-        p90: archetypeDetails.p90_cooling_effect_celsius, 
-        p10: archetypeDetails.p10_cooling_effect_celsius, 
-        commonName: archetypeDetails.common_name 
+      setActiveSpeciesCooling({
+        p90: archetypeDetails.p90_cooling_effect_celsius,
+        p10: archetypeDetails.p10_cooling_effect_celsius,
+        commonName: archetypeDetails.common_name
       });
     } else {
       setActiveSpeciesCooling(null);
@@ -224,11 +231,11 @@ function App() {
 
       <Header />
       <div className="dashboard-content">
-        <MapView 
-          onTreeSelect={handleTreeSelect} 
-          sidebarOpen={sidebarOpen} 
-          toggleSidebar={toggleSidebar} 
-          baseMap={baseMap} 
+        <MapView
+          onTreeSelect={handleTreeSelect}
+          sidebarOpen={sidebarOpen}
+          toggleSidebar={toggleSidebar}
+          baseMap={baseMap}
           changeBaseMap={handleChangeBaseMap}
           showLSTOverlay={showLSTOverlay}
           selectedTreeId={selectedTreeId}
@@ -259,7 +266,7 @@ function App() {
           baseMap={baseMap}
           changeBaseMap={handleChangeBaseMap}
           showLSTOverlay={showLSTOverlay}
-          toggleLSTOverlay={handleToggleLSTOverlay} 
+          toggleLSTOverlay={handleToggleLSTOverlay}
           lstMinValue={LST_MIN_VALUE_FOR_LEGEND_AND_CHART}
           lstMaxValue={LST_MAX_VALUE_FOR_LEGEND_AND_CHART}
           setShowTemperatureChart={setShowTemperatureChart}
@@ -274,10 +281,11 @@ function App() {
           onTreeShadowsToggle={setShowTreeShadows}
           showBuildingShadows={showBuildingShadows}
           onBuildingShadowsToggle={setShowBuildingShadows}
+          tourFocusMode={sidebarNeedsTourFocus}
         />
       </div>
       {showTemperatureChart && activeSpeciesCooling && (
-        <div 
+        <div
           className={`chart-container ${sidebarOpen ? 'chart-container-sidebar-open' : ''}`}
         >
           <TemperaturePredictionChart
