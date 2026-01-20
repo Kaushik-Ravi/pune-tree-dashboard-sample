@@ -1,86 +1,115 @@
 // src/components/tour/ModernTooltip.tsx
-import React from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { TooltipRenderProps } from 'react-joyride';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
- * Get arrow position styles based on placement
+ * Calculate arrow position and direction based on tooltip and target positions
  */
-const getArrowStyles = (placement: string | undefined): React.CSSProperties => {
-  const arrowSize = 12;
+interface ArrowPosition {
+  styles: React.CSSProperties;
+  visible: boolean;
+}
+
+const calculateArrowPosition = (
+  tooltipRect: DOMRect | null,
+  targetRect: DOMRect | null,
+  placement: string | undefined
+): ArrowPosition => {
+  const arrowSize = 14;
   const arrowColor = '#2E7D32'; // Brand green
+
+  if (!tooltipRect || !targetRect || !placement || placement === 'center') {
+    return { styles: { display: 'none' }, visible: false };
+  }
 
   const baseStyle: React.CSSProperties = {
     position: 'absolute',
     width: 0,
     height: 0,
     borderStyle: 'solid',
+    zIndex: 1,
   };
 
-  // Determine arrow direction based on tooltip placement
-  // If tooltip is on bottom, arrow points UP (at the top of tooltip)
-  // If tooltip is on top, arrow points DOWN (at the bottom of tooltip)
-  // If tooltip is on left, arrow points RIGHT
-  // If tooltip is on right, arrow points LEFT
+  // Calculate where target center is relative to tooltip
+  const targetCenterX = targetRect.left + targetRect.width / 2;
+  const targetCenterY = targetRect.top + targetRect.height / 2;
 
-  if (!placement || placement === 'center') {
-    return { display: 'none' };
+  // Determine arrow position based on placement
+  if (placement.includes('bottom') || placement.includes('top')) {
+    // Horizontal arrow positioning - calculate where target is horizontally
+    const relativeX = targetCenterX - tooltipRect.left;
+    const clampedX = Math.max(30, Math.min(relativeX, tooltipRect.width - 30));
+
+    if (placement.includes('bottom')) {
+      // Tooltip below target → arrow on top pointing up
+      return {
+        styles: {
+          ...baseStyle,
+          top: -arrowSize,
+          left: clampedX,
+          transform: 'translateX(-50%)',
+          borderWidth: `0 ${arrowSize}px ${arrowSize}px ${arrowSize}px`,
+          borderColor: `transparent transparent ${arrowColor} transparent`,
+        },
+        visible: true,
+      };
+    } else {
+      // Tooltip above target → arrow on bottom pointing down
+      return {
+        styles: {
+          ...baseStyle,
+          bottom: -arrowSize,
+          left: clampedX,
+          transform: 'translateX(-50%)',
+          borderWidth: `${arrowSize}px ${arrowSize}px 0 ${arrowSize}px`,
+          borderColor: `${arrowColor} transparent transparent transparent`,
+        },
+        visible: true,
+      };
+    }
   }
 
-  if (placement.includes('bottom')) {
-    // Tooltip below target → arrow on top pointing up
-    return {
-      ...baseStyle,
-      top: -arrowSize,
-      left: '50%',
-      transform: 'translateX(-50%)',
-      borderWidth: `0 ${arrowSize}px ${arrowSize}px ${arrowSize}px`,
-      borderColor: `transparent transparent ${arrowColor} transparent`,
-    };
+  if (placement.includes('left') || placement.includes('right')) {
+    // Vertical arrow positioning - calculate where target is vertically
+    const relativeY = targetCenterY - tooltipRect.top;
+    const clampedY = Math.max(30, Math.min(relativeY, tooltipRect.height - 30));
+
+    if (placement.includes('left')) {
+      // Tooltip on left → arrow on right pointing right toward target
+      return {
+        styles: {
+          ...baseStyle,
+          right: -arrowSize,
+          top: clampedY,
+          transform: 'translateY(-50%)',
+          borderWidth: `${arrowSize}px 0 ${arrowSize}px ${arrowSize}px`,
+          borderColor: `transparent transparent transparent ${arrowColor}`,
+        },
+        visible: true,
+      };
+    } else {
+      // Tooltip on right → arrow on left pointing left toward target
+      return {
+        styles: {
+          ...baseStyle,
+          left: -arrowSize,
+          top: clampedY,
+          transform: 'translateY(-50%)',
+          borderWidth: `${arrowSize}px ${arrowSize}px ${arrowSize}px 0`,
+          borderColor: `transparent ${arrowColor} transparent transparent`,
+        },
+        visible: true,
+      };
+    }
   }
 
-  if (placement.includes('top')) {
-    // Tooltip above target → arrow on bottom pointing down
-    return {
-      ...baseStyle,
-      bottom: -arrowSize,
-      left: '50%',
-      transform: 'translateX(-50%)',
-      borderWidth: `${arrowSize}px ${arrowSize}px 0 ${arrowSize}px`,
-      borderColor: `${arrowColor} transparent transparent transparent`,
-    };
-  }
-
-  if (placement.includes('left')) {
-    // Tooltip on left → arrow on right pointing right
-    return {
-      ...baseStyle,
-      right: -arrowSize,
-      top: '50%',
-      transform: 'translateY(-50%)',
-      borderWidth: `${arrowSize}px 0 ${arrowSize}px ${arrowSize}px`,
-      borderColor: `transparent transparent transparent ${arrowColor}`,
-    };
-  }
-
-  if (placement.includes('right')) {
-    // Tooltip on right → arrow on left pointing left
-    return {
-      ...baseStyle,
-      left: -arrowSize,
-      top: '50%',
-      transform: 'translateY(-50%)',
-      borderWidth: `${arrowSize}px ${arrowSize}px ${arrowSize}px 0`,
-      borderColor: `transparent ${arrowColor} transparent transparent`,
-    };
-  }
-
-  return { display: 'none' };
+  return { styles: { display: 'none' }, visible: false };
 };
 
 /**
  * Modern, mobile-friendly custom tooltip for the tour
- * Features: Brand colors, arrow indicator, responsive design
+ * Features: Brand colors, dynamic arrow pointing to target, responsive design
  */
 const ModernTooltip: React.FC<TooltipRenderProps> = ({
   index,
@@ -95,10 +124,39 @@ const ModernTooltip: React.FC<TooltipRenderProps> = ({
 }) => {
   const isMobile = window.innerWidth < 768;
   const placement = step.placement as string;
-  const arrowStyles = getArrowStyles(placement);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [arrowPosition, setArrowPosition] = useState<ArrowPosition>({ styles: { display: 'none' }, visible: false });
+
+  // Calculate arrow position after tooltip renders
+  useEffect(() => {
+    const updateArrowPosition = () => {
+      const tooltipEl = tooltipRef.current;
+      const targetSelector = step.target as string;
+
+      if (tooltipEl && targetSelector && targetSelector !== 'body') {
+        const targetEl = document.querySelector(targetSelector);
+        if (targetEl) {
+          const tooltipRect = tooltipEl.getBoundingClientRect();
+          const targetRect = targetEl.getBoundingClientRect();
+          setArrowPosition(calculateArrowPosition(tooltipRect, targetRect, placement));
+        }
+      } else {
+        setArrowPosition({ styles: { display: 'none' }, visible: false });
+      }
+    };
+
+    // Update on mount and after a small delay for positioning to settle
+    updateArrowPosition();
+    const timer = setTimeout(updateArrowPosition, 100);
+
+    return () => clearTimeout(timer);
+  }, [step.target, placement]);
+
+  const arrowStyles = arrowPosition.styles;
 
   return (
     <div
+      ref={tooltipRef}
       {...tooltipProps}
       className="modern-tour-tooltip"
       style={{
