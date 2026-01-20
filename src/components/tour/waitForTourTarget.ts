@@ -2,19 +2,18 @@
 
 export interface WaitForTargetOptions {
   timeout?: number;
-  retries?: number;
 }
 
 export interface WaitForTargetResult {
   success: boolean;
   element?: HTMLElement;
   error?: string;
-  attemptCount?: number;
 }
 
 /**
- * Simplified function to wait for a tour target element.
- * Scrolls element into view when found. Uses polling for reliability.
+ * Wait for a tour target element using MutationObserver (trigger-based).
+ * Scrolls element into view within its scrollable container.
+ * Silently fails on timeout - no console warnings.
  */
 export function waitForTourTarget(
   selector: string,
@@ -23,46 +22,78 @@ export function waitForTourTarget(
   const { timeout = 5000 } = options;
 
   return new Promise((resolve) => {
-    const startTime = Date.now();
+    let observer: MutationObserver | null = null;
+    let timeoutId: ReturnType<typeof setTimeout>;
 
-    const checkElement = () => {
+    const cleanup = () => {
+      if (observer) {
+        observer.disconnect();
+        observer = null;
+      }
+      clearTimeout(timeoutId);
+    };
+
+    const scrollElementIntoView = (el: HTMLElement) => {
+      // Find the scrollable parent (sidebar content area)
+      let scrollParent: HTMLElement | null = el.parentElement;
+      while (scrollParent) {
+        const overflowY = getComputedStyle(scrollParent).overflowY;
+        if (overflowY === 'auto' || overflowY === 'scroll') {
+          break;
+        }
+        scrollParent = scrollParent.parentElement;
+      }
+
+      if (scrollParent) {
+        // Scroll within the container
+        const containerRect = scrollParent.getBoundingClientRect();
+        const elementRect = el.getBoundingClientRect();
+        const scrollTop = scrollParent.scrollTop + (elementRect.top - containerRect.top) - (containerRect.height / 2);
+        scrollParent.scrollTo({ top: scrollTop, behavior: 'smooth' });
+      } else {
+        // Fallback to scrollIntoView
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    };
+
+    const checkAndResolve = (): boolean => {
       const el = document.querySelector(selector) as HTMLElement | null;
 
       if (el) {
-        // Scroll element into view if it's inside a scrollable container
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-        // Give a moment for scroll to complete, then verify visibility
-        setTimeout(() => {
-          const rect = el.getBoundingClientRect();
-          if (rect.width > 0 && rect.height > 0) {
-            resolve({ success: true, element: el, attemptCount: 1 });
-            return;
-          }
-          // Element exists but not visible, keep trying
-          scheduleNextCheck();
-        }, 100);
-        return;
+        const rect = el.getBoundingClientRect();
+        // Check if element has dimensions
+        if (rect.width > 0 && rect.height > 0) {
+          cleanup();
+          scrollElementIntoView(el);
+          // Wait a bit for scroll, then resolve
+          setTimeout(() => {
+            resolve({ success: true, element: el });
+          }, 150);
+          return true;
+        }
       }
-
-      // Element not found yet
-      if (Date.now() - startTime < timeout) {
-        scheduleNextCheck();
-      } else {
-        // Timeout reached - silently fail (no noisy console logs)
-        resolve({
-          success: false,
-          error: `Target not found: ${selector}`,
-          attemptCount: 1
-        });
-      }
+      return false;
     };
 
-    const scheduleNextCheck = () => {
-      requestAnimationFrame(() => setTimeout(checkElement, 50));
-    };
+    // Initial check
+    if (checkAndResolve()) return;
 
-    // Start checking
-    checkElement();
+    // Set up MutationObserver for DOM changes
+    observer = new MutationObserver(() => {
+      checkAndResolve();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'data-tour-id']
+    });
+
+    // Timeout fallback - silently fail
+    timeoutId = setTimeout(() => {
+      cleanup();
+      resolve({ success: false, error: `Target not found: ${selector}` });
+    }, timeout);
   });
 }

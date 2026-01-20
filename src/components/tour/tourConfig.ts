@@ -135,9 +135,9 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
   },
   {
     key: 'mapLayers',
-    target: '[data-tour-id="tab-map-layers"]',
+    target: '[data-tour-id="basemap-options"]',
     content: 'Here you can change the basemap style and toggle data overlays, like the Land Surface Temperature layer.',
-    placement: 'bottom',
+    placement: 'top',
     styles: tourStyles,
     requirements: {
       requiresSidebar: 'open',

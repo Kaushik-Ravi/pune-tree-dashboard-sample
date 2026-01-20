@@ -27,10 +27,9 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
       advancingStep.current = true;
 
       // Use generous timeout since we're trigger-based with MutationObserver
-      waitForTourTarget(selector, { timeout: 10000, retries: 2 })
+      waitForTourTarget(selector, { timeout: 10000 })
         .then((result) => {
           if (!result.success) {
-            console.warn(`⚠️ Tour target not found: ${selector}`);
             // Silently skip if element is truly not available
             handleTourControl('SKIP_STEP');
           }
@@ -139,6 +138,7 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
           },
         }}
         floaterProps={{
+          hideArrow: true,
           disableAnimation: false,
           offset: isMobile ? 16 : 20,
           disableFlip: false,
