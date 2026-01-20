@@ -177,6 +177,14 @@ function App() {
     }
   }, [executePreStepActions]);
 
+  // Function to start the tour from anywhere (e.g., Header button)
+  const startTour = useCallback(() => {
+    setTourStepIndex(0);
+    setRunTour(true);
+    setSidebarOpen(false);
+    localStorage.removeItem('hasCompletedTour');
+  }, []);
+
   const handleLightChange = useCallback((newLightConfig: LightConfig | null) => {
     setLightConfig(newLightConfig);
   }, []);
@@ -229,7 +237,7 @@ function App() {
         isPreparingStep={isPreparingStep}
       />
 
-      <Header />
+      <Header onStartTour={startTour} />
       <div className="dashboard-content">
         <MapView
           onTreeSelect={handleTreeSelect}

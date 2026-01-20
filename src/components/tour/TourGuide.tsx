@@ -75,6 +75,9 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
         const nextStep = steps[index + 1];
         if (nextStep) {
           handleTourControl('NEXT_STEP', nextStep.key);
+        } else {
+          // This was the last step - finish the tour
+          handleTourControl('RESTART');
         }
       } else if (action === ACTIONS.PREV) {
         // Pass the key of the *previous* step to restore its state

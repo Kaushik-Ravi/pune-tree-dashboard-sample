@@ -4,23 +4,57 @@ import { TooltipRenderProps } from 'react-joyride';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
- * Calculate arrow position and direction based on tooltip and target positions
+ * Calculate arrow position based on ACTUAL direction from tooltip to target.
+ * This works regardless of Joyride's placement value.
  */
 interface ArrowPosition {
   styles: React.CSSProperties;
   visible: boolean;
 }
 
+type ArrowDirection = 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
 const calculateArrowPosition = (
   tooltipRect: DOMRect | null,
-  targetRect: DOMRect | null,
-  placement: string | undefined
+  targetRect: DOMRect | null
 ): ArrowPosition => {
-  const arrowSize = 14;
+  const arrowSize = 16;
   const arrowColor = '#2E7D32'; // Brand green
 
-  if (!tooltipRect || !targetRect || !placement || placement === 'center') {
+  if (!tooltipRect || !targetRect) {
     return { styles: { display: 'none' }, visible: false };
+  }
+
+  // Calculate centers
+  const tooltipCenterX = tooltipRect.left + tooltipRect.width / 2;
+  const tooltipCenterY = tooltipRect.top + tooltipRect.height / 2;
+  const targetCenterX = targetRect.left + targetRect.width / 2;
+  const targetCenterY = targetRect.top + targetRect.height / 2;
+
+  // Calculate angle from tooltip to target
+  const dx = targetCenterX - tooltipCenterX;
+  const dy = targetCenterY - tooltipCenterY;
+  const angle = Math.atan2(dy, dx) * (180 / Math.PI); // -180 to 180
+
+  // Determine arrow direction based on angle
+  // Divide into 8 sectors (45 degrees each)
+  let direction: ArrowDirection;
+  if (angle >= -22.5 && angle < 22.5) {
+    direction = 'right';
+  } else if (angle >= 22.5 && angle < 67.5) {
+    direction = 'bottom-right';
+  } else if (angle >= 67.5 && angle < 112.5) {
+    direction = 'bottom';
+  } else if (angle >= 112.5 && angle < 157.5) {
+    direction = 'bottom-left';
+  } else if (angle >= 157.5 || angle < -157.5) {
+    direction = 'left';
+  } else if (angle >= -157.5 && angle < -112.5) {
+    direction = 'top-left';
+  } else if (angle >= -112.5 && angle < -67.5) {
+    direction = 'top';
+  } else {
+    direction = 'top-right';
   }
 
   const baseStyle: React.CSSProperties = {
@@ -28,83 +62,110 @@ const calculateArrowPosition = (
     width: 0,
     height: 0,
     borderStyle: 'solid',
-    zIndex: 1,
+    zIndex: 10,
   };
 
-  // Calculate where target center is relative to tooltip
-  const targetCenterX = targetRect.left + targetRect.width / 2;
-  const targetCenterY = targetRect.top + targetRect.height / 2;
-
-  // Determine arrow position based on placement
-  if (placement.includes('bottom') || placement.includes('top')) {
-    // Horizontal arrow positioning - calculate where target is horizontally
-    const relativeX = targetCenterX - tooltipRect.left;
-    const clampedX = Math.max(30, Math.min(relativeX, tooltipRect.width - 30));
-
-    if (placement.includes('bottom')) {
-      // Tooltip below target → arrow on top pointing up
+  // Position arrow at the edge/corner pointing toward target
+  switch (direction) {
+    case 'top':
       return {
         styles: {
           ...baseStyle,
           top: -arrowSize,
-          left: clampedX,
+          left: '50%',
           transform: 'translateX(-50%)',
           borderWidth: `0 ${arrowSize}px ${arrowSize}px ${arrowSize}px`,
           borderColor: `transparent transparent ${arrowColor} transparent`,
         },
         visible: true,
       };
-    } else {
-      // Tooltip above target → arrow on bottom pointing down
+    case 'bottom':
       return {
         styles: {
           ...baseStyle,
           bottom: -arrowSize,
-          left: clampedX,
+          left: '50%',
           transform: 'translateX(-50%)',
           borderWidth: `${arrowSize}px ${arrowSize}px 0 ${arrowSize}px`,
           borderColor: `${arrowColor} transparent transparent transparent`,
         },
         visible: true,
       };
-    }
-  }
-
-  if (placement.includes('left') || placement.includes('right')) {
-    // Vertical arrow positioning - calculate where target is vertically
-    const relativeY = targetCenterY - tooltipRect.top;
-    const clampedY = Math.max(30, Math.min(relativeY, tooltipRect.height - 30));
-
-    if (placement.includes('left')) {
-      // Tooltip on left → arrow on right pointing right toward target
-      return {
-        styles: {
-          ...baseStyle,
-          right: -arrowSize,
-          top: clampedY,
-          transform: 'translateY(-50%)',
-          borderWidth: `${arrowSize}px 0 ${arrowSize}px ${arrowSize}px`,
-          borderColor: `transparent transparent transparent ${arrowColor}`,
-        },
-        visible: true,
-      };
-    } else {
-      // Tooltip on right → arrow on left pointing left toward target
+    case 'left':
       return {
         styles: {
           ...baseStyle,
           left: -arrowSize,
-          top: clampedY,
+          top: '50%',
           transform: 'translateY(-50%)',
           borderWidth: `${arrowSize}px ${arrowSize}px ${arrowSize}px 0`,
           borderColor: `transparent ${arrowColor} transparent transparent`,
         },
         visible: true,
       };
-    }
+    case 'right':
+      return {
+        styles: {
+          ...baseStyle,
+          right: -arrowSize,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          borderWidth: `${arrowSize}px 0 ${arrowSize}px ${arrowSize}px`,
+          borderColor: `transparent transparent transparent ${arrowColor}`,
+        },
+        visible: true,
+      };
+    case 'top-left':
+      return {
+        styles: {
+          ...baseStyle,
+          top: -arrowSize + 4,
+          left: -arrowSize + 4,
+          borderWidth: `0 ${arrowSize}px ${arrowSize}px 0`,
+          borderColor: `transparent ${arrowColor} transparent transparent`,
+          transform: 'rotate(-45deg)',
+        },
+        visible: true,
+      };
+    case 'top-right':
+      return {
+        styles: {
+          ...baseStyle,
+          top: -arrowSize + 4,
+          right: -arrowSize + 4,
+          borderWidth: `0 0 ${arrowSize}px ${arrowSize}px`,
+          borderColor: `transparent transparent ${arrowColor} transparent`,
+          transform: 'rotate(45deg)',
+        },
+        visible: true,
+      };
+    case 'bottom-left':
+      return {
+        styles: {
+          ...baseStyle,
+          bottom: -arrowSize + 4,
+          left: -arrowSize + 4,
+          borderWidth: `${arrowSize}px ${arrowSize}px 0 0`,
+          borderColor: `${arrowColor} transparent transparent transparent`,
+          transform: 'rotate(45deg)',
+        },
+        visible: true,
+      };
+    case 'bottom-right':
+      return {
+        styles: {
+          ...baseStyle,
+          bottom: -arrowSize + 4,
+          right: -arrowSize + 4,
+          borderWidth: `${arrowSize}px 0 0 ${arrowSize}px`,
+          borderColor: `transparent transparent transparent ${arrowColor}`,
+          transform: 'rotate(-45deg)',
+        },
+        visible: true,
+      };
+    default:
+      return { styles: { display: 'none' }, visible: false };
   }
-
-  return { styles: { display: 'none' }, visible: false };
 };
 
 /**
@@ -123,7 +184,6 @@ const ModernTooltip: React.FC<TooltipRenderProps> = ({
   size,
 }) => {
   const isMobile = window.innerWidth < 768;
-  const placement = step.placement as string;
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [arrowPosition, setArrowPosition] = useState<ArrowPosition>({ styles: { display: 'none' }, visible: false });
 
@@ -138,7 +198,7 @@ const ModernTooltip: React.FC<TooltipRenderProps> = ({
         if (targetEl) {
           const tooltipRect = tooltipEl.getBoundingClientRect();
           const targetRect = targetEl.getBoundingClientRect();
-          setArrowPosition(calculateArrowPosition(tooltipRect, targetRect, placement));
+          setArrowPosition(calculateArrowPosition(tooltipRect, targetRect));
         }
       } else {
         setArrowPosition({ styles: { display: 'none' }, visible: false });
@@ -150,7 +210,7 @@ const ModernTooltip: React.FC<TooltipRenderProps> = ({
     const timer = setTimeout(updateArrowPosition, 100);
 
     return () => clearTimeout(timer);
-  }, [step.target, placement]);
+  }, [step.target]);
 
   const arrowStyles = arrowPosition.styles;
 
