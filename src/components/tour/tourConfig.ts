@@ -137,7 +137,7 @@ export const TOUR_STEPS_CONFIG: EnhancedTourStep[] = [
     key: 'mapLayers',
     target: '[data-tour-id="basemap-options"]',
     content: 'Here you can change the basemap style and toggle data overlays, like the Land Surface Temperature layer.',
-    placement: 'top',
+    placement: 'bottom',
     styles: tourStyles,
     requirements: {
       requiresSidebar: 'open',
@@ -194,9 +194,13 @@ export function getTourSteps(isMobile: boolean): EnhancedTourStep[] {
       else if (step.key === 'knowYourNeighbourhood') {
         mobileStep.placement = 'top'; // Tooltip above scrollable content
       }
-      // For map controls (drawing tools, 3D button) - elements on map itself
-      else if (step.key === 'drawingTools' || step.key === 'threeDMode' || step.key === 'openDashboardMobile') {
-        mobileStep.placement = 'bottom'; // Tooltip below map buttons
+      // For hamburger menu FAB at bottom-right
+      else if (step.key === 'openDashboardMobile') {
+        mobileStep.placement = 'top'; // Tooltip above FAB, arrow points down
+      }
+      // For map controls on the left side (drawing tools, 3D button)
+      else if (step.key === 'drawingTools' || step.key === 'threeDMode') {
+        mobileStep.placement = 'right'; // Tooltip to the right, arrow points left
       }
       // For center modals
       else {
