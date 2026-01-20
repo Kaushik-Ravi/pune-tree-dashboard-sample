@@ -23,27 +23,39 @@ const TourGuide: React.FC<TourGuideProps> = ({ run, stepIndex, handleTourControl
   // This effect ensures the tour waits for the target to be ready (trigger-based).
   useEffect(() => {
     const selector = steps[stepIndex]?.target;
+    let isCancelled = false; // Prevent stale callbacks
+
     if (run && typeof selector === 'string' && selector !== 'body') {
       advancingStep.current = true;
 
       // Use generous timeout since we're trigger-based with MutationObserver
       waitForTourTarget(selector, { timeout: 10000 })
         .then((result) => {
+          if (isCancelled) return; // Effect was cleaned up, ignore
+
           if (!result.success) {
             // Silently skip if element is truly not available
             handleTourControl('SKIP_STEP');
           }
         })
         .catch((error) => {
+          if (isCancelled) return; // Effect was cleaned up, ignore
           console.error('Error waiting for tour target:', error);
           handleTourControl('SKIP_STEP');
         })
         .finally(() => {
-          advancingStep.current = false;
+          if (!isCancelled) {
+            advancingStep.current = false;
+          }
         });
     } else {
       advancingStep.current = false;
     }
+
+    // Cleanup function to prevent stale callbacks
+    return () => {
+      isCancelled = true;
+    };
   }, [run, stepIndex, steps, handleTourControl]);
 
   const handleJoyrideCallback = (data: CallBackProps) => {

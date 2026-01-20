@@ -196,11 +196,15 @@ export function getTourSteps(isMobile: boolean): EnhancedTourStep[] {
       }
       // For hamburger menu FAB at bottom-right
       else if (step.key === 'openDashboardMobile') {
-        mobileStep.placement = 'top'; // Tooltip above FAB, arrow points down
+        mobileStep.placement = 'left'; // Tooltip to left of FAB, arrow points right toward it
       }
-      // For map controls on the left side (drawing tools, 3D button)
-      else if (step.key === 'drawingTools' || step.key === 'threeDMode') {
-        mobileStep.placement = 'right'; // Tooltip to the right, arrow points left
+      // For drawing tools on the left side
+      else if (step.key === 'drawingTools') {
+        mobileStep.placement = 'bottom'; // Tooltip below tools, arrow points up at them
+      }
+      // For 3D mode toggle on the left side
+      else if (step.key === 'threeDMode') {
+        mobileStep.placement = 'right'; // Tooltip to right, arrow points left
       }
       // For center modals
       else {
