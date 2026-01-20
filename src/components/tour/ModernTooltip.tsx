@@ -156,8 +156,15 @@ const ModernTooltip: React.FC<TooltipRenderProps> = ({
 
   return (
     <div
-      ref={tooltipRef}
       {...tooltipProps}
+      ref={(el) => {
+        // Merge refs: set our ref and Joyride's ref
+        (tooltipRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+        // Also call Joyride's ref if it exists
+        if (typeof (tooltipProps as any).ref === 'function') {
+          (tooltipProps as any).ref(el);
+        }
+      }}
       className="modern-tour-tooltip"
       style={{
         position: 'relative',
