@@ -16,6 +16,7 @@ import CityOverview from './tabs/CityOverview';
 import TreeDetails from './tabs/TreeDetails';
 import PlantingAdvisor from './tabs/PlantingAdvisor';
 import MapLayers, { ShadowQuality } from './tabs/MapLayers';
+import { TreeFilterBar } from '../filters';
 import { ArchetypeData } from '../../store/TreeStore';
 import { LightConfig } from './tabs/LightAndShadowControl';
 
@@ -142,6 +143,9 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
           <X size={24} />
         </button>
       </div>
+
+      {/* Tree Filter Bar - Collapsible */}
+      <TreeFilterBar />
 
       <div data-tour-id="sidebar-tabs" className="bg-gray-50 border-b border-gray-200 relative h-[var(--sidebar-tabs-height)] flex items-center">
         {/* Desktop-only scroll buttons */}

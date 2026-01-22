@@ -288,3 +288,24 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* --- END: React Joyride Styles --- */
+
+/* --- Mobile Filter Sheet Animations --- */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out forwards;
+}
+
+/* Safe area for devices with notches/home indicators */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* --- END: Mobile Filter Sheet Animations --- */

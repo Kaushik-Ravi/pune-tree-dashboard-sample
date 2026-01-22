@@ -1,11 +1,13 @@
 // src/components/sidebar/tabs/CityOverview.tsx
-import React, { useState, useEffect, useRef } from 'react';
-import { ScissorsSquare, XCircle, BarChartBig, PieChart, Info } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { XCircle, BarChartBig, Filter } from 'lucide-react';
 import { Line, Pie } from 'react-chartjs-2';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler, ChartOptions
 } from 'chart.js';
-import { useTreeStore, DrawnGeoJson } from '../../../store/TreeStore';
+import { useTreeStore } from '../../../store/TreeStore';
+import { useFilters } from '../../../store/FilterStore';
+import { ActiveFilterChips } from '../../filters';
 import InfoPopover from '../../common/InfoPopover';
 
 ChartJS.register(
@@ -24,8 +26,16 @@ const CityOverview: React.FC = () => {
     getStatsForPolygon,
   } = useTreeStore();
 
+  const {
+    hasActiveFilters,
+    activeFilterChips,
+    filteredStats,
+    isLoadingStats,
+    removeFilter,
+    resetFilters,
+  } = useFilters();
+
   const [selectedChartView, setSelectedChartView] = useState<ChartViewType>('co2'); 
-  const [showNeighbourhoodStats, setShowNeighbourhoodStats] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [neighbourhoodTreeCount, setNeighbourhoodTreeCount] = useState(0);
   const [neighbourhoodCO2, setNeighbourhoodCO2] = useState(0);
@@ -34,7 +44,6 @@ const CityOverview: React.FC = () => {
     const calculateStats = async () => {
         if (selectedArea && selectedArea.type === 'geojson' && selectedArea.geojsonData) {
             setIsCalculating(true);
-            setShowNeighbourhoodStats(true);
             const polygonStats = await getStatsForPolygon(selectedArea.geojsonData);
             if (polygonStats) {
                 setNeighbourhoodTreeCount(polygonStats.tree_count);
@@ -44,8 +53,6 @@ const CityOverview: React.FC = () => {
                 setNeighbourhoodCO2(0);
             }
             setIsCalculating(false);
-        } else {
-            setShowNeighbourhoodStats(false);
         }
     };
     calculateStats();
@@ -53,11 +60,18 @@ const CityOverview: React.FC = () => {
 
   const clearDrawnSelection = () => {
     setSelectedArea(null); 
-    setShowNeighbourhoodStats(false);
     setNeighbourhoodTreeCount(0);
     setNeighbourhoodCO2(0);
   };
 
+  // Determine display values - use filtered stats if filters are active
+  const displayTreeCount = hasActiveFilters && filteredStats 
+    ? filteredStats.totalTrees 
+    : cityStats?.total_trees || 0;
+  
+  const displayCO2 = hasActiveFilters && filteredStats 
+    ? filteredStats.totalCO2Kg 
+    : cityStats?.total_co2_annual_kg || 0;
   const wardLabels = wardCO2Data.length > 0 ? wardCO2Data.map(d => d.ward) : (wardTreeCountData.length > 0 ? wardTreeCountData.map(d => d.ward) : []);
   const lineChartData = {
     labels: wardLabels,
@@ -104,13 +118,77 @@ const CityOverview: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="card">
-        <div className="card-header"><h3 className="text-lg font-medium">Summary</h3></div>
+        <div className="card-header flex justify-between items-center">
+          <h3 className="text-lg font-medium">Summary</h3>
+          {hasActiveFilters && (
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-primary-50 text-primary-700 text-xs font-medium rounded-full">
+              <Filter size={12} />
+              <span>Filtered</span>
+            </div>
+          )}
+        </div>
         <div className="card-body space-y-4">
-          {!cityStats ? <div className="text-center text-gray-500">Loading city stats...</div> : <>
-            <div><span className="text-base text-gray-600 block mb-1">Number of Trees</span><div className="text-4xl font-bold text-primary-700">{cityStats.total_trees.toLocaleString()}</div></div>
-            <hr className="border-gray-200" />
-            <div><span className="text-base text-gray-600 block mb-1">Total CO₂ Sequestered</span><div className="text-4xl font-bold text-accent-700">{(cityStats.total_co2_annual_kg / 1000).toLocaleString('en-US', { maximumFractionDigits: 0 })}<span className="text-xl font-medium"> tons (lifetime)</span></div></div>
-          </>}
+          {/* Active Filter Chips */}
+          {hasActiveFilters && (
+            <div className="pb-3 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Active Filters</span>
+                <button
+                  onClick={resetFilters}
+                  className="text-xs text-primary-600 hover:text-primary-800 hover:underline"
+                >
+                  Clear all
+                </button>
+              </div>
+              <ActiveFilterChips
+                chips={activeFilterChips}
+                onRemove={removeFilter}
+                compact
+              />
+            </div>
+          )}
+
+          {(!cityStats && !hasActiveFilters) ? (
+            <div className="text-center text-gray-500">Loading city stats...</div>
+          ) : isLoadingStats ? (
+            <div className="text-center py-4">
+              <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-primary-600 mx-auto mb-2"></div>
+              <p className="text-sm text-gray-500">Updating stats...</p>
+            </div>
+          ) : (
+            <>
+              <div>
+                <span className="text-base text-gray-600 block mb-1">
+                  Number of Trees
+                  {hasActiveFilters && <span className="text-xs text-gray-400 ml-1">(filtered)</span>}
+                </span>
+                <div className="text-4xl font-bold text-primary-700">
+                  {displayTreeCount.toLocaleString()}
+                </div>
+                {hasActiveFilters && cityStats && (
+                  <span className="text-sm text-gray-400">
+                    of {cityStats.total_trees.toLocaleString()} total
+                  </span>
+                )}
+              </div>
+              <hr className="border-gray-200" />
+              <div>
+                <span className="text-base text-gray-600 block mb-1">
+                  Total CO₂ Sequestered
+                  {hasActiveFilters && <span className="text-xs text-gray-400 ml-1">(filtered)</span>}
+                </span>
+                <div className="text-4xl font-bold text-accent-700">
+                  {(displayCO2 / 1000).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                  <span className="text-xl font-medium"> tons (lifetime)</span>
+                </div>
+                {hasActiveFilters && cityStats && (
+                  <span className="text-sm text-gray-400">
+                    of {(cityStats.total_co2_annual_kg / 1000).toLocaleString('en-US', { maximumFractionDigits: 0 })} total
+                  </span>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
 

@@ -279,6 +279,235 @@ app.get('/api/sun-path', (req, res) => {
 });
 
 
+// --- NEW API ENDPOINT FOR FILTER METADATA ---
+// Returns available options for dropdowns, ranges for sliders
+app.get('/api/filter-metadata', async (req, res) => {
+  try {
+    // Get distinct species names
+    const speciesQuery = `
+      SELECT DISTINCT common_name 
+      FROM public.trees 
+      WHERE common_name IS NOT NULL AND common_name != ''
+      ORDER BY common_name;
+    `;
+    
+    // Get distinct wards
+    const wardsQuery = `
+      SELECT DISTINCT ward 
+      FROM public.trees 
+      WHERE ward IS NOT NULL AND ward != ''
+      ORDER BY ward::double precision::int;
+    `;
+    
+    // Get range values for numeric filters
+    const rangesQuery = `
+      SELECT
+        MIN(height_m) as height_min,
+        MAX(height_m) as height_max,
+        MIN(canopy_dia_m) as canopy_min,
+        MAX(canopy_dia_m) as canopy_max,
+        MIN(girth_cm) as girth_min,
+        MAX(girth_cm) as girth_max,
+        MIN("CO2_sequestered_kg") as co2_min,
+        MAX("CO2_sequestered_kg") as co2_max
+      FROM public.trees;
+    `;
+    
+    // Get distinct economic importance values
+    const economicQuery = `
+      SELECT DISTINCT economic_i 
+      FROM public.trees 
+      WHERE economic_i IS NOT NULL AND economic_i != ''
+      ORDER BY economic_i;
+    `;
+    
+    // Get street tree counts for the location filter labels
+    const locationCountsQuery = `
+      SELECT
+        COUNT(*) FILTER (WHERE distance_to_road_m IS NOT NULL AND distance_to_road_m <= 15) as street_count,
+        COUNT(*) FILTER (WHERE distance_to_road_m IS NULL OR distance_to_road_m > 15) as non_street_count,
+        COUNT(*) as total_count
+      FROM public.trees;
+    `;
+    
+    const [speciesResult, wardsResult, rangesResult, economicResult, locationCountsResult] = await Promise.all([
+      pool.query(speciesQuery),
+      pool.query(wardsQuery),
+      pool.query(rangesQuery),
+      pool.query(economicQuery),
+      pool.query(locationCountsQuery)
+    ]);
+    
+    const ranges = rangesResult.rows[0];
+    const locationCounts = locationCountsResult.rows[0];
+    
+    res.json({
+      species: speciesResult.rows.map(r => r.common_name),
+      wards: wardsResult.rows.map(r => r.ward),
+      heightRange: {
+        min: Math.floor(parseFloat(ranges.height_min) || 0),
+        max: Math.ceil(parseFloat(ranges.height_max) || 30)
+      },
+      canopyRange: {
+        min: Math.floor(parseFloat(ranges.canopy_min) || 0),
+        max: Math.ceil(parseFloat(ranges.canopy_max) || 20)
+      },
+      girthRange: {
+        min: Math.floor(parseFloat(ranges.girth_min) || 0),
+        max: Math.ceil(parseFloat(ranges.girth_max) || 500)
+      },
+      co2Range: {
+        min: Math.floor(parseFloat(ranges.co2_min) || 0),
+        max: Math.ceil(parseFloat(ranges.co2_max) || 10000)
+      },
+      economicImportanceOptions: economicResult.rows.map(r => r.economic_i),
+      locationCounts: {
+        street: parseInt(locationCounts.street_count) || 0,
+        nonStreet: parseInt(locationCounts.non_street_count) || 0,
+        total: parseInt(locationCounts.total_count) || 0
+      }
+    });
+  } catch (err) {
+    console.error('Error executing query for /api/filter-metadata', err.stack);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+// --- NEW API ENDPOINT FOR FILTERED STATS ---
+// Returns aggregated stats based on applied filters
+app.post('/api/filtered-stats', async (req, res) => {
+  const { filters } = req.body;
+  
+  try {
+    // Check if distance_to_road_m column exists
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'trees' AND column_name = 'distance_to_road_m'
+    `);
+    const hasDistanceColumn = columnCheck.rows.length > 0;
+    
+    // Build WHERE clauses based on filters
+    const conditions = [];
+    const params = [];
+    let paramIndex = 1;
+    
+    // Location type filter (requires distance_to_road_m column)
+    if (filters.locationType && filters.locationType !== 'all' && hasDistanceColumn) {
+      if (filters.locationType === 'street') {
+        conditions.push(`distance_to_road_m IS NOT NULL AND distance_to_road_m <= 15`);
+      } else if (filters.locationType === 'non-street') {
+        conditions.push(`(distance_to_road_m > 15 OR distance_to_road_m IS NULL)`);
+      }
+    }
+    
+    // Species filter
+    if (filters.species && filters.species.length > 0) {
+      conditions.push(`common_name = ANY($${paramIndex})`);
+      params.push(filters.species);
+      paramIndex++;
+    }
+    
+    // Ward filter
+    if (filters.wards && filters.wards.length > 0) {
+      conditions.push(`ward = ANY($${paramIndex})`);
+      params.push(filters.wards);
+      paramIndex++;
+    }
+    
+    // Height range filter
+    if (filters.height) {
+      if (filters.height.min !== null) {
+        conditions.push(`height_m >= $${paramIndex}`);
+        params.push(filters.height.min);
+        paramIndex++;
+      }
+      if (filters.height.max !== null) {
+        conditions.push(`height_m <= $${paramIndex}`);
+        params.push(filters.height.max);
+        paramIndex++;
+      }
+    }
+    
+    // Canopy diameter range filter
+    if (filters.canopyDiameter) {
+      if (filters.canopyDiameter.min !== null) {
+        conditions.push(`canopy_dia_m >= $${paramIndex}`);
+        params.push(filters.canopyDiameter.min);
+        paramIndex++;
+      }
+      if (filters.canopyDiameter.max !== null) {
+        conditions.push(`canopy_dia_m <= $${paramIndex}`);
+        params.push(filters.canopyDiameter.max);
+        paramIndex++;
+      }
+    }
+    
+    // Girth range filter
+    if (filters.girth) {
+      if (filters.girth.min !== null) {
+        conditions.push(`girth_cm >= $${paramIndex}`);
+        params.push(filters.girth.min);
+        paramIndex++;
+      }
+      if (filters.girth.max !== null) {
+        conditions.push(`girth_cm <= $${paramIndex}`);
+        params.push(filters.girth.max);
+        paramIndex++;
+      }
+    }
+    
+    // CO2 sequestered range filter
+    if (filters.co2Sequestered) {
+      if (filters.co2Sequestered.min !== null) {
+        conditions.push(`"CO2_sequestered_kg" >= $${paramIndex}`);
+        params.push(filters.co2Sequestered.min);
+        paramIndex++;
+      }
+      if (filters.co2Sequestered.max !== null) {
+        conditions.push(`"CO2_sequestered_kg" <= $${paramIndex}`);
+        params.push(filters.co2Sequestered.max);
+        paramIndex++;
+      }
+    }
+    
+    // Flowering filter
+    if (filters.flowering !== null && filters.flowering !== undefined) {
+      if (filters.flowering === true) {
+        conditions.push(`flowering IS NOT NULL AND flowering != '' AND LOWER(flowering) != 'no'`);
+      } else {
+        conditions.push(`(flowering IS NULL OR flowering = '' OR LOWER(flowering) = 'no')`);
+      }
+    }
+    
+    // Economic importance filter
+    if (filters.economicImportance) {
+      conditions.push(`economic_i = $${paramIndex}`);
+      params.push(filters.economicImportance);
+      paramIndex++;
+    }
+    
+    // Build the final query
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    
+    const query = `
+      SELECT
+        COUNT(*) AS total_trees,
+        COALESCE(SUM("CO2_sequestered_kg"), 0) AS total_co2_kg
+      FROM public.trees
+      ${whereClause};
+    `;
+    
+    const result = await pool.query(query, params);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error executing query for /api/filtered-stats', err.stack);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
 // --- Start Server ---
 // Only start server if not in Vercel serverless environment
 if (process.env.VERCEL !== '1') {
