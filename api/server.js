@@ -388,7 +388,11 @@ app.get('/api/filter-metadata', async (req, res) => {
     
     res.json({
       species: speciesResult.rows.map(r => r.common_name),
-      wards: wardsResult.rows.map(r => r.ward),
+      wards: wardsResult.rows.map(r => {
+        // Format ward as integer if it's a number
+        const num = parseFloat(r.ward);
+        return isNaN(num) ? r.ward : Math.round(num).toString();
+      }),
       heightRange: {
         min: Math.floor(parseFloat(ranges.height_min) || 0),
         max: Math.ceil(parseFloat(ranges.height_max) || 30)
