@@ -9,6 +9,7 @@ import MultiSelect from './MultiSelect';
 import ToggleGroup from './ToggleGroup';
 import ActiveFilterChips from './ActiveFilterChips';
 import MobileFilterSheet from './MobileFilterSheet';
+import FilterLoadingState from './FilterLoadingState';
 import { LocationFilterType } from '../../types/filters';
 
 interface TreeFilterBarProps {
@@ -147,10 +148,7 @@ const TreeFilterBar: React.FC<TreeFilterBarProps> = ({ className = '' }) => {
       {isExpanded && (
         <div className="absolute left-0 right-0 top-full z-50 bg-white border-b border-gray-200 shadow-lg px-4 pb-4 border-t border-gray-100 animate-fade-in max-h-[60vh] overflow-y-auto">
           {isLoadingMetadata ? (
-            <div className="py-8 text-center">
-              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary-600 mx-auto mb-2"></div>
-              <p className="text-sm text-gray-500">Loading filter options...</p>
-            </div>
+            <FilterLoadingState />
           ) : (
             <div className="space-y-6 pt-4">
               {/* Location Type Toggle */}

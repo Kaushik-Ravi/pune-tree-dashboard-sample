@@ -8,6 +8,7 @@ import RangeSlider from './RangeSlider';
 import MultiSelect from './MultiSelect';
 import ToggleGroup from './ToggleGroup';
 import ActiveFilterChips from './ActiveFilterChips';
+import FilterLoadingState from './FilterLoadingState';
 import { LocationFilterType } from '../../types/filters';
 
 interface MobileFilterSheetProps {
@@ -110,9 +111,14 @@ const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }
             <div className="flex items-center justify-between">
               <span className="text-sm text-primary-700">
                 {isLoadingStats ? (
-                  'Updating...'
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="inline-block w-2 h-2 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="inline-block w-2 h-2 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <span className="ml-1">Counting trees...</span>
+                  </span>
                 ) : filteredStats ? (
-                  `${filteredStats.totalTrees.toLocaleString()} trees match`
+                  `🌳 ${filteredStats.totalTrees.toLocaleString()} trees match your filters`
                 ) : (
                   'Calculating...'
                 )}
@@ -124,10 +130,7 @@ const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }
         {/* Scrollable Filter Content */}
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {isLoadingMetadata ? (
-            <div className="py-12 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-600 mx-auto mb-3"></div>
-              <p className="text-gray-500">Loading filter options...</p>
-            </div>
+            <FilterLoadingState />
           ) : (
             <div className="space-y-6">
               {/* Location Type Toggle */}

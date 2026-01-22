@@ -309,3 +309,46 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* --- END: Mobile Filter Sheet Animations --- */
+
+/* --- Filter Loading Animations --- */
+@keyframes loading-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-loading-bar {
+  animation: loading-bar 1.8s ease-in-out infinite;
+  width: 100%;
+}
+
+@keyframes gentle-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-gentle-float {
+  animation: gentle-float 2s ease-in-out infinite;
+}
+
+/* Staggered bounce animation for icons */
+@keyframes stagger-bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+/* --- END: Filter Loading Animations --- */
