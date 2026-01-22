@@ -331,9 +331,16 @@ app.get('/api/sun-path', (req, res) => {
 
 // --- NEW API ENDPOINT FOR FILTER METADATA ---
 // Returns available options for dropdowns, ranges for sliders
+// Cached on Vercel CDN for fast global access
 app.get('/api/filter-metadata', async (req, res) => {
   console.log('[filter-metadata] Request received');
   const startTime = Date.now();
+  
+  // CDN Cache Headers:
+  // s-maxage=3600 = Cache on Vercel CDN for 1 hour
+  // stale-while-revalidate=86400 = Serve stale for 24h while revalidating in background
+  // This means: Users ALWAYS get instant response (cached or stale), database is hit at most once per hour
+  res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
   
   try {
     // Get distinct species names

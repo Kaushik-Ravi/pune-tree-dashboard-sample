@@ -125,29 +125,28 @@ export const FilterProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   
   const [filterMetadata, setFilterMetadata] = useState<FilterMetadata | null>(null);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(true);
-  const [metadataRetryCount, setMetadataRetryCount] = useState(0);
-  const [isRetrying, setIsRetrying] = useState(false);
+  // Retry state kept for API compatibility but always false (CDN caching eliminates retries)
+  const metadataRetryCount = 0;
+  const isRetrying = false;
   
   const [filteredStats, setFilteredStats] = useState<FilteredStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   
-  // Fetch filter metadata on mount with retry logic
+  // Fetch filter metadata on mount
+  // No retry logic needed - Vercel CDN caches responses globally
+  // After first request, all users get instant cached response
   useEffect(() => {
-    let retryCount = 0;
-    const maxRetries = 3;
-    
     const fetchMetadata = async () => {
       setIsLoadingMetadata(true);
-      setIsRetrying(retryCount > 0);
-      setMetadataRetryCount(retryCount);
       
       try {
+        // 60 second timeout for rare cold-start cases
+        // In normal operation, CDN serves cached response instantly
         const response = await axios.get(`${API_BASE_URL}/api/filter-metadata`, {
-          timeout: 15000, // 15 second timeout
+          timeout: 60000,
         });
         if (response.data && response.data.species) {
           setFilterMetadata(response.data);
-          setIsRetrying(false);
           console.log('[FilterStore] Metadata loaded successfully:', {
             speciesCount: response.data.species?.length || 0,
             wardsCount: response.data.wards?.length || 0,
@@ -156,21 +155,9 @@ export const FilterProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           throw new Error('Invalid metadata response');
         }
       } catch (error) {
-        console.error(`[FilterStore] Error fetching metadata (attempt ${retryCount + 1}/${maxRetries}):`, error);
+        console.error('[FilterStore] Error fetching metadata:', error);
         
-        // Retry if we haven't exceeded max retries
-        if (retryCount < maxRetries - 1) {
-          retryCount++;
-          setMetadataRetryCount(retryCount);
-          setIsRetrying(true);
-          console.log(`[FilterStore] Retrying in ${retryCount * 2} seconds...`);
-          setTimeout(fetchMetadata, retryCount * 2000);
-          return;
-        }
-        
-        // Set default metadata on final failure
-        console.error('[FilterStore] All retries failed, using defaults');
-        setIsRetrying(false);
+        // Set default metadata on failure
         setFilterMetadata({
           species: [],
           wards: [],
