@@ -288,28 +288,29 @@ app.get('/api/filter-metadata', async (req, res) => {
       SELECT DISTINCT common_name 
       FROM public.trees 
       WHERE common_name IS NOT NULL AND common_name != ''
-      ORDER BY common_name;
+      ORDER BY common_name
+      LIMIT 500;
     `;
     
-    // Get distinct wards
+    // Get distinct wards - handle non-numeric wards gracefully
     const wardsQuery = `
       SELECT DISTINCT ward 
       FROM public.trees 
       WHERE ward IS NOT NULL AND ward != ''
-      ORDER BY ward::double precision::int;
+      ORDER BY ward;
     `;
     
     // Get range values for numeric filters
     const rangesQuery = `
       SELECT
-        MIN(height_m) as height_min,
-        MAX(height_m) as height_max,
-        MIN(canopy_dia_m) as canopy_min,
-        MAX(canopy_dia_m) as canopy_max,
-        MIN(girth_cm) as girth_min,
-        MAX(girth_cm) as girth_max,
-        MIN("CO2_sequestered_kg") as co2_min,
-        MAX("CO2_sequestered_kg") as co2_max
+        COALESCE(MIN(height_m), 0) as height_min,
+        COALESCE(MAX(height_m), 30) as height_max,
+        COALESCE(MIN(canopy_dia_m), 0) as canopy_min,
+        COALESCE(MAX(canopy_dia_m), 20) as canopy_max,
+        COALESCE(MIN(girth_cm), 0) as girth_min,
+        COALESCE(MAX(girth_cm), 500) as girth_max,
+        COALESCE(MIN("CO2_sequestered_kg"), 0) as co2_min,
+        COALESCE(MAX("CO2_sequestered_kg"), 10000) as co2_max
       FROM public.trees;
     `;
     
@@ -321,25 +322,38 @@ app.get('/api/filter-metadata', async (req, res) => {
       ORDER BY economic_i;
     `;
     
-    // Get street tree counts for the location filter labels
-    const locationCountsQuery = `
-      SELECT
-        COUNT(*) FILTER (WHERE distance_to_road_m IS NOT NULL AND distance_to_road_m <= 15) as street_count,
-        COUNT(*) FILTER (WHERE distance_to_road_m IS NULL OR distance_to_road_m > 15) as non_street_count,
-        COUNT(*) as total_count
-      FROM public.trees;
-    `;
-    
-    const [speciesResult, wardsResult, rangesResult, economicResult, locationCountsResult] = await Promise.all([
+    // Run main queries in parallel
+    const [speciesResult, wardsResult, rangesResult, economicResult] = await Promise.all([
       pool.query(speciesQuery),
       pool.query(wardsQuery),
       pool.query(rangesQuery),
-      pool.query(economicQuery),
-      pool.query(locationCountsQuery)
+      pool.query(economicQuery)
     ]);
     
-    const ranges = rangesResult.rows[0];
-    const locationCounts = locationCountsResult.rows[0];
+    const ranges = rangesResult.rows[0] || {};
+    
+    // Get location counts separately with fallback (uses simpler CASE WHEN syntax)
+    let locationCounts = { street: 0, nonStreet: 0, total: 0 };
+    try {
+      const locationCountsQuery = `
+        SELECT
+          SUM(CASE WHEN distance_to_road_m IS NOT NULL AND distance_to_road_m <= 15 THEN 1 ELSE 0 END) as street_count,
+          SUM(CASE WHEN distance_to_road_m IS NULL OR distance_to_road_m > 15 THEN 1 ELSE 0 END) as non_street_count,
+          COUNT(*) as total_count
+        FROM public.trees;
+      `;
+      const locationCountsResult = await pool.query(locationCountsQuery);
+      if (locationCountsResult.rows[0]) {
+        locationCounts = {
+          street: parseInt(locationCountsResult.rows[0].street_count) || 0,
+          nonStreet: parseInt(locationCountsResult.rows[0].non_street_count) || 0,
+          total: parseInt(locationCountsResult.rows[0].total_count) || 0
+        };
+      }
+    } catch (locErr) {
+      console.error('Error getting location counts (non-fatal):', locErr.message);
+      // Continue without location counts - they're optional
+    }
     
     res.json({
       species: speciesResult.rows.map(r => r.common_name),
@@ -361,15 +375,11 @@ app.get('/api/filter-metadata', async (req, res) => {
         max: Math.ceil(parseFloat(ranges.co2_max) || 10000)
       },
       economicImportanceOptions: economicResult.rows.map(r => r.economic_i),
-      locationCounts: {
-        street: parseInt(locationCounts.street_count) || 0,
-        nonStreet: parseInt(locationCounts.non_street_count) || 0,
-        total: parseInt(locationCounts.total_count) || 0
-      }
+      locationCounts
     });
   } catch (err) {
     console.error('Error executing query for /api/filter-metadata', err.stack);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });
 
@@ -377,24 +387,16 @@ app.get('/api/filter-metadata', async (req, res) => {
 // --- NEW API ENDPOINT FOR FILTERED STATS ---
 // Returns aggregated stats based on applied filters
 app.post('/api/filtered-stats', async (req, res) => {
-  const { filters } = req.body;
+  const { filters = {} } = req.body || {};
   
   try {
-    // Check if distance_to_road_m column exists
-    const columnCheck = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'trees' AND column_name = 'distance_to_road_m'
-    `);
-    const hasDistanceColumn = columnCheck.rows.length > 0;
-    
     // Build WHERE clauses based on filters
     const conditions = [];
     const params = [];
     let paramIndex = 1;
     
-    // Location type filter (requires distance_to_road_m column)
-    if (filters.locationType && filters.locationType !== 'all' && hasDistanceColumn) {
+    // Location type filter
+    if (filters.locationType && filters.locationType !== 'all') {
       if (filters.locationType === 'street') {
         conditions.push(`distance_to_road_m IS NOT NULL AND distance_to_road_m <= 15`);
       } else if (filters.locationType === 'non-street') {
@@ -500,10 +502,13 @@ app.post('/api/filtered-stats', async (req, res) => {
     `;
     
     const result = await pool.query(query, params);
-    res.json(result.rows[0]);
+    res.json({
+      total_trees: parseInt(result.rows[0]?.total_trees) || 0,
+      total_co2_kg: parseFloat(result.rows[0]?.total_co2_kg) || 0
+    });
   } catch (err) {
     console.error('Error executing query for /api/filtered-stats', err.stack);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });
 
