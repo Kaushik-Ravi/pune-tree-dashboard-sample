@@ -42,6 +42,37 @@ pool.connect((err, client, release) => {
     client.release();
 });
 
+// --- Health Check Endpoint ---
+app.get('/api/health', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW() as time, current_database() as db');
+    res.json({ 
+      status: 'ok', 
+      database: result.rows[0].db,
+      time: result.rows[0].time,
+      env: {
+        hasDbHost: !!process.env.DB_HOST,
+        hasDbUser: !!process.env.DB_USER,
+        hasDbPassword: !!process.env.DB_PASSWORD,
+        hasDbDatabase: !!process.env.DB_DATABASE,
+        isVercel: process.env.VERCEL === '1'
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ 
+      status: 'error', 
+      message: err.message,
+      env: {
+        hasDbHost: !!process.env.DB_HOST,
+        hasDbUser: !!process.env.DB_USER,
+        hasDbPassword: !!process.env.DB_PASSWORD,
+        hasDbDatabase: !!process.env.DB_DATABASE,
+        isVercel: process.env.VERCEL === '1'
+      }
+    });
+  }
+});
+
 
 // --- API Endpoints ---
 
@@ -182,7 +213,7 @@ app.get('/api/tree-archetypes', async (req, res) => {
 
   } catch (err) {
     console.error('Error executing query for /api/tree-archetypes', err.stack);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });
 
