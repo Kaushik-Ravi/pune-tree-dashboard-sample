@@ -22,6 +22,7 @@ app.use(cors({
 app.use(express.json());
 
 // --- Database Connection ---
+// Configured for serverless (Vercel) + PgBouncer connection pooling
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
@@ -31,25 +32,43 @@ const pool = new Pool({
   ssl: process.env.DB_CA_CERT ? {
     rejectUnauthorized: false,
     ca: process.env.DB_CA_CERT.replace(/\\n/g, '\n'),
-  } : false,
+  } : { rejectUnauthorized: false }, // Default SSL for DigitalOcean
+  
+  // Serverless-friendly pool configuration
+  max: 3,                        // Low max - PgBouncer handles pooling
+  min: 0,                        // Don't keep idle connections in serverless
+  idleTimeoutMillis: 10000,      // Close idle connections after 10s
+  connectionTimeoutMillis: 10000, // Fail fast if can't connect in 10s
+  allowExitOnIdle: true,         // Allow serverless function to exit
 });
 
-pool.connect((err, client, release) => {
-    if (err) {
-        return console.error('Error acquiring client', err.stack);
-    }
-    console.log('Successfully connected to the database.');
-    client.release();
+// Handle pool errors gracefully (prevents crashes on idle connection issues)
+pool.on('error', (err, client) => {
+  console.error('[Pool] Unexpected error on idle client:', err.message);
 });
+
+// Log successful connection on first query (not at startup - avoids race conditions)
+let connectionLogged = false;
+const logConnection = () => {
+  if (!connectionLogged) {
+    console.log('Successfully connected to the database via PgBouncer pool.');
+    connectionLogged = true;
+  }
+};
 
 // --- Health Check Endpoint ---
 app.get('/api/health', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW() as time, current_database() as db');
+    logConnection();
     res.json({ 
       status: 'ok', 
       database: result.rows[0].db,
       time: result.rows[0].time,
+      poolConfig: {
+        max: 3,
+        usingPgBouncer: true
+      },
       env: {
         hasDbHost: !!process.env.DB_HOST,
         hasDbUser: !!process.env.DB_USER,
@@ -326,21 +345,12 @@ app.get('/api/filter-metadata', async (req, res) => {
       LIMIT 500;
     `;
     
-    // Get distinct wards - sort numerically and format as integers
+    // Get distinct wards - simple query, sort in JavaScript
+    // (Avoids PostgreSQL DISTINCT + ORDER BY expression mismatch error)
     const wardsQuery = `
-      SELECT DISTINCT 
-        CASE 
-          WHEN ward ~ '^[0-9.]+$' THEN FLOOR(ward::numeric)::text
-          ELSE ward
-        END as ward
+      SELECT DISTINCT ward
       FROM public.trees 
-      WHERE ward IS NOT NULL AND ward != ''
-      ORDER BY 
-        CASE 
-          WHEN ward ~ '^[0-9.]+$' THEN FLOOR(ward::numeric)
-          ELSE 999999
-        END,
-        ward;
+      WHERE ward IS NOT NULL AND ward != '';
     `;
     
     // Get range values for numeric filters
@@ -365,15 +375,37 @@ app.get('/api/filter-metadata', async (req, res) => {
       ORDER BY economic_i;
     `;
     
-    // Run main queries in parallel
-    const [speciesResult, wardsResult, rangesResult, economicResult] = await Promise.all([
-      pool.query(speciesQuery),
+    // Run queries - species first (largest), then others in parallel
+    // This reduces connection pressure vs all 4 at once
+    const speciesResult = await pool.query(speciesQuery);
+    logConnection(); // Log on first successful query
+    
+    const [wardsResult, rangesResult, economicResult] = await Promise.all([
       pool.query(wardsQuery),
       pool.query(rangesQuery),
       pool.query(economicQuery)
     ]);
     
     const ranges = rangesResult.rows[0] || {};
+    
+    // Sort wards in JavaScript - handles numeric and text wards correctly
+    const sortedWards = wardsResult.rows
+      .map(r => r.ward)
+      .map(ward => {
+        // Try to convert to integer for numeric wards
+        const num = parseFloat(ward);
+        return {
+          original: ward,
+          display: !isNaN(num) ? String(Math.floor(num)) : ward,
+          sortKey: !isNaN(num) ? num : 999999
+        };
+      })
+      .sort((a, b) => {
+        if (a.sortKey !== b.sortKey) return a.sortKey - b.sortKey;
+        return a.display.localeCompare(b.display);
+      })
+      .map(w => w.display)
+      .filter((v, i, arr) => arr.indexOf(v) === i); // Remove duplicates after floor()
     
     // Get location counts separately with fallback (uses simpler CASE WHEN syntax)
     let locationCounts = { street: 0, nonStreet: 0, total: 0 };
@@ -400,7 +432,7 @@ app.get('/api/filter-metadata', async (req, res) => {
     
     const responseData = {
       species: speciesResult.rows.map(r => r.common_name),
-      wards: wardsResult.rows.map(r => r.ward),
+      wards: sortedWards,
       heightRange: {
         min: Math.floor(parseFloat(ranges.height_min) || 0),
         max: Math.ceil(parseFloat(ranges.height_max) || 30)
