@@ -30,6 +30,8 @@ const TreeFilterBar: React.FC<TreeFilterBarProps> = ({ className = '' }) => {
     activeFilterChips,
     filterMetadata,
     isLoadingMetadata,
+    metadataRetryCount,
+    isRetrying,
   } = useFilters();
 
   // Default metadata if not loaded yet
@@ -148,7 +150,7 @@ const TreeFilterBar: React.FC<TreeFilterBarProps> = ({ className = '' }) => {
       {isExpanded && (
         <div className="absolute left-0 right-0 top-full z-50 bg-white border-b border-gray-200 shadow-lg px-4 pb-4 border-t border-gray-100 animate-fade-in max-h-[60vh] overflow-y-auto">
           {isLoadingMetadata ? (
-            <FilterLoadingState />
+            <FilterLoadingState retryCount={metadataRetryCount} isRetrying={isRetrying} />
           ) : (
             <div className="space-y-6 pt-4">
               {/* Location Type Toggle */}
@@ -178,6 +180,7 @@ const TreeFilterBar: React.FC<TreeFilterBarProps> = ({ className = '' }) => {
                   selected={filters.wards}
                   onChange={(selected) => updateFilter('wards', selected)}
                   placeholder="Select wards..."
+                  sortType="natural"
                 />
               </div>
 

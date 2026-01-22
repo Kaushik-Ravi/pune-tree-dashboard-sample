@@ -12,7 +12,14 @@ interface MultiSelectProps {
   placeholder?: string;
   maxDisplayItems?: number;
   searchable?: boolean;
+  /** Sort type: 'alpha' for alphabetical, 'natural' for numeric-aware sorting */
+  sortType?: 'alpha' | 'natural';
 }
+
+// Natural sort comparator - handles numeric strings properly (1, 2, 10 instead of 1, 10, 2)
+const naturalSort = (a: string, b: string): number => {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+};
 
 const MultiSelect: React.FC<MultiSelectProps> = ({
   label,
@@ -22,6 +29,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
   placeholder = 'Select...',
   maxDisplayItems = 3,
   searchable = true,
+  sortType = 'alpha',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -33,8 +41,13 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
     option.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Group options by first letter for better navigation
-  const groupedOptions = filteredOptions.reduce((acc, option) => {
+  // Sort options based on sortType
+  const sortedOptions = [...filteredOptions].sort(
+    sortType === 'natural' ? naturalSort : (a, b) => a.localeCompare(b)
+  );
+
+  // Group options by first letter for better navigation (use sorted options)
+  const groupedOptions = sortedOptions.reduce((acc, option) => {
     const firstLetter = option.charAt(0).toUpperCase();
     if (!acc[firstLetter]) {
       acc[firstLetter] = [];

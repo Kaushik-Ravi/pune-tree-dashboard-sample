@@ -9,6 +9,10 @@ interface FilterLoadingStateProps {
   className?: string;
   /** Compact mode for inline display */
   compact?: boolean;
+  /** Number of retry attempts (shows fact when > 0) */
+  retryCount?: number;
+  /** Whether currently in retry state */
+  isRetrying?: boolean;
 }
 
 // Tree-themed loading messages that rotate
@@ -34,12 +38,16 @@ const TREE_FACTS = [
 
 const FilterLoadingState: React.FC<FilterLoadingStateProps> = ({ 
   className = '',
-  compact = false 
+  compact = false,
+  retryCount = 0,
+  isRetrying = false,
 }) => {
   const [messageIndex, setMessageIndex] = useState(0);
-  const [showFact, setShowFact] = useState(false);
-  const [factIndex, setFactIndex] = useState(0);
+  const [factIndex, setFactIndex] = useState(() => Math.floor(Math.random() * TREE_FACTS.length));
   const [dots, setDots] = useState('');
+
+  // Show fact when retrying (triggered by actual retry, not arbitrary time)
+  const showFact = retryCount > 0 || isRetrying;
 
   // Rotate through messages every 2.5 seconds
   useEffect(() => {
@@ -59,15 +67,12 @@ const FilterLoadingState: React.FC<FilterLoadingStateProps> = ({
     return () => clearInterval(dotsInterval);
   }, []);
 
-  // Show fact after 5 seconds
+  // Rotate facts when retrying
   useEffect(() => {
-    const factTimer = setTimeout(() => {
-      setShowFact(true);
-      setFactIndex(Math.floor(Math.random() * TREE_FACTS.length));
-    }, 5000);
-
-    return () => clearTimeout(factTimer);
-  }, []);
+    if (isRetrying) {
+      setFactIndex((prev) => (prev + 1) % TREE_FACTS.length);
+    }
+  }, [retryCount, isRetrying]);
 
   const currentMessage = LOADING_MESSAGES[messageIndex];
   const IconComponent = currentMessage.icon;

@@ -106,6 +106,8 @@ interface FilterContextType {
   // Filter metadata (for dropdowns, ranges, etc.)
   filterMetadata: FilterMetadata | null;
   isLoadingMetadata: boolean;
+  metadataRetryCount: number;
+  isRetrying: boolean;
   
   // Filtered stats
   filteredStats: FilteredStats | null;
@@ -123,6 +125,8 @@ export const FilterProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   
   const [filterMetadata, setFilterMetadata] = useState<FilterMetadata | null>(null);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(true);
+  const [metadataRetryCount, setMetadataRetryCount] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
   
   const [filteredStats, setFilteredStats] = useState<FilteredStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
@@ -134,12 +138,16 @@ export const FilterProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     
     const fetchMetadata = async () => {
       setIsLoadingMetadata(true);
+      setIsRetrying(retryCount > 0);
+      setMetadataRetryCount(retryCount);
+      
       try {
         const response = await axios.get(`${API_BASE_URL}/api/filter-metadata`, {
           timeout: 15000, // 15 second timeout
         });
         if (response.data && response.data.species) {
           setFilterMetadata(response.data);
+          setIsRetrying(false);
           console.log('[FilterStore] Metadata loaded successfully:', {
             speciesCount: response.data.species?.length || 0,
             wardsCount: response.data.wards?.length || 0,
@@ -153,6 +161,8 @@ export const FilterProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         // Retry if we haven't exceeded max retries
         if (retryCount < maxRetries - 1) {
           retryCount++;
+          setMetadataRetryCount(retryCount);
+          setIsRetrying(true);
           console.log(`[FilterStore] Retrying in ${retryCount * 2} seconds...`);
           setTimeout(fetchMetadata, retryCount * 2000);
           return;
@@ -160,6 +170,7 @@ export const FilterProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         
         // Set default metadata on final failure
         console.error('[FilterStore] All retries failed, using defaults');
+        setIsRetrying(false);
         setFilterMetadata({
           species: [],
           wards: [],
@@ -214,6 +225,8 @@ export const FilterProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     activeFilterChips: getActiveFilterChips(filters),
     filterMetadata,
     isLoadingMetadata,
+    metadataRetryCount,
+    isRetrying,
     filteredStats,
     isLoadingStats,
     refreshFilteredStats,

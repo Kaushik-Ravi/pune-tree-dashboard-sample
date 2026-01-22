@@ -27,6 +27,8 @@ const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }
     activeFilterChips,
     filterMetadata,
     isLoadingMetadata,
+    metadataRetryCount,
+    isRetrying,
     filteredStats,
     isLoadingStats,
   } = useFilters();
@@ -130,7 +132,7 @@ const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }
         {/* Scrollable Filter Content */}
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {isLoadingMetadata ? (
-            <FilterLoadingState />
+            <FilterLoadingState retryCount={metadataRetryCount} isRetrying={isRetrying} />
           ) : (
             <div className="space-y-6">
               {/* Location Type Toggle */}
@@ -160,6 +162,7 @@ const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }
                   selected={filters.wards}
                   onChange={(selected) => updateFilter('wards', selected)}
                   placeholder="Select wards..."
+                  sortType="natural"
                 />
               </div>
 
