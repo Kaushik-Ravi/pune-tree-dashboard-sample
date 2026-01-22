@@ -145,7 +145,7 @@ const TreeFilterBar: React.FC<TreeFilterBarProps> = ({ className = '' }) => {
 
       {/* Expanded filter panel */}
       {isExpanded && (
-        <div className="px-4 pb-4 border-t border-gray-100 animate-fade-in">
+        <div className="px-4 pb-4 border-t border-gray-100 animate-fade-in max-h-[60vh] overflow-y-auto">
           {isLoadingMetadata ? (
             <div className="py-8 text-center">
               <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary-600 mx-auto mb-2"></div>
@@ -176,11 +176,7 @@ const TreeFilterBar: React.FC<TreeFilterBarProps> = ({ className = '' }) => {
               <div className="relative">
                 <MultiSelect
                   label="Ward"
-                  options={metadata.wards.map(w => {
-                    // Format ward as integer if it's a number
-                    const num = parseFloat(w);
-                    return isNaN(num) ? w : Math.round(num).toString();
-                  })}
+                  options={metadata.wards}
                   selected={filters.wards}
                   onChange={(selected) => updateFilter('wards', selected)}
                   placeholder="Select wards..."
@@ -195,7 +191,7 @@ const TreeFilterBar: React.FC<TreeFilterBarProps> = ({ className = '' }) => {
                   unit="m"
                   min={metadata.heightRange.min}
                   max={metadata.heightRange.max}
-                  step={0.1}
+                  step={0.5}
                   value={filters.height}
                   onChange={(range) => updateFilter('height', range)}
                 />
@@ -206,7 +202,7 @@ const TreeFilterBar: React.FC<TreeFilterBarProps> = ({ className = '' }) => {
                   unit="m"
                   min={metadata.canopyRange.min}
                   max={metadata.canopyRange.max}
-                  step={0.1}
+                  step={0.5}
                   value={filters.canopyDiameter}
                   onChange={(range) => updateFilter('canopyDiameter', range)}
                 />
@@ -217,7 +213,7 @@ const TreeFilterBar: React.FC<TreeFilterBarProps> = ({ className = '' }) => {
                   unit="cm"
                   min={metadata.girthRange.min}
                   max={metadata.girthRange.max}
-                  step={1}
+                  step={10}
                   value={filters.girth}
                   onChange={(range) => updateFilter('girth', range)}
                 />
@@ -228,7 +224,7 @@ const TreeFilterBar: React.FC<TreeFilterBarProps> = ({ className = '' }) => {
                   unit="kg"
                   min={metadata.co2Range.min}
                   max={metadata.co2Range.max}
-                  step={10}
+                  step={100}
                   value={filters.co2Sequestered}
                   onChange={(range) => updateFilter('co2Sequestered', range)}
                   formatValue={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString()}

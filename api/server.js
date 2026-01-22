@@ -323,12 +323,21 @@ app.get('/api/filter-metadata', async (req, res) => {
       LIMIT 500;
     `;
     
-    // Get distinct wards - handle non-numeric wards gracefully
+    // Get distinct wards - sort numerically and format as integers
     const wardsQuery = `
-      SELECT DISTINCT ward 
+      SELECT DISTINCT 
+        CASE 
+          WHEN ward ~ '^[0-9.]+$' THEN FLOOR(ward::numeric)::text
+          ELSE ward
+        END as ward
       FROM public.trees 
       WHERE ward IS NOT NULL AND ward != ''
-      ORDER BY ward;
+      ORDER BY 
+        CASE 
+          WHEN ward ~ '^[0-9.]+$' THEN FLOOR(ward::numeric)
+          ELSE 999999
+        END,
+        ward;
     `;
     
     // Get range values for numeric filters
@@ -388,11 +397,7 @@ app.get('/api/filter-metadata', async (req, res) => {
     
     res.json({
       species: speciesResult.rows.map(r => r.common_name),
-      wards: wardsResult.rows.map(r => {
-        // Format ward as integer if it's a number
-        const num = parseFloat(r.ward);
-        return isNaN(num) ? r.ward : Math.round(num).toString();
-      }),
+      wards: wardsResult.rows.map(r => r.ward),
       heightRange: {
         min: Math.floor(parseFloat(ranges.height_min) || 0),
         max: Math.ceil(parseFloat(ranges.height_max) || 30)
@@ -446,9 +451,13 @@ app.post('/api/filtered-stats', async (req, res) => {
       paramIndex++;
     }
     
-    // Ward filter
+    // Ward filter - handle both integer format (from UI) and original format (in DB)
     if (filters.wards && filters.wards.length > 0) {
-      conditions.push(`ward = ANY($${paramIndex})`);
+      // Match wards that when truncated to integer equal the selected ward
+      conditions.push(`(
+        ward = ANY($${paramIndex}) OR 
+        (ward ~ '^[0-9.]+$' AND FLOOR(ward::numeric)::text = ANY($${paramIndex}))
+      )`);
       params.push(filters.wards);
       paramIndex++;
     }

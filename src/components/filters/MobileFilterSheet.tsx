@@ -53,7 +53,7 @@ const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }
   };
 
   const locationOptions = [
-    { value: 'all' as LocationFilterType, label: 'All', icon: <Layers size={14} /> },
+    { value: 'all' as LocationFilterType, label: 'All Trees', icon: <Layers size={14} /> },
     { value: 'street' as LocationFilterType, label: 'Street', icon: <MapPin size={14} /> },
     { value: 'non-street' as LocationFilterType, label: 'Non-Street', icon: <Trees size={14} /> },
   ];
@@ -153,10 +153,7 @@ const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }
               <div className="relative">
                 <MultiSelect
                   label="Ward"
-                  options={metadata.wards.map(w => {
-                    const num = parseFloat(w);
-                    return isNaN(num) ? w : Math.round(num).toString();
-                  })}
+                  options={metadata.wards}
                   selected={filters.wards}
                   onChange={(selected) => updateFilter('wards', selected)}
                   placeholder="Select wards..."
@@ -169,7 +166,7 @@ const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }
                 unit="m"
                 min={metadata.heightRange.min}
                 max={metadata.heightRange.max}
-                step={0.1}
+                step={0.5}
                 value={filters.height}
                 onChange={(range) => updateFilter('height', range)}
               />
@@ -179,7 +176,7 @@ const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }
                 unit="m"
                 min={metadata.canopyRange.min}
                 max={metadata.canopyRange.max}
-                step={0.1}
+                step={0.5}
                 value={filters.canopyDiameter}
                 onChange={(range) => updateFilter('canopyDiameter', range)}
               />
@@ -189,7 +186,7 @@ const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }
                 unit="cm"
                 min={metadata.girthRange.min}
                 max={metadata.girthRange.max}
-                step={1}
+                step={10}
                 value={filters.girth}
                 onChange={(range) => updateFilter('girth', range)}
               />
@@ -199,7 +196,7 @@ const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }
                 unit="kg"
                 min={metadata.co2Range.min}
                 max={metadata.co2Range.max}
-                step={10}
+                step={100}
                 value={filters.co2Sequestered}
                 onChange={(range) => updateFilter('co2Sequestered', range)}
                 formatValue={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString()}
