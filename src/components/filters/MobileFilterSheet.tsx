@@ -1,14 +1,15 @@
 // src/components/filters/MobileFilterSheet.tsx
 // Full-screen filter modal for mobile devices
 
-import React, { useEffect } from 'react';
-import { X, Filter, RotateCcw, Trees, MapPin, Layers } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, Filter, RotateCcw, Trees, MapPin, Layers, ChevronDown, ChevronUp, Settings2 } from 'lucide-react';
 import { useFilters } from '../../store/FilterStore';
 import RangeSlider from './RangeSlider';
 import MultiSelect from './MultiSelect';
 import ToggleGroup from './ToggleGroup';
 import ActiveFilterChips from './ActiveFilterChips';
 import FilterLoadingState from './FilterLoadingState';
+import QuickFilterChips from './QuickFilterChips';
 import { LocationFilterType } from '../../types/filters';
 
 interface MobileFilterSheetProps {
@@ -17,6 +18,7 @@ interface MobileFilterSheetProps {
 }
 
 const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }) => {
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const {
     filters,
     updateFilter,
@@ -134,7 +136,7 @@ const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }
           {isLoadingMetadata ? (
             <FilterLoadingState retryCount={metadataRetryCount} isRetrying={isRetrying} />
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-5">
               {/* Location Type Toggle */}
               <ToggleGroup
                 label="Location Type"
@@ -143,70 +145,8 @@ const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }
                 onChange={(value) => updateFilter('locationType', value)}
               />
 
-              {/* Species */}
-              <div className="relative">
-                <MultiSelect
-                  label="Species"
-                  options={metadata.species}
-                  selected={filters.species}
-                  onChange={(selected) => updateFilter('species', selected)}
-                  placeholder="Select species..."
-                />
-              </div>
-
-              {/* Ward */}
-              <div className="relative">
-                <MultiSelect
-                  label="Ward"
-                  options={metadata.wards}
-                  selected={filters.wards}
-                  onChange={(selected) => updateFilter('wards', selected)}
-                  placeholder="Select wards..."
-                  sortType="natural"
-                />
-              </div>
-
-              {/* Range Filters */}
-              <RangeSlider
-                label="Height"
-                unit="m"
-                min={metadata.heightRange.min}
-                max={metadata.heightRange.max}
-                step={0.5}
-                value={filters.height}
-                onChange={(range) => updateFilter('height', range)}
-              />
-
-              <RangeSlider
-                label="Canopy Diameter"
-                unit="m"
-                min={metadata.canopyRange.min}
-                max={metadata.canopyRange.max}
-                step={0.5}
-                value={filters.canopyDiameter}
-                onChange={(range) => updateFilter('canopyDiameter', range)}
-              />
-
-              <RangeSlider
-                label="Girth"
-                unit="cm"
-                min={metadata.girthRange.min}
-                max={metadata.girthRange.max}
-                step={10}
-                value={filters.girth}
-                onChange={(range) => updateFilter('girth', range)}
-              />
-
-              <RangeSlider
-                label="CO₂ Sequestered"
-                unit="kg"
-                min={metadata.co2Range.min}
-                max={metadata.co2Range.max}
-                step={100}
-                value={filters.co2Sequestered}
-                onChange={(range) => updateFilter('co2Sequestered', range)}
-                formatValue={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString()}
-              />
+              {/* Quick Filter Chips - Purpose & Size presets */}
+              <QuickFilterChips compact />
 
               {/* Flowering Status */}
               <div className="space-y-2">
@@ -237,21 +177,122 @@ const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({ isOpen, onClose }
                 </div>
               </div>
 
-              {/* Economic Importance */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Economic Importance</label>
-                <select
-                  value={filters.economicImportance || ''}
-                  onChange={(e) => updateFilter('economicImportance', e.target.value || null)}
-                  className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              {/* Primary Filters */}
+              <div className="space-y-4 pt-2 border-t border-gray-100">
+                {/* Species */}
+                <div className="relative">
+                  <MultiSelect
+                    label="Species"
+                    options={metadata.species}
+                    selected={filters.species}
+                    onChange={(selected) => updateFilter('species', selected)}
+                    placeholder="Search all 397+ species..."
+                  />
+                </div>
+
+                {/* Ward */}
+                <div className="relative">
+                  <MultiSelect
+                    label="Ward"
+                    options={metadata.wards}
+                    selected={filters.wards}
+                    onChange={(selected) => updateFilter('wards', selected)}
+                    placeholder="Select wards..."
+                    sortType="natural"
+                    itemPrefix="Ward"
+                  />
+                </div>
+
+                {/* Economic Importance */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Economic Importance</label>
+                  <select
+                    value={filters.economicImportance || ''}
+                    onChange={(e) => updateFilter('economicImportance', e.target.value || null)}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    <option value="">All Types</option>
+                    {metadata.economicImportanceOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Advanced Filters - Collapsible */}
+              <div className="border-t border-gray-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+                  className="flex items-center justify-between w-full py-2 text-sm font-medium text-gray-700"
                 >
-                  <option value="">All</option>
-                  {metadata.economicImportanceOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+                  <div className="flex items-center gap-2">
+                    <Settings2 size={16} className="text-gray-500" />
+                    <span>Advanced Filters</span>
+                    {(filters.height.min !== null || filters.height.max !== null ||
+                      filters.canopyDiameter.min !== null || filters.canopyDiameter.max !== null ||
+                      filters.girth.min !== null || filters.girth.max !== null ||
+                      filters.co2Sequestered.min !== null || filters.co2Sequestered.max !== null) && (
+                      <span className="px-1.5 py-0.5 text-xs bg-primary-100 text-primary-700 rounded">
+                        Active
+                      </span>
+                    )}
+                  </div>
+                  {isAdvancedOpen ? (
+                    <ChevronUp size={16} className="text-gray-400" />
+                  ) : (
+                    <ChevronDown size={16} className="text-gray-400" />
+                  )}
+                </button>
+
+                {isAdvancedOpen && (
+                  <div className="mt-3 space-y-4">
+                    <p className="text-xs text-gray-500">Fine-tune with precise ranges</p>
+                    
+                    <RangeSlider
+                      label="Height"
+                      unit="m"
+                      min={metadata.heightRange.min}
+                      max={metadata.heightRange.max}
+                      step={0.5}
+                      value={filters.height}
+                      onChange={(range) => updateFilter('height', range)}
+                    />
+
+                    <RangeSlider
+                      label="Canopy Diameter"
+                      unit="m"
+                      min={metadata.canopyRange.min}
+                      max={metadata.canopyRange.max}
+                      step={0.5}
+                      value={filters.canopyDiameter}
+                      onChange={(range) => updateFilter('canopyDiameter', range)}
+                    />
+
+                    <RangeSlider
+                      label="Girth"
+                      unit="cm"
+                      min={metadata.girthRange.min}
+                      max={metadata.girthRange.max}
+                      step={10}
+                      value={filters.girth}
+                      onChange={(range) => updateFilter('girth', range)}
+                    />
+
+                    <RangeSlider
+                      label="CO₂ Sequestered"
+                      unit="kg"
+                      min={metadata.co2Range.min}
+                      max={metadata.co2Range.max}
+                      step={100}
+                      value={filters.co2Sequestered}
+                      onChange={(range) => updateFilter('co2Sequestered', range)}
+                      formatValue={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString()}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Active Filters */}

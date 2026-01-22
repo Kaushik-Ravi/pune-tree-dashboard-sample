@@ -14,6 +14,8 @@ interface MultiSelectProps {
   searchable?: boolean;
   /** Sort type: 'alpha' for alphabetical, 'natural' for numeric-aware sorting */
   sortType?: 'alpha' | 'natural';
+  /** Optional prefix for display in flat list (e.g., "Ward" for "Ward 1") */
+  itemPrefix?: string;
 }
 
 // Natural sort comparator - handles numeric strings properly (1, 2, 10 instead of 1, 10, 2)
@@ -30,6 +32,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
   maxDisplayItems = 3,
   searchable = true,
   sortType = 'alpha',
+  itemPrefix = '',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -46,15 +49,20 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
     sortType === 'natural' ? naturalSort : (a, b) => a.localeCompare(b)
   );
 
-  // Group options by first letter for better navigation (use sorted options)
-  const groupedOptions = sortedOptions.reduce((acc, option) => {
-    const firstLetter = option.charAt(0).toUpperCase();
-    if (!acc[firstLetter]) {
-      acc[firstLetter] = [];
-    }
-    acc[firstLetter].push(option);
-    return acc;
-  }, {} as Record<string, string[]>);
+  // Group options by first letter for better navigation (only for alphabetical sort)
+  // For natural/numeric sorting (like wards), we use a flat list for proper 1, 2, 3... order
+  const useGrouping = sortType !== 'natural';
+  
+  const groupedOptions = useGrouping 
+    ? sortedOptions.reduce((acc, option) => {
+        const firstLetter = option.charAt(0).toUpperCase();
+        if (!acc[firstLetter]) {
+          acc[firstLetter] = [];
+        }
+        acc[firstLetter].push(option);
+        return acc;
+      }, {} as Record<string, string[]>)
+    : {}; // Empty when using flat list
 
   // Close on click outside
   useEffect(() => {
@@ -183,11 +191,12 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
 
           {/* Options list */}
           <div className="overflow-y-auto max-h-48">
-            {Object.keys(groupedOptions).length === 0 ? (
+            {sortedOptions.length === 0 ? (
               <div className="px-3 py-4 text-center text-sm text-gray-500">
                 No options found
               </div>
-            ) : (
+            ) : useGrouping ? (
+              // Grouped view for alphabetical sorting (species, etc.)
               Object.entries(groupedOptions)
                 .sort(([a], [b]) => a.localeCompare(b))
                 .map(([letter, items]) => (
@@ -222,6 +231,33 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                     ))}
                   </div>
                 ))
+            ) : (
+              // Flat list for natural/numeric sorting (wards: 1, 2, 3, 4...)
+              sortedOptions.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => toggleOption(option)}
+                  className={`w-full px-3 py-2 flex items-center gap-2 text-sm text-left hover:bg-gray-50 ${
+                    selected.includes(option) ? 'bg-primary-50' : ''
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded border flex items-center justify-center ${
+                      selected.includes(option)
+                        ? 'bg-primary-500 border-primary-500'
+                        : 'border-gray-300'
+                    }`}
+                  >
+                    {selected.includes(option) && (
+                      <Check size={12} className="text-white" />
+                    )}
+                  </div>
+                  <span className={selected.includes(option) ? 'font-medium' : ''}>
+                    {itemPrefix ? `${itemPrefix} ${option}` : option}
+                  </span>
+                </button>
+              ))
             )}
           </div>
 
