@@ -313,6 +313,9 @@ app.get('/api/sun-path', (req, res) => {
 // --- NEW API ENDPOINT FOR FILTER METADATA ---
 // Returns available options for dropdowns, ranges for sliders
 app.get('/api/filter-metadata', async (req, res) => {
+  console.log('[filter-metadata] Request received');
+  const startTime = Date.now();
+  
   try {
     // Get distinct species names
     const speciesQuery = `
@@ -395,7 +398,7 @@ app.get('/api/filter-metadata', async (req, res) => {
       // Continue without location counts - they're optional
     }
     
-    res.json({
+    const responseData = {
       species: speciesResult.rows.map(r => r.common_name),
       wards: wardsResult.rows.map(r => r.ward),
       heightRange: {
@@ -416,9 +419,12 @@ app.get('/api/filter-metadata', async (req, res) => {
       },
       economicImportanceOptions: economicResult.rows.map(r => r.economic_i),
       locationCounts
-    });
+    };
+    
+    console.log(`[filter-metadata] Success in ${Date.now() - startTime}ms - Species: ${responseData.species.length}, Wards: ${responseData.wards.length}`);
+    res.json(responseData);
   } catch (err) {
-    console.error('Error executing query for /api/filter-metadata', err.stack);
+    console.error(`[filter-metadata] Error after ${Date.now() - startTime}ms:`, err.message);
     res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });

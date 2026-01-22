@@ -92,7 +92,7 @@ const TreeFilterBar: React.FC<TreeFilterBarProps> = ({ className = '' }) => {
 
   // Desktop view - collapsible inline filter bar
   const DesktopFilterBar = () => (
-    <div className={`hidden md:block bg-white border-b border-gray-200 ${className}`}>
+    <div className={`hidden md:block bg-white border-b border-gray-200 relative ${className}`}>
       {/* Collapsed header - always visible */}
       <div
         className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors"
@@ -143,9 +143,9 @@ const TreeFilterBar: React.FC<TreeFilterBarProps> = ({ className = '' }) => {
         </div>
       )}
 
-      {/* Expanded filter panel */}
+      {/* Expanded filter panel - overlays on top of content below */}
       {isExpanded && (
-        <div className="px-4 pb-4 border-t border-gray-100 animate-fade-in max-h-[60vh] overflow-y-auto">
+        <div className="absolute left-0 right-0 top-full z-50 bg-white border-b border-gray-200 shadow-lg px-4 pb-4 border-t border-gray-100 animate-fade-in max-h-[60vh] overflow-y-auto">
           {isLoadingMetadata ? (
             <div className="py-8 text-center">
               <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary-600 mx-auto mb-2"></div>

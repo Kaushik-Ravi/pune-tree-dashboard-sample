@@ -127,16 +127,39 @@ export const FilterProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [filteredStats, setFilteredStats] = useState<FilteredStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   
-  // Fetch filter metadata on mount
+  // Fetch filter metadata on mount with retry logic
   useEffect(() => {
+    let retryCount = 0;
+    const maxRetries = 3;
+    
     const fetchMetadata = async () => {
       setIsLoadingMetadata(true);
       try {
-        const response = await axios.get(`${API_BASE_URL}/api/filter-metadata`);
-        setFilterMetadata(response.data);
+        const response = await axios.get(`${API_BASE_URL}/api/filter-metadata`, {
+          timeout: 15000, // 15 second timeout
+        });
+        if (response.data && response.data.species) {
+          setFilterMetadata(response.data);
+          console.log('[FilterStore] Metadata loaded successfully:', {
+            speciesCount: response.data.species?.length || 0,
+            wardsCount: response.data.wards?.length || 0,
+          });
+        } else {
+          throw new Error('Invalid metadata response');
+        }
       } catch (error) {
-        console.error('Error fetching filter metadata:', error);
-        // Set default metadata on error
+        console.error(`[FilterStore] Error fetching metadata (attempt ${retryCount + 1}/${maxRetries}):`, error);
+        
+        // Retry if we haven't exceeded max retries
+        if (retryCount < maxRetries - 1) {
+          retryCount++;
+          console.log(`[FilterStore] Retrying in ${retryCount * 2} seconds...`);
+          setTimeout(fetchMetadata, retryCount * 2000);
+          return;
+        }
+        
+        // Set default metadata on final failure
+        console.error('[FilterStore] All retries failed, using defaults');
         setFilterMetadata({
           species: [],
           wards: [],
@@ -158,7 +181,9 @@ export const FilterProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const refreshFilteredStats = useCallback(async () => {
     setIsLoadingStats(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/filtered-stats`, { filters });
+      const response = await axios.post(`${API_BASE_URL}/api/filtered-stats`, { filters }, {
+        timeout: 15000, // 15 second timeout
+      });
       setFilteredStats({
         totalTrees: parseInt(response.data.total_trees, 10),
         totalCO2Kg: parseFloat(response.data.total_co2_kg),
