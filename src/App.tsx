@@ -4,18 +4,12 @@ import Header from './components/Header';
 import MapView from './components/map/MapView';
 import Sidebar from './components/sidebar/Sidebar';
 import TemperaturePredictionChart from './components/common/TemperaturePredictionChart';
+import ProgressiveLoadingOverlay from './components/common/ProgressiveLoadingOverlay';
 import { ArchetypeData, useTreeStore } from './store/TreeStore';
 import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl';
 import { ShadowQuality } from './components/sidebar/tabs/MapLayers';
 import TourGuide, { TourControlAction } from './components/tour/TourGuide';
 import { getStepRequirements, getTourSteps } from './components/tour/tourConfig';
-
-const LoadingOverlay: React.FC = () => (
-  <div className="fixed inset-0 bg-white bg-opacity-90 z-[20000] flex flex-col items-center justify-center">
-    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-primary-600"></div>
-    <p className="mt-4 text-lg text-gray-700 font-medium">Preparing Your Dashboard...</p>
-  </div>
-);
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -32,7 +26,8 @@ function App() {
   const [showTreeShadows, setShowTreeShadows] = useState(false);
   const [showBuildingShadows, setShowBuildingShadows] = useState(false);
 
-  const { cityStats } = useTreeStore();
+  // Get data from TreeStore for loading overlay
+  const { cityStats, wardCO2Data } = useTreeStore();
   const [isLoading, setIsLoading] = useState(true);
   const [runTour, setRunTour] = useState(false);
   const [tourStepIndex, setTourStepIndex] = useState(0);
@@ -229,7 +224,14 @@ function App() {
 
   return (
     <div className="dashboard-layout">
-      {isLoading && <LoadingOverlay />}
+      {isLoading && (
+        <ProgressiveLoadingOverlay
+          totalTrees={cityStats?.total_trees}
+          totalCO2Kg={cityStats?.total_co2_annual_kg}
+          wardsLoaded={wardCO2Data?.length || 0}
+          isComplete={!isLoading}
+        />
+      )}
       <TourGuide
         run={runTour}
         stepIndex={tourStepIndex}
