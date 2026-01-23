@@ -12,6 +12,20 @@ const SunCalc = require('suncalc'); // --- ADDED: For sun position calculations 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+/**
+ * POST /api/chart-data
+ * Flexible chart data endpoint for dashboard chart builder
+ * Request body: {
+ *   groupBy: string, // e.g. 'ward', 'species', 'economic_i', 'height_category', etc.
+ *   metric: string,  // e.g. 'count', 'sum_co2', 'avg_height', etc.
+ *   sortBy: 'label' | 'value',
+ *   sortOrder: 'asc' | 'desc',
+ *   limit: number | null,
+ *   filters: { ... } // same as /api/filtered-stats
+ * }
+ * Returns: [{ label, value }] for bar/line, [{ id, value }] for pie, [{ id, data: [{x, y}]}] for scatter
+ */
+
 // --- Middleware ---
 app.use(cors({
   origin: process.env.VERCEL === '1' 
