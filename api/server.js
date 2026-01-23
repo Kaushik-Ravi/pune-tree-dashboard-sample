@@ -97,6 +97,156 @@ app.get('/api/health', async (req, res) => {
 
 // NO CHANGES to existing, working endpoints. They remain untouched.
 
+// --- FLEXIBLE CHART DATA ENDPOINT ---
+// POST /api/chart-data
+// { groupBy, metric, type, sortBy, sortOrder, limit, filters }
+app.post('/api/chart-data', async (req, res) => {
+  const {
+    groupBy = 'ward',
+    metric = 'count',
+    type = 'bar',
+    sortBy = 'value',
+    sortOrder = 'desc',
+    limit = null,
+    filters = {}
+  } = req.body || {};
+
+  // Map groupBy to DB columns or expressions
+  const groupMap = {
+    ward: 'ward',
+    species: 'common_name',
+    economic_i: 'economic_i',
+    flowering: 'flowering',
+    location_type: `CASE WHEN distance_to_road_m IS NULL THEN 'Unknown' WHEN distance_to_road_m <= 15 THEN 'Street' ELSE 'Non-Street' END`,
+    height_category: `CASE WHEN height_m IS NULL THEN 'Unknown' WHEN height_m < 5 THEN 'Short (<5m)' WHEN height_m >= 5 AND height_m < 10 THEN 'Medium (5-10m)' WHEN height_m >= 10 AND height_m < 15 THEN 'Tall (10-15m)' ELSE 'Very Tall (>15m)' END`,
+    canopy_category: `CASE WHEN canopy_dia_m IS NULL THEN 'Unknown' WHEN canopy_dia_m < 3 THEN 'Small (<3m)' WHEN canopy_dia_m >= 3 AND canopy_dia_m < 6 THEN 'Medium (3-6m)' WHEN canopy_dia_m >= 6 AND canopy_dia_m < 10 THEN 'Large (6-10m)' ELSE 'Very Large (>10m)' END`,
+    co2_category: `CASE WHEN "CO2_sequestered_kg" IS NULL THEN 'Unknown' WHEN "CO2_sequestered_kg" < 50 THEN 'Low (<50 kg)' WHEN "CO2_sequestered_kg" >= 50 AND "CO2_sequestered_kg" < 200 THEN 'Medium (50-200 kg)' WHEN "CO2_sequestered_kg" >= 200 AND "CO2_sequestered_kg" < 500 THEN 'High (200-500 kg)' ELSE 'Very High (>500 kg)' END`,
+  };
+  const groupExpr = groupMap[groupBy] || 'ward';
+
+  // Map metric to SQL
+  const metricMap = {
+    count: 'COUNT(*)',
+    sum_co2: 'SUM("CO2_sequestered_kg")',
+    avg_height: 'AVG(height_m)',
+    avg_canopy: 'AVG(canopy_dia_m)',
+    avg_girth: 'AVG(girth_cm)',
+  };
+  const metricExpr = metricMap[metric] || 'COUNT(*)';
+
+  // Build WHERE clause from filters (reuse logic from /api/filtered-stats)
+  const conditions = [];
+  const params = [];
+  let paramIndex = 1;
+  if (filters.locationType && filters.locationType !== 'all') {
+    if (filters.locationType === 'street') {
+      conditions.push(`distance_to_road_m IS NOT NULL AND distance_to_road_m <= 15`);
+    } else if (filters.locationType === 'non-street') {
+      conditions.push(`(distance_to_road_m > 15 OR distance_to_road_m IS NULL)`);
+    }
+  }
+  if (filters.species && filters.species.length > 0) {
+    conditions.push(`common_name = ANY($${paramIndex})`);
+    params.push(filters.species);
+    paramIndex++;
+  }
+  if (filters.wards && filters.wards.length > 0) {
+    conditions.push(`(ward = ANY($${paramIndex}) OR (ward ~ '^[0-9.]+$' AND FLOOR(ward::numeric)::text = ANY($${paramIndex})))`);
+    params.push(filters.wards);
+    paramIndex++;
+  }
+  if (filters.height) {
+    if (filters.height.min !== null) {
+      conditions.push(`height_m >= $${paramIndex}`);
+      params.push(filters.height.min);
+      paramIndex++;
+    }
+    if (filters.height.max !== null) {
+      conditions.push(`height_m <= $${paramIndex}`);
+      params.push(filters.height.max);
+      paramIndex++;
+    }
+  }
+  if (filters.canopyDiameter) {
+    if (filters.canopyDiameter.min !== null) {
+      conditions.push(`canopy_dia_m >= $${paramIndex}`);
+      params.push(filters.canopyDiameter.min);
+      paramIndex++;
+    }
+    if (filters.canopyDiameter.max !== null) {
+      conditions.push(`canopy_dia_m <= $${paramIndex}`);
+      params.push(filters.canopyDiameter.max);
+      paramIndex++;
+    }
+  }
+  if (filters.girth) {
+    if (filters.girth.min !== null) {
+      conditions.push(`girth_cm >= $${paramIndex}`);
+      params.push(filters.girth.min);
+      paramIndex++;
+    }
+    if (filters.girth.max !== null) {
+      conditions.push(`girth_cm <= $${paramIndex}`);
+      params.push(filters.girth.max);
+      paramIndex++;
+    }
+  }
+  if (filters.co2Sequestered) {
+    if (filters.co2Sequestered.min !== null) {
+      conditions.push(`"CO2_sequestered_kg" >= $${paramIndex}`);
+      params.push(filters.co2Sequestered.min);
+      paramIndex++;
+    }
+    if (filters.co2Sequestered.max !== null) {
+      conditions.push(`"CO2_sequestered_kg" <= $${paramIndex}`);
+      params.push(filters.co2Sequestered.max);
+      paramIndex++;
+    }
+  }
+  if (filters.flowering !== null && filters.flowering !== undefined) {
+    if (filters.flowering === true) {
+      conditions.push(`flowering IS NOT NULL AND flowering != '' AND LOWER(flowering) != 'no'`);
+    } else {
+      conditions.push(`(flowering IS NULL OR flowering = '' OR LOWER(flowering) = 'no')`);
+    }
+  }
+  if (filters.economicImportance) {
+    conditions.push(`economic_i = $${paramIndex}`);
+    params.push(filters.economicImportance);
+    paramIndex++;
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  // Build SQL
+  let sql = `SELECT ${groupExpr} AS label, ${metricExpr} AS value FROM public.trees ${whereClause} GROUP BY label`;
+  // Sorting
+  if (sortBy === 'label') {
+    sql += ` ORDER BY label ${sortOrder === 'asc' ? 'ASC' : 'DESC'}`;
+  } else {
+    sql += ` ORDER BY value ${sortOrder === 'asc' ? 'ASC' : 'DESC'}`;
+  }
+  if (limit) {
+    sql += ` LIMIT ${parseInt(limit, 10)}`;
+  }
+
+  try {
+    const result = await pool.query(sql, params);
+    // Nivo expects different shapes for different chart types
+    // Bar/Line: [{ label, value }], Pie: [{ id, value }], Scatter: [{ x, y }]
+    let data = result.rows;
+    if (req.body.type === 'pie') {
+      data = data.map(r => ({ id: r.label, value: r.value }));
+    } else if (req.body.type === 'scatter') {
+      data = [{ id: 'All', data: data.map(r => ({ x: r.label, y: r.value })) }];
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('Error executing chart-data query:', err.message, sql, params);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+});
+
 app.get('/api/trees/:id', async (req, res) => {
   const { id } = req.params;
   try {

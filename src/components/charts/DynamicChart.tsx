@@ -6,28 +6,24 @@ import { ResponsivePie } from '@nivo/pie';
 import { ResponsiveLine } from '@nivo/line';
 import { ResponsiveScatterPlot } from '@nivo/scatterplot';
 
-// ...existing code for helpers, export, etc. will be added as we wire up the API and data
 
-interface DynamicChartProps {
-  config: any;
-  data: any;
-}
 
-const DynamicChart: React.FC<DynamicChartProps> = ({ config, data }) => {
-  // This is a stub. We'll expand this to handle all chart types and export options.
-  if (config.type === 'bar') {
-    return <div style={{ height: 400 }}><ResponsiveBar data={data} keys={[config.metric]} indexBy={config.groupBy} /></div>;
+// Use a valid Nivo color scheme (see https://nivo.rocks/guides/colors/)
+const nivoScheme = 'nivo' as const;
+
+const DynamicChart: React.FC<{ type: string, data: any, xLabel?: string, yLabel?: string }> = ({ type, data, xLabel, yLabel }) => {
+  if (type === 'bar') {
+    return <div style={{ height: 350 }}><ResponsiveBar data={data} keys={['value']} indexBy="label" margin={{ top: 30, right: 30, bottom: 60, left: 60 }} colors={{ scheme: nivoScheme }} axisBottom={{ legend: xLabel, legendPosition: 'middle', legendOffset: 40 }} axisLeft={{ legend: yLabel, legendPosition: 'middle', legendOffset: -50 }} /></div>;
   }
-  if (config.type === 'pie') {
-    return <div style={{ height: 400 }}><ResponsivePie data={data} id={config.groupBy} value={config.metric} /></div>;
+  if (type === 'pie') {
+    return <div style={{ height: 350 }}><ResponsivePie data={data} margin={{ top: 30, right: 30, bottom: 60, left: 60 }} colors={{ scheme: nivoScheme }} innerRadius={0.5} padAngle={1} cornerRadius={3} /></div>;
   }
-  if (config.type === 'line') {
-    return <div style={{ height: 400 }}><ResponsiveLine data={data} xScale={{ type: 'point' }} yScale={{ type: 'linear' }} /></div>;
+  if (type === 'line') {
+    return <div style={{ height: 350 }}><ResponsiveLine data={[{ id: yLabel || 'Value', data: data.map((d: any) => ({ x: d.label, y: d.value })) }]} margin={{ top: 30, right: 30, bottom: 60, left: 60 }} colors={{ scheme: nivoScheme }} xScale={{ type: 'point' }} yScale={{ type: 'linear', min: 'auto', max: 'auto', stacked: false }} axisBottom={{ legend: xLabel, legendPosition: 'middle', legendOffset: 40 }} axisLeft={{ legend: yLabel, legendPosition: 'middle', legendOffset: -50 }} /></div>;
   }
-  if (config.type === 'scatter') {
-    return <div style={{ height: 400 }}><ResponsiveScatterPlot data={data} /></div>;
+  if (type === 'scatter') {
+    return <div style={{ height: 350 }}><ResponsiveScatterPlot data={data} margin={{ top: 30, right: 30, bottom: 60, left: 60 }} colors={{ scheme: nivoScheme }} xScale={{ type: 'linear', min: 'auto', max: 'auto' }} yScale={{ type: 'linear', min: 'auto', max: 'auto' }} axisBottom={{ legend: xLabel, legendPosition: 'middle', legendOffset: 40 }} axisLeft={{ legend: yLabel, legendPosition: 'middle', legendOffset: -50 }} /></div>;
   }
-  // ...other chart types
   return <div>Unsupported chart type</div>;
 };
 

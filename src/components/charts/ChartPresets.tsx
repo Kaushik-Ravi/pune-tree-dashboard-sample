@@ -1,44 +1,35 @@
 // src/components/charts/ChartPresets.tsx
-// Quick preset chart chips for dashboard
+// Quick preset chart chips for Pune Tree Dashboard
 import React from 'react';
 
-export type ChartPresetKey =
-  | 'treesByWard'
-  | 'co2ByWard'
-  | 'topSpecies'
-  | 'byPurpose'
-  | 'heightDist'
-  | 'streetVsNonStreet'
-  | 'floweringStatus'
-  | 'topCO2Species';
-
-export const CHART_PRESETS: { key: ChartPresetKey; label: string; icon: React.ReactNode; }[] = [
-  { key: 'treesByWard', label: 'Trees by Ward', icon: '🏘️' },
-  { key: 'co2ByWard', label: 'CO₂ by Ward', icon: '🌍' },
-  { key: 'topSpecies', label: 'Top 10 Species', icon: '🌳' },
-  { key: 'byPurpose', label: 'By Purpose', icon: '💰' },
-  { key: 'heightDist', label: 'Height Distribution', icon: '📏' },
-  { key: 'streetVsNonStreet', label: 'Street vs Non-Street', icon: '🛣️' },
-  { key: 'floweringStatus', label: 'Flowering Status', icon: '🌸' },
-  { key: 'topCO2Species', label: 'Top CO₂ Contributors', icon: '🏆' },
-];
-
-interface ChartPresetsProps {
-  selected: ChartPresetKey;
-  onSelect: (key: ChartPresetKey) => void;
+export interface ChartPreset {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  config: any; // Chart config for builder
 }
 
-const ChartPresets: React.FC<ChartPresetsProps> = ({ selected, onSelect }) => (
-  <div className="flex flex-wrap gap-2 pb-2">
-    {CHART_PRESETS.map(preset => (
+const presets: ChartPreset[] = [
+  { key: 'trees_by_ward', label: 'Trees by Ward', icon: '🏘️', config: { groupBy: 'ward', metric: 'count', type: 'bar', sortBy: 'value', sortOrder: 'desc', limit: 20 } },
+  { key: 'co2_by_ward', label: 'CO₂ by Ward', icon: '🌍', config: { groupBy: 'ward', metric: 'sum_co2', type: 'bar', sortBy: 'value', sortOrder: 'desc', limit: 20 } },
+  { key: 'top_species', label: 'Top 10 Species', icon: '🌳', config: { groupBy: 'species', metric: 'count', type: 'bar', sortBy: 'value', sortOrder: 'desc', limit: 10 } },
+  { key: 'by_purpose', label: 'By Purpose', icon: '💰', config: { groupBy: 'economic_i', metric: 'count', type: 'pie', sortBy: 'value', sortOrder: 'desc' } },
+  { key: 'height_dist', label: 'Height Distribution', icon: '📏', config: { groupBy: 'height_category', metric: 'count', type: 'bar', sortBy: 'label', sortOrder: 'asc' } },
+  { key: 'street_vs_non', label: 'Street vs Non-Street', icon: '🛣️', config: { groupBy: 'location_type', metric: 'count', type: 'pie', sortBy: 'value', sortOrder: 'desc' } },
+  { key: 'flowering', label: 'Flowering Status', icon: '🌸', config: { groupBy: 'flowering', metric: 'count', type: 'pie', sortBy: 'value', sortOrder: 'desc' } },
+  { key: 'top_co2_species', label: 'Top CO₂ Contributors', icon: '🏆', config: { groupBy: 'species', metric: 'sum_co2', type: 'bar', sortBy: 'value', sortOrder: 'desc', limit: 10 } },
+];
+
+const ChartPresets: React.FC<{ onSelect: (config: any) => void, activeKey?: string | null }> = ({ onSelect, activeKey }) => (
+  <div className="flex flex-wrap gap-2 py-2">
+    {presets.map(preset => (
       <button
         key={preset.key}
-        className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-sm font-medium transition-colors ${selected === preset.key ? 'bg-primary-100 border-primary-500 text-primary-700' : 'bg-white border-gray-300 text-gray-700 hover:border-primary-300'}`}
-        onClick={() => onSelect(preset.key)}
-        type="button"
+        className={`px-3 py-1 rounded-full border text-sm flex items-center gap-1 transition-colors ${activeKey === preset.key ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-primary-50'}`}
+        onClick={() => onSelect(preset.config)}
+        aria-pressed={activeKey === preset.key}
       >
-        <span>{preset.icon}</span>
-        {preset.label}
+        <span>{preset.icon}</span> {preset.label}
       </button>
     ))}
   </div>

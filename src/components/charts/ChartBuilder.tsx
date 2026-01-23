@@ -1,138 +1,91 @@
 // src/components/charts/ChartBuilder.tsx
-// Advanced custom chart builder UI
+// Advanced chart builder UI for Pune Tree Dashboard
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Settings2 } from 'lucide-react';
 
-const CHART_TYPES = [
-  { key: 'bar', label: 'Bar' },
-  { key: 'line', label: 'Line' },
-  { key: 'pie', label: 'Pie' },
-  { key: 'horizontalBar', label: 'Horizontal Bar' },
-  { key: 'area', label: 'Area' },
-  { key: 'scatter', label: 'Scatter' },
+const groupByOptions = [
+  { value: 'ward', label: 'Ward' },
+  { value: 'species', label: 'Species' },
+  { value: 'economic_i', label: 'Economic Importance' },
+  { value: 'flowering', label: 'Flowering Status' },
+  { value: 'location_type', label: 'Location Type' },
+  { value: 'height_category', label: 'Height Category' },
+  { value: 'canopy_category', label: 'Canopy Category' },
+  { value: 'co2_category', label: 'CO₂ Category' },
+];
+const metricOptions = [
+  { value: 'count', label: 'Tree Count' },
+  { value: 'sum_co2', label: 'CO₂ Sequestered (kg)' },
+  { value: 'avg_height', label: 'Avg Height (m)' },
+  { value: 'avg_canopy', label: 'Avg Canopy (m)' },
+  { value: 'avg_girth', label: 'Avg Girth (cm)' },
+];
+const typeOptions = [
+  { value: 'bar', label: 'Bar' },
+  { value: 'line', label: 'Line' },
+  { value: 'pie', label: 'Pie/Donut' },
+  { value: 'scatter', label: 'Scatter' },
 ];
 
-const GROUP_BY_OPTIONS = [
-  { key: 'ward', label: 'Ward' },
-  { key: 'species', label: 'Species' },
-  { key: 'economic_i', label: 'Purpose' },
-  { key: 'flowering', label: 'Flowering' },
-  { key: 'location_type', label: 'Location Type' },
-  { key: 'height_category', label: 'Height Category' },
-  { key: 'canopy_category', label: 'Canopy Category' },
-  { key: 'co2_category', label: 'CO₂ Category' },
+const sortByOptions = [
+  { value: 'value', label: 'Value' },
+  { value: 'label', label: 'Label' },
 ];
 
-const METRIC_OPTIONS = [
-  { key: 'count', label: 'Tree Count' },
-  { key: 'sum_co2', label: 'CO₂ Sequestered' },
-  { key: 'avg_height', label: 'Avg Height' },
-  { key: 'avg_canopy', label: 'Avg Canopy' },
-  { key: 'avg_girth', label: 'Avg Girth' },
+const limitOptions = [
+  { value: null, label: 'All' },
+  { value: 10, label: 'Top 10' },
+  { value: 20, label: 'Top 20' },
+  { value: 50, label: 'Top 50' },
 ];
 
-const SORT_OPTIONS = [
-  { key: 'label', label: 'Label' },
-  { key: 'value', label: 'Value' },
-];
-
-const LIMIT_OPTIONS = [10, 20, 50];
-
-interface ChartBuilderProps {
-  value: any;
-  onChange: (config: any) => void;
-}
-
-const ChartBuilder: React.FC<ChartBuilderProps> = ({ value, onChange }) => {
-  const [open, setOpen] = useState(false);
+const ChartBuilder: React.FC<{ value: any, onChange: (config: any) => void }> = ({ value, onChange }) => {
+  const [local, setLocal] = useState(value);
+  const handleChange = (key: string, val: any) => {
+    const next = { ...local, [key]: val };
+    setLocal(next);
+    onChange(next);
+  };
   return (
-    <div className="border-t border-gray-100 pt-3">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex items-center justify-between w-full py-2 text-sm font-medium text-gray-700"
-      >
-        <div className="flex items-center gap-2">
-          <Settings2 size={16} className="text-gray-500" />
-          <span>Custom Chart Builder</span>
+    <div className="space-y-3 p-3 border rounded-md bg-gray-50">
+      <div className="flex flex-wrap gap-3">
+        <div>
+          <label className="block text-xs font-medium mb-1">Chart Type</label>
+          <select value={local.type} onChange={e => handleChange('type', e.target.value)} className="input">
+            {typeOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
         </div>
-        {open ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
-      </button>
-      {open && (
-        <div className="mt-3 space-y-4 animate-fade-in">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Chart Type</label>
-              <select
-                className="w-full border rounded px-2 py-1"
-                value={value.type}
-                onChange={e => onChange({ ...value, type: e.target.value })}
-              >
-                {CHART_TYPES.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Group By (X-Axis)</label>
-              <select
-                className="w-full border rounded px-2 py-1"
-                value={value.groupBy}
-                onChange={e => onChange({ ...value, groupBy: e.target.value })}
-              >
-                {GROUP_BY_OPTIONS.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Metric (Y-Axis)</label>
-              <select
-                className="w-full border rounded px-2 py-1"
-                value={value.metric}
-                onChange={e => onChange({ ...value, metric: e.target.value })}
-              >
-                {METRIC_OPTIONS.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Sort By</label>
-              <select
-                className="w-full border rounded px-2 py-1"
-                value={value.sortBy}
-                onChange={e => onChange({ ...value, sortBy: e.target.value })}
-              >
-                {SORT_OPTIONS.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Limit</label>
-              <select
-                className="w-full border rounded px-2 py-1"
-                value={value.limit ?? ''}
-                onChange={e => onChange({ ...value, limit: e.target.value ? Number(e.target.value) : null })}
-              >
-                <option value="">All</option>
-                {LIMIT_OPTIONS.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="flex gap-4 items-center">
-            <label className="flex items-center gap-1 text-xs">
-              <input
-                type="checkbox"
-                checked={!!value.showValues}
-                onChange={e => onChange({ ...value, showValues: e.target.checked })}
-              />
-              Show values on chart
-            </label>
-            <label className="flex items-center gap-1 text-xs">
-              <input
-                type="checkbox"
-                checked={!!value.descending}
-                onChange={e => onChange({ ...value, descending: e.target.checked })}
-              />
-              Descending order
-            </label>
-          </div>
+        <div>
+          <label className="block text-xs font-medium mb-1">X-Axis (Group By)</label>
+          <select value={local.groupBy} onChange={e => handleChange('groupBy', e.target.value)} className="input">
+            {groupByOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
         </div>
-      )}
+        <div>
+          <label className="block text-xs font-medium mb-1">Y-Axis (Metric)</label>
+          <select value={local.metric} onChange={e => handleChange('metric', e.target.value)} className="input">
+            {metricOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium mb-1">Sort By</label>
+          <select value={local.sortBy} onChange={e => handleChange('sortBy', e.target.value)} className="input">
+            {sortByOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium mb-1">Order</label>
+          <select value={local.sortOrder} onChange={e => handleChange('sortOrder', e.target.value)} className="input">
+            <option value="desc">Descending</option>
+            <option value="asc">Ascending</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium mb-1">Limit</label>
+          <select value={local.limit ?? ''} onChange={e => handleChange('limit', e.target.value ? Number(e.target.value) : null)} className="input">
+            {limitOptions.map(opt => <option key={String(opt.value)} value={opt.value ?? ''}>{opt.label}</option>)}
+          </select>
+        </div>
+      </div>
     </div>
   );
 };
