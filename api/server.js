@@ -611,3 +611,187 @@ if (process.env.VERCEL !== '1') {
 }
 
 module.exports = app;
+
+
+// --- NEW API ENDPOINT FOR FLEXIBLE CHART DATA ---
+// POST /api/chart-data { groupBy, metric, sortBy, sortOrder, limit, filters }
+app.post('/api/chart-data', async (req, res) => {
+  const {
+    groupBy = 'ward',
+    metric = 'count',
+    sortBy = 'value',
+    sortOrder = 'desc',
+    limit = null,
+    filters = {}
+  } = req.body || {};
+
+  // Map metric to SQL
+  let metricExpr = 'COUNT(*)';
+  let metricLabel = 'count';
+  if (metric === 'sum_co2') {
+    metricExpr = 'COALESCE(SUM("CO2_sequestered_kg"),0)';
+    metricLabel = 'sum_co2';
+  } else if (metric === 'avg_height') {
+    metricExpr = 'AVG(height_m)';
+    metricLabel = 'avg_height';
+  } else if (metric === 'avg_canopy') {
+    metricExpr = 'AVG(canopy_dia_m)';
+    metricLabel = 'avg_canopy';
+  } else if (metric === 'avg_girth') {
+    metricExpr = 'AVG(girth_cm)';
+    metricLabel = 'avg_girth';
+  }
+
+  // Map groupBy to SQL
+  let groupExpr = groupBy;
+  if (groupBy === 'height_category') {
+    groupExpr = `CASE 
+      WHEN height_m IS NULL THEN 'Unknown'
+      WHEN height_m < 5 THEN 'Short (<5m)'
+      WHEN height_m >= 5 AND height_m < 10 THEN 'Medium (5-10m)'
+      WHEN height_m >= 10 AND height_m < 15 THEN 'Tall (10-15m)'
+      ELSE 'Very Tall (>15m)'
+    END`;
+  } else if (groupBy === 'canopy_category') {
+    groupExpr = `CASE 
+      WHEN canopy_dia_m IS NULL THEN 'Unknown'
+      WHEN canopy_dia_m < 3 THEN 'Small (<3m)'
+      WHEN canopy_dia_m >= 3 AND canopy_dia_m < 6 THEN 'Medium (3-6m)'
+      WHEN canopy_dia_m >= 6 AND canopy_dia_m < 10 THEN 'Large (6-10m)'
+      ELSE 'Very Large (>10m)'
+    END`;
+  } else if (groupBy === 'co2_category') {
+    groupExpr = `CASE 
+      WHEN "CO2_sequestered_kg" IS NULL THEN 'Unknown'
+      WHEN "CO2_sequestered_kg" < 50 THEN 'Low (<50 kg)'
+      WHEN "CO2_sequestered_kg" >= 50 AND "CO2_sequestered_kg" < 200 THEN 'Medium (50-200 kg)'
+      WHEN "CO2_sequestered_kg" >= 200 AND "CO2_sequestered_kg" < 500 THEN 'High (200-500 kg)'
+      ELSE 'Very High (>500 kg)'
+    END`;
+  }
+
+  // Build WHERE clause from filters (reuse logic from /api/filtered-stats)
+  const conditions = [];
+  const params = [];
+  let paramIndex = 1;
+  // Location type filter
+  if (filters.locationType && filters.locationType !== 'all') {
+    if (filters.locationType === 'street') {
+      conditions.push(`distance_to_road_m IS NOT NULL AND distance_to_road_m <= 15`);
+    } else if (filters.locationType === 'non-street') {
+      conditions.push(`(distance_to_road_m > 15 OR distance_to_road_m IS NULL)`);
+    }
+  }
+  // Species filter
+  if (filters.species && filters.species.length > 0) {
+    conditions.push(`common_name = ANY($${paramIndex})`);
+    params.push(filters.species);
+    paramIndex++;
+  }
+  // Ward filter
+  if (filters.wards && filters.wards.length > 0) {
+    conditions.push(`(
+      ward = ANY($${paramIndex}) OR 
+      (ward ~ '^[0-9.]+$' AND FLOOR(ward::numeric)::text = ANY($${paramIndex}))
+    )`);
+    params.push(filters.wards);
+    paramIndex++;
+  }
+  // Height range filter
+  if (filters.height) {
+    if (filters.height.min !== null) {
+      conditions.push(`height_m >= $${paramIndex}`);
+      params.push(filters.height.min);
+      paramIndex++;
+    }
+    if (filters.height.max !== null) {
+      conditions.push(`height_m <= $${paramIndex}`);
+      params.push(filters.height.max);
+      paramIndex++;
+    }
+  }
+  // Canopy diameter range filter
+  if (filters.canopyDiameter) {
+    if (filters.canopyDiameter.min !== null) {
+      conditions.push(`canopy_dia_m >= $${paramIndex}`);
+      params.push(filters.canopyDiameter.min);
+      paramIndex++;
+    }
+    if (filters.canopyDiameter.max !== null) {
+      conditions.push(`canopy_dia_m <= $${paramIndex}`);
+      params.push(filters.canopyDiameter.max);
+      paramIndex++;
+    }
+  }
+  // Girth range filter
+  if (filters.girth) {
+    if (filters.girth.min !== null) {
+      conditions.push(`girth_cm >= $${paramIndex}`);
+      params.push(filters.girth.min);
+      paramIndex++;
+    }
+    if (filters.girth.max !== null) {
+      conditions.push(`girth_cm <= $${paramIndex}`);
+      params.push(filters.girth.max);
+      paramIndex++;
+    }
+  }
+  // CO2 sequestered range filter
+  if (filters.co2Sequestered) {
+    if (filters.co2Sequestered.min !== null) {
+      conditions.push(`"CO2_sequestered_kg" >= $${paramIndex}`);
+      params.push(filters.co2Sequestered.min);
+      paramIndex++;
+    }
+    if (filters.co2Sequestered.max !== null) {
+      conditions.push(`"CO2_sequestered_kg" <= $${paramIndex}`);
+      params.push(filters.co2Sequestered.max);
+      paramIndex++;
+    }
+  }
+  // Flowering filter
+  if (filters.flowering !== null && filters.flowering !== undefined) {
+    if (filters.flowering === true) {
+      conditions.push(`flowering IS NOT NULL AND flowering != '' AND LOWER(flowering) != 'no'`);
+    } else {
+      conditions.push(`(flowering IS NULL OR flowering = '' OR LOWER(flowering) = 'no')`);
+    }
+  }
+  // Economic importance filter
+  if (filters.economicImportance) {
+    conditions.push(`economic_i = $${paramIndex}`);
+    params.push(filters.economicImportance);
+    paramIndex++;
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  // Compose SQL
+  const sql = `
+    SELECT
+      ${groupExpr} AS label,
+      ${metricExpr} AS value
+    FROM public.trees
+    ${whereClause}
+    GROUP BY label
+    HAVING label IS NOT NULL AND label != ''
+    ORDER BY ${sortBy === 'label' ? 'label' : 'value'} ${sortOrder === 'desc' ? 'DESC' : 'ASC'}
+    ${limit ? `LIMIT ${parseInt(limit)}` : ''}
+  `;
+
+  try {
+    const result = await pool.query(sql, params);
+    // Nivo expects different shapes for different chart types
+    // Bar/Line: [{ label, value }], Pie: [{ id, value }], Scatter: [{ x, y }]
+    let data = result.rows;
+    if (req.body.type === 'pie') {
+      data = data.map(r => ({ id: r.label, value: r.value }));
+    } else if (req.body.type === 'scatter') {
+      data = [{ id: 'All', data: data.map(r => ({ x: r.label, y: r.value })) }];
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('Error executing chart-data query:', err.message, sql, params);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+});

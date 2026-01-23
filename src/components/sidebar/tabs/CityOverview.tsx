@@ -1,154 +1,28 @@
 // src/components/sidebar/tabs/CityOverview.tsx
 import React, { useState, useEffect } from 'react';
 import { XCircle, BarChartBig, Filter } from 'lucide-react';
-import { Line, Pie } from 'react-chartjs-2';
-import {
-  Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler, ChartOptions
-} from 'chart.js';
+import CityOverviewCharts from './CityOverviewCharts';
 import { useTreeStore } from '../../../store/TreeStore';
 import { useFilters } from '../../../store/FilterStore';
 import { ActiveFilterChips } from '../../filters';
 import InfoPopover from '../../common/InfoPopover';
 
-ChartJS.register(
-  CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, Filler
-);
 
-type ChartViewType = 'co2' | 'trees';
 
 const CityOverview: React.FC = () => {
-  const {
-    cityStats,
-    wardCO2Data,
-    wardTreeCountData,
-    selectedArea,
-    setSelectedArea,
-    getStatsForPolygon,
-  } = useTreeStore();
-
-  const {
-    hasActiveFilters,
-    activeFilterChips,
-    filteredStats,
-    isLoadingStats,
-    removeFilter,
-    resetFilters,
-  } = useFilters();
-
-  const [selectedChartView, setSelectedChartView] = useState<ChartViewType>('co2'); 
-  const [isCalculating, setIsCalculating] = useState(false);
-  const [neighbourhoodTreeCount, setNeighbourhoodTreeCount] = useState(0);
-  const [neighbourhoodCO2, setNeighbourhoodCO2] = useState(0);
-
-  useEffect(() => {
-    const calculateStats = async () => {
-        if (selectedArea && selectedArea.type === 'geojson' && selectedArea.geojsonData) {
-            setIsCalculating(true);
-            const polygonStats = await getStatsForPolygon(selectedArea.geojsonData);
-            if (polygonStats) {
-                setNeighbourhoodTreeCount(polygonStats.tree_count);
-                setNeighbourhoodCO2(polygonStats.co2_kg / 1000); // Convert kg to tons
-            } else {
-                setNeighbourhoodTreeCount(0);
-                setNeighbourhoodCO2(0);
-            }
-            setIsCalculating(false);
-        }
-    };
-    calculateStats();
-  }, [selectedArea, getStatsForPolygon]);
-
-  const clearDrawnSelection = () => {
-    setSelectedArea(null); 
-    setNeighbourhoodTreeCount(0);
-    setNeighbourhoodCO2(0);
-  };
-
-  // Determine display values - use filtered stats if filters are active
-  const displayTreeCount = hasActiveFilters && filteredStats 
-    ? filteredStats.totalTrees 
-    : cityStats?.total_trees || 0;
-  
-  const displayCO2 = hasActiveFilters && filteredStats 
-    ? filteredStats.totalCO2Kg 
-    : cityStats?.total_co2_annual_kg || 0;
-  const wardLabels = wardCO2Data.length > 0 ? wardCO2Data.map(d => d.ward) : (wardTreeCountData.length > 0 ? wardTreeCountData.map(d => d.ward) : []);
-  const lineChartData = {
-    labels: wardLabels,
-    datasets: [
-        selectedChartView === 'co2'
-        ? {
-            label: 'CO₂ Sequestered (tons)',
-            data: wardCO2Data.map(w => w.co2_kg / 1000), // convert kg to tons
-            borderColor: 'rgba(46, 125, 50, 1)',
-            backgroundColor: 'rgba(46, 125, 50, 0.2)',
-            yAxisID: 'y',
-          }
-        : {
-            label: 'Number of Trees',
-            data: wardTreeCountData.map(w => w.tree_count),
-            borderColor: 'rgba(25, 118, 210, 1)',
-            backgroundColor: 'rgba(25, 118, 210, 0.2)',
-            yAxisID: 'y',
-          }
-    ].map(ds => ({...ds, tension: 0.4, fill: true}))
-  };
-
-  const lineChartOptions: ChartOptions<'line'> = {
-    responsive: true, maintainAspectRatio: false,
-    interaction: { mode: 'index' as const, intersect: false, },
-    plugins: { legend: { display: false, },
-        tooltip: { callbacks: { label: (ctx) => { let l = ctx.dataset.label || ''; if (l) { l += ': '; } if (ctx.parsed.y !== null) { l += ctx.parsed.y.toLocaleString('en-US', { maximumFractionDigits: 1 }); if (selectedChartView === 'co2') { l += ' tons'; } else { l += ' trees'; } } return l; } } }
-    },
-    scales: { y: { beginAtZero: true, title: { display: true, text: selectedChartView === 'co2' ? 'CO₂ Sequestered (tons)' : 'Number of Trees', font: { size: 12 } }, ticks: { font: { size: 10 } } }, x: { title: { display: true, text: 'Ward', font: { size: 12 } }, ticks: { font: { size: 10 }, autoSkip: true, maxTicksLimit: 15 } } }
-  };
-
-  const neighbourhoodTreePieData = cityStats ? {
-    labels: ['In Selected Area', 'Rest of City'],
-    datasets: [{ data: [neighbourhoodTreeCount, Math.max(0, cityStats.total_trees - neighbourhoodTreeCount)], backgroundColor: ['#4CAF50', '#E0E0E0'], borderColor: ['#FFFFFF', '#FFFFFF'], borderWidth: 2, }],
-  } : null;
-
-  const neighbourhoodCO2PieData = cityStats ? {
-    labels: ['In Selected Area', 'Rest of City'],
-    datasets: [{ data: [neighbourhoodCO2, Math.max(0, (cityStats.total_co2_annual_kg / 1000) - neighbourhoodCO2)], backgroundColor: ['#FFC107', '#E0E0E0'], borderColor: ['#FFFFFF', '#FFFFFF'], borderWidth: 2, }],
-  } : null;
-  
-  const pieChartOptions: ChartOptions<'pie'> = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' as const, labels: { boxWidth:15, font:{size:10} } }, tooltip: { callbacks: { label: (context) => { const value = context.raw as number; let label = context.label || ''; if(label){label+=': ';} label+= value.toLocaleString('en-US', {maximumFractionDigits: 1}); return label; } } } } };
-
   return (
     <div className="space-y-6">
       <div className="card">
         <div className="card-header flex justify-between items-center">
-          <h3 className="text-lg font-medium">Summary</h3>
-          {hasActiveFilters && (
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-primary-50 text-primary-700 text-xs font-medium rounded-full">
-              <Filter size={12} />
-              <span>Filtered</span>
-            </div>
-          )}
+          <h3 className="text-lg font-medium">Charts</h3>
         </div>
         <div className="card-body space-y-4">
-          {/* Active Filter Chips */}
-          {hasActiveFilters && (
-            <div className="pb-3 border-b border-gray-100">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Active Filters</span>
-                <button
-                  onClick={resetFilters}
-                  className="text-xs text-primary-600 hover:text-primary-800 hover:underline"
-                >
-                  Clear all
-                </button>
-              </div>
-              <ActiveFilterChips
-                chips={activeFilterChips}
-                onRemove={removeFilter}
-                compact
-              />
-            </div>
-          )}
-
-          {(!cityStats && !hasActiveFilters) ? (
+          <CityOverviewCharts />
+        </div>
+      </div>
+    </div>
+  );
+};
             <div className="text-center text-gray-500">Loading city stats...</div>
           ) : isLoadingStats ? (
             <div className="text-center py-4">
