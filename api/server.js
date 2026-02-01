@@ -602,6 +602,133 @@ app.post('/api/filtered-stats', async (req, res) => {
 });
 
 
+// --- NEW API ENDPOINT FOR DYNAMIC CHART DATA ---
+// Flexible aggregation endpoint for the chart builder
+app.post('/api/chart-data', async (req, res) => {
+  const { groupBy, metric, sortBy, sortOrder, limit } = req.body;
+  
+  // Validate required fields
+  if (!groupBy || !metric) {
+    return res.status(400).json({ error: 'groupBy and metric are required' });
+  }
+  
+  try {
+    // Build the GROUP BY expression based on field
+    let groupByExpr;
+    let groupByAlias = 'name';
+    
+    switch (groupBy) {
+      case 'ward':
+        groupByExpr = `COALESCE(FLOOR(ward::numeric)::text, 'Unknown')`;
+        break;
+      case 'species':
+        groupByExpr = `COALESCE(NULLIF(common_name, ''), 'Unknown')`;
+        break;
+      case 'economic_importance':
+        groupByExpr = `COALESCE(NULLIF(economic_i, ''), 'Not Specified')`;
+        break;
+      case 'flowering':
+        groupByExpr = `CASE 
+          WHEN flowering IS NULL OR flowering = '' THEN 'Unknown'
+          WHEN LOWER(flowering) = 'no' THEN 'Non-Flowering'
+          ELSE 'Flowering'
+        END`;
+        break;
+      case 'location_type':
+        groupByExpr = `CASE 
+          WHEN distance_to_road_m IS NULL THEN 'Unknown'
+          WHEN distance_to_road_m <= 15 THEN 'Street Trees'
+          ELSE 'Non-Street Trees'
+        END`;
+        break;
+      case 'height_category':
+        groupByExpr = `CASE 
+          WHEN height_m IS NULL THEN 'Unknown'
+          WHEN height_m < 5 THEN '1. Short (<5m)'
+          WHEN height_m >= 5 AND height_m < 10 THEN '2. Medium (5-10m)'
+          WHEN height_m >= 10 AND height_m < 15 THEN '3. Tall (10-15m)'
+          ELSE '4. Very Tall (>15m)'
+        END`;
+        break;
+      case 'canopy_category':
+        groupByExpr = `CASE 
+          WHEN canopy_dia_m IS NULL THEN 'Unknown'
+          WHEN canopy_dia_m < 3 THEN '1. Small (<3m)'
+          WHEN canopy_dia_m >= 3 AND canopy_dia_m < 6 THEN '2. Medium (3-6m)'
+          WHEN canopy_dia_m >= 6 AND canopy_dia_m < 10 THEN '3. Large (6-10m)'
+          ELSE '4. Very Large (>10m)'
+        END`;
+        break;
+      default:
+        return res.status(400).json({ error: `Invalid groupBy field: ${groupBy}` });
+    }
+    
+    // Build the metric expression
+    let metricExpr;
+    let metricAlias = 'value';
+    
+    switch (metric) {
+      case 'count':
+        metricExpr = 'COUNT(*)';
+        break;
+      case 'sum_co2':
+        metricExpr = 'COALESCE(SUM("CO2_sequestered_kg") / 1000, 0)'; // Convert to tons
+        break;
+      case 'avg_height':
+        metricExpr = 'COALESCE(ROUND(AVG(height_m)::numeric, 2), 0)';
+        break;
+      case 'avg_canopy':
+        metricExpr = 'COALESCE(ROUND(AVG(canopy_dia_m)::numeric, 2), 0)';
+        break;
+      case 'avg_girth':
+        metricExpr = 'COALESCE(ROUND(AVG(girth_cm)::numeric, 2), 0)';
+        break;
+      default:
+        return res.status(400).json({ error: `Invalid metric field: ${metric}` });
+    }
+    
+    // Build ORDER BY clause
+    const orderByField = sortBy === 'label' ? groupByAlias : metricAlias;
+    const orderDirection = sortOrder === 'asc' ? 'ASC' : 'DESC';
+    
+    // Build LIMIT clause
+    const limitClause = limit && limit > 0 ? `LIMIT ${parseInt(limit)}` : '';
+    
+    // Build and execute the query
+    const query = `
+      SELECT 
+        ${groupByExpr} AS ${groupByAlias},
+        ${metricExpr} AS ${metricAlias}
+      FROM public.trees
+      GROUP BY ${groupByExpr}
+      HAVING ${groupByExpr} IS NOT NULL
+      ORDER BY ${orderByField} ${orderDirection}
+      ${limitClause};
+    `;
+    
+    const result = await pool.query(query);
+    
+    // Also get total for context
+    const totalQuery = `SELECT COUNT(*) as total FROM public.trees;`;
+    const totalResult = await pool.query(totalQuery);
+    
+    res.json({
+      data: result.rows.map(row => ({
+        name: String(row.name),
+        value: parseFloat(row.value) || 0
+      })),
+      total: parseInt(totalResult.rows[0]?.total) || 0,
+      groupBy,
+      metric
+    });
+    
+  } catch (err) {
+    console.error('Error executing query for /api/chart-data', err.stack);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+});
+
+
 // --- Start Server ---
 // Only start server if not in Vercel serverless environment
 if (process.env.VERCEL !== '1') {
