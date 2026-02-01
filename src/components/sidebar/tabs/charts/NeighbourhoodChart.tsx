@@ -53,11 +53,11 @@ const NeighbourhoodChart: React.FC<NeighbourhoodChartProps> = ({
       {/* Percentage - primary KPI */}
       <text
         x="50%"
-        y="42%"
+        y="38%"
         textAnchor="middle"
         dominantBaseline="central"
         style={{
-          fontSize: '18px',
+          fontSize: '16px',
           fontWeight: 600,
           fill: '#111827',
           fontFamily: 'Inter, system-ui, sans-serif',
@@ -68,15 +68,14 @@ const NeighbourhoodChart: React.FC<NeighbourhoodChartProps> = ({
       {/* Descriptor label */}
       <text
         x="50%"
-        y="56%"
+        y="50%"
         textAnchor="middle"
         dominantBaseline="central"
         style={{
-          fontSize: '10px',
-          fontWeight: 400,
-          fill: '#6B7280',
+          fontSize: '9px',
+          fontWeight: 500,
+          fill: '#9CA3AF',
           fontFamily: 'Inter, system-ui, sans-serif',
-          textTransform: 'uppercase',
           letterSpacing: '0.5px',
         }}
       >
@@ -109,9 +108,11 @@ const NeighbourhoodChart: React.FC<NeighbourhoodChartProps> = ({
           ))}
         </Pie>
         <Tooltip 
-          formatter={(value) => {
+          formatter={(value, name) => {
             const numValue = typeof value === 'number' ? value : 0;
-            return [`${formatValue(numValue)}${unit}`, ''];
+            // Determine label based on unit - trees or CO2
+            const label = unit.includes('ton') ? 'CO₂' : 'Trees';
+            return [`${formatValue(numValue)}${unit}`, label];
           }}
           contentStyle={{
             backgroundColor: '#fff',

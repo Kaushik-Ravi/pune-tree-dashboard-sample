@@ -103,11 +103,16 @@ const ChartSection: React.FC<ChartSectionProps> = ({ className = '' }) => {
     if (!chartRef.current) return;
     
     try {
+      // Wait a brief moment to ensure SVG elements are fully rendered
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       const dataUrl = await toPng(chartRef.current, {
         backgroundColor: '#ffffff',
         pixelRatio: 3, // High quality for print/presentations
-        style: {
-          padding: '16px',
+        cacheBust: true, // Ensure fresh render
+        filter: (node) => {
+          // Include all nodes, don't filter anything out
+          return true;
         },
       });
       
@@ -225,8 +230,8 @@ const ChartSection: React.FC<ChartSectionProps> = ({ className = '' }) => {
         {/* Chart Display - Enterprise-grade container */}
         <div 
           ref={chartRef}
-          className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
-          style={{ minHeight: '360px' }}
+          className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-visible"
+          style={{ minHeight: '420px' }}
         >
           {/* Chart Header with title */}
           <div className="px-5 pt-4 pb-2 border-b border-gray-100">
@@ -239,7 +244,7 @@ const ChartSection: React.FC<ChartSectionProps> = ({ className = '' }) => {
           </div>
           
           {/* Chart Content */}
-          <div className="p-4">
+          <div className="p-4 pb-6">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
               <div className="text-center">

@@ -471,12 +471,12 @@ const DynamicChart: React.FC<DynamicChartProps> = ({ data, config }) => {
 
     case 'pie':
       return (
-        <ResponsiveContainer width="100%" height={300}>
+        <ResponsiveContainer width="100%" height={340}>
           <PieChart>
             <Pie
               data={coloredData}
               cx="50%"
-              cy="42%"
+              cy="38%"
               innerRadius={55}
               outerRadius={90}
               paddingAngle={2}
@@ -499,18 +499,21 @@ const DynamicChart: React.FC<DynamicChartProps> = ({ data, config }) => {
             />
             <Legend 
               verticalAlign="bottom"
-              height={50}
+              height={70}
               iconType="circle"
               iconSize={10}
-              wrapperStyle={{ paddingTop: '16px' }}
+              wrapperStyle={{ 
+                paddingTop: '8px',
+                paddingBottom: '8px',
+              }}
               formatter={(value: string) => (
                 <span style={{ 
-                  fontSize: '12px', 
+                  fontSize: '11px', 
                   color: '#374151',
                   fontWeight: 500,
-                  marginRight: '12px',
+                  marginRight: '8px',
                 }}>
-                  {truncateLabel(value, 18)}
+                  {truncateLabel(value, 16)}
                 </span>
               )}
             />
