@@ -98,18 +98,23 @@ const ChartSection: React.FC<ChartSectionProps> = ({ className = '' }) => {
     handleConfigChange({ [field]: value });
   };
 
-  // Export to PNG
+  // Export to PNG - enterprise-grade with proper styling
   const handleExportPNG = async () => {
     if (!chartRef.current) return;
     
     try {
       const dataUrl = await toPng(chartRef.current, {
         backgroundColor: '#ffffff',
-        pixelRatio: 2, // Higher quality
+        pixelRatio: 3, // High quality for print/presentations
+        style: {
+          padding: '16px',
+        },
       });
       
+      // Create timestamp for unique filename
+      const timestamp = new Date().toISOString().slice(0, 10);
       const link = document.createElement('a');
-      link.download = `${chartConfig.title.replace(/[^a-z0-9]/gi, '_')}.png`;
+      link.download = `${chartConfig.title.replace(/[^a-z0-9]/gi, '_')}_${timestamp}.png`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
@@ -118,21 +123,52 @@ const ChartSection: React.FC<ChartSectionProps> = ({ className = '' }) => {
     setIsExportMenuOpen(false);
   };
 
-  // Export to CSV
+  // Export to CSV - enterprise-grade with metadata
   const handleExportCSV = () => {
     if (chartData.length === 0) return;
     
-    // Build CSV content
-    const headers = ['Name', chartConfig.metric === 'count' ? 'Count' : 'Value'];
-    const rows = chartData.map(d => [d.name, d.value.toString()]);
-    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
+    // Get proper metric label
+    const metricLabel = chartConfig.metric === 'count' 
+      ? 'Number of Trees' 
+      : chartConfig.metric === 'sum_co2' 
+        ? 'CO2 Sequestered (tons)'
+        : chartConfig.metric === 'avg_height'
+          ? 'Average Height (m)'
+          : chartConfig.metric === 'avg_canopy'
+            ? 'Average Canopy (m)'
+            : chartConfig.metric === 'avg_girth'
+              ? 'Average Girth (cm)'
+              : 'Value';
     
-    // Download
+    // Build CSV with metadata header
+    const timestamp = new Date().toLocaleString();
+    const metadata = [
+      `# Pune Tree Dashboard - Chart Export`,
+      `# Title: ${chartConfig.title}`,
+      `# Generated: ${timestamp}`,
+      `# Total Records: ${chartData.length}`,
+      ``,
+    ];
+    
+    const headers = ['Category', metricLabel];
+    const rows = chartData.map(d => [
+      `"${d.name}"`, // Quote to handle commas in names
+      d.value.toString()
+    ]);
+    
+    const csvContent = [
+      ...metadata,
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    // Download with timestamp
+    const dateStr = new Date().toISOString().slice(0, 10);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${chartConfig.title.replace(/[^a-z0-9]/gi, '_')}.csv`;
+    link.download = `${chartConfig.title.replace(/[^a-z0-9]/gi, '_')}_${dateStr}.csv`;
     link.click();
     URL.revokeObjectURL(url);
     setIsExportMenuOpen(false);
@@ -186,17 +222,24 @@ const ChartSection: React.FC<ChartSectionProps> = ({ className = '' }) => {
           onPresetSelect={handlePresetSelect}
         />
 
-        {/* Chart Display */}
+        {/* Chart Display - Enterprise-grade container */}
         <div 
           ref={chartRef}
-          className="bg-gray-50 rounded-lg p-4"
-          style={{ minHeight: '320px' }}
+          className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
+          style={{ minHeight: '360px' }}
         >
-          {/* Chart Title */}
-          <h4 className="text-sm font-medium text-gray-700 mb-3 text-center">
-            {chartConfig.title}
-          </h4>
+          {/* Chart Header with title */}
+          <div className="px-5 pt-4 pb-2 border-b border-gray-100">
+            <h4 className="text-base font-semibold text-gray-800 text-center">
+              {chartConfig.title}
+            </h4>
+            <p className="text-xs text-gray-500 text-center mt-1">
+              Pune Urban Tree Census
+            </p>
+          </div>
           
+          {/* Chart Content */}
+          <div className="p-4">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
               <div className="text-center">
@@ -226,6 +269,7 @@ const ChartSection: React.FC<ChartSectionProps> = ({ className = '' }) => {
               config={chartConfig}
             />
           )}
+          </div>
         </div>
 
         {/* Advanced Builder Toggle */}
