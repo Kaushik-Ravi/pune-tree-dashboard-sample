@@ -9,9 +9,13 @@ import Map, {
   MapLayerMouseEvent,
   MapLayerTouchEvent,
 } from 'react-map-gl/maplibre';
-import type { LayerProps } from 'react-map-gl/maplibre';
+import type { LayerProps, ExpressionSpecification } from 'react-map-gl/maplibre';
+import maplibregl from 'maplibre-gl';
+import { Protocol } from 'pmtiles';
 import { ChevronLeft, ChevronRight, LayoutDashboard } from 'lucide-react';
 import { useTreeStore } from '../../store/TreeStore';
+import { useFilterStore } from '../../store/FilterStore';
+import { TreeFilters, hasActiveFilters } from '../../types/filters';
 import SimulatedTreesLayer from './SimulatedTreesLayer';
 import DrawControl, { DrawEvent, DrawActionEvent } from './DrawControl';
 import MapboxDraw from 'maplibre-gl-draw';
@@ -21,6 +25,78 @@ import { RealisticShadowsLayer } from './RealisticShadowsLayer';
 import { LightConfig } from '../sidebar/tabs/LightAndShadowControl';
 import { ShadowQuality } from '../sidebar/tabs/MapLayers';
 
+// Initialize PMTiles protocol (only once)
+let pmtilesProtocolAdded = false;
+
+// PMTiles URL - Cloudflare R2 for production, local file for development
+const PMTILES_URL = import.meta.env.VITE_PMTILES_URL || 
+  'https://pub-6a88122430ec4e08bc70cf4abd6d1f58.r2.dev/pune-trees-full.pmtiles';
+
+/**
+ * Build MapLibre filter expression from TreeFilters
+ * Returns null if no filters are active (show all trees)
+ */
+function buildFilterExpression(filters: TreeFilters): ExpressionSpecification | null {
+  const conditions: ExpressionSpecification[] = ['all'];
+  
+  // Ward filter - using 'in' operator for multiple wards
+  // Note: GeoJSON has ward as "1.0", "2.0" etc.
+  if (filters.wards && filters.wards.length > 0) {
+    // Convert ward numbers to the format in the tileset (e.g., "1" -> "1.0")
+    const wardValues = filters.wards.map(w => {
+      const num = parseFloat(w);
+      return isNaN(num) ? w : `${num}.0`;
+    });
+    conditions.push(['in', ['get', 'ward'], ['literal', wardValues]]);
+  }
+  
+  // Species filter (Common_Name in tileset)
+  if (filters.species && filters.species.length > 0) {
+    conditions.push(['in', ['get', 'Common_Name'], ['literal', filters.species]]);
+  }
+  
+  // Height range filter (Height_m in tileset)
+  if (filters.height.min !== null) {
+    conditions.push(['>=', ['get', 'Height_m'], filters.height.min]);
+  }
+  if (filters.height.max !== null) {
+    conditions.push(['<=', ['get', 'Height_m'], filters.height.max]);
+  }
+  
+  // Canopy diameter filter (Canopy_Diameter_m in tileset)
+  if (filters.canopyDiameter.min !== null) {
+    conditions.push(['>=', ['get', 'Canopy_Diameter_m'], filters.canopyDiameter.min]);
+  }
+  if (filters.canopyDiameter.max !== null) {
+    conditions.push(['<=', ['get', 'Canopy_Diameter_m'], filters.canopyDiameter.max]);
+  }
+  
+  // Girth filter (Girth_cm in tileset)
+  if (filters.girth.min !== null) {
+    conditions.push(['>=', ['get', 'Girth_cm'], filters.girth.min]);
+  }
+  if (filters.girth.max !== null) {
+    conditions.push(['<=', ['get', 'Girth_cm'], filters.girth.max]);
+  }
+  
+  // CO2 Sequestered filter (CO2_Sequestration_kg_yr in tileset)
+  if (filters.co2Sequestered.min !== null) {
+    conditions.push(['>=', ['get', 'CO2_Sequestration_kg_yr'], filters.co2Sequestered.min]);
+  }
+  if (filters.co2Sequestered.max !== null) {
+    conditions.push(['<=', ['get', 'CO2_Sequestration_kg_yr'], filters.co2Sequestered.max]);
+  }
+  
+  // Economic importance filter (economic_i in tileset)
+  if (filters.economicImportance) {
+    conditions.push(['==', ['get', 'economic_i'], filters.economicImportance]);
+  }
+  
+  // Return null if no filters (just the 'all' operator), otherwise return the expression
+  return conditions.length > 1 ? conditions : null;
+}
+
+// Main tree layer - shows matching trees with full opacity
 const treeLayerStyle: LayerProps = {
   id: 'trees-point',
   type: 'circle',
@@ -31,7 +107,21 @@ const treeLayerStyle: LayerProps = {
     'circle-color': '#2E7D32',
     'circle-stroke-width': 1,
     'circle-stroke-color': '#ffffff',
-    'circle-opacity': 0.8,
+    'circle-opacity': 0.9,
+  },
+};
+
+// Faded tree layer - shows non-matching trees with low opacity when filters are active
+const treeLayerFadedStyle: LayerProps = {
+  id: 'trees-point-faded',
+  type: 'circle',
+  source: 'trees',
+  'source-layer': 'trees',
+  paint: {
+    'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 1.5, 22, 6],
+    'circle-color': '#9E9E9E', // Gray color for filtered-out trees
+    'circle-stroke-width': 0,
+    'circle-opacity': 0.15, // Very faded
   },
 };
 
@@ -93,6 +183,7 @@ const MapView: React.FC<MapViewProps> = ({
 }) => {
   const mapRef = useRef<MapRef | null>(null);
   const { setSelectedArea } = useTreeStore();
+  const filters = useFilterStore((state) => state.filters);
   const drawControlRef = useRef<{ draw: MapboxDraw } | null>(null);
   const shadowLayerRef = useRef<RealisticShadowsLayer | null>(null);
   const [zoom, setZoom] = useState(11.5);
@@ -101,6 +192,68 @@ const MapView: React.FC<MapViewProps> = ({
   const [isLoading3DTrees, setIsLoading3DTrees] = useState(false);
   const [isLoadingShadows, setIsLoadingShadows] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
+
+  // Initialize PMTiles protocol once
+  useEffect(() => {
+    if (!pmtilesProtocolAdded) {
+      const protocol = new Protocol();
+      maplibregl.addProtocol('pmtiles', protocol.tile);
+      pmtilesProtocolAdded = true;
+      console.log('✅ PMTiles protocol registered');
+    }
+    return () => {
+      // Don't remove protocol on unmount - it should persist
+    };
+  }, []);
+
+  // Build filter expression from current filters
+  const filterExpression = useMemo(() => {
+    return buildFilterExpression(filters);
+  }, [filters]);
+
+  // Check if any filters are active
+  const filtersActive = useMemo(() => {
+    return hasActiveFilters(filters);
+  }, [filters]);
+
+  // Apply filters to map layers when they change
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !map.isStyleLoaded()) return;
+
+    const applyFilters = () => {
+      try {
+        // Main tree layer - show only matching trees
+        if (map.getLayer('trees-point')) {
+          map.setFilter('trees-point', filterExpression);
+        }
+        
+        // Faded layer - show all trees when filters are active (they'll be behind the main layer)
+        // When no filters, hide the faded layer completely
+        if (map.getLayer('trees-point-faded')) {
+          if (filtersActive && filterExpression) {
+            // Show non-matching trees by inverting the filter
+            const invertedFilter: ExpressionSpecification = ['!', filterExpression];
+            map.setFilter('trees-point-faded', invertedFilter);
+            map.setLayoutProperty('trees-point-faded', 'visibility', 'visible');
+          } else {
+            // No filters - hide the faded layer
+            map.setLayoutProperty('trees-point-faded', 'visibility', 'none');
+          }
+        }
+        
+        console.log(`🌳 Map filters applied: ${filtersActive ? 'Active' : 'None'}`);
+      } catch (e) {
+        console.warn('Could not apply filters:', e);
+      }
+    };
+
+    if (map.isStyleLoaded()) {
+      applyFilters();
+    } else {
+      map.once('styledata', applyFilters);
+    }
+  }, [filterExpression, filtersActive]);
 
   const mapTilerKey = import.meta.env.VITE_MAPTILER_KEY;
   const getMapStyle = (style: string) => {
@@ -401,8 +554,13 @@ const MapView: React.FC<MapViewProps> = ({
   ];
   const lstImageUrl = './lst_pune.png';
 
+  // PMTiles source URL (uses pmtiles:// protocol)
+  // Falls back to MapTiler for compatibility if PMTiles fails
+  const pmtilesSourceUrl = `pmtiles://${PMTILES_URL}`;
+  
+  // Keep MapTiler as fallback (currently disabled - using PMTiles)
   const PUNE_TREES_TILESET_ID = '0197f37a-c205-7e6f-8c64-151bca4d9195';
-  const vectorSourceUrl = `https://api.maptiler.com/tiles/${PUNE_TREES_TILESET_ID}/tiles.json?key=${mapTilerKey}`;
+  const _maptilerFallbackUrl = `https://api.maptiler.com/tiles/${PUNE_TREES_TILESET_ID}/tiles.json?key=${mapTilerKey}`;
 
   const handleMapClick = useCallback((event: MapLayerMouseEvent | MapLayerTouchEvent) => {
     event.preventDefault();
@@ -468,9 +626,14 @@ const MapView: React.FC<MapViewProps> = ({
         onDragEnd={handleDragEnd}
         onTouchEnd={handleTouchEnd}
       >
+        {/* PMTiles-based tree layer with filter support */}
         {!is3D && (
-          <Source id="trees" type="vector" url={vectorSourceUrl}>
+          <Source id="trees" type="vector" url={pmtilesSourceUrl}>
+            {/* Faded layer for non-matching trees (rendered first, behind main layer) */}
+            <Layer {...treeLayerFadedStyle} />
+            {/* Main tree layer showing matching trees */}
             <Layer {...treeLayerStyle} />
+            {/* Highlight layer for hover/selection */}
             <Layer {...treeLayerHighlightStyle} />
           </Source>
         )}
