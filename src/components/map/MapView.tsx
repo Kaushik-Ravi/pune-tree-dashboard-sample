@@ -30,7 +30,7 @@ let pmtilesProtocolAdded = false;
 
 // PMTiles URL - Cloudflare R2 for production, local file for development
 const PMTILES_URL = import.meta.env.VITE_PMTILES_URL || 
-  'https://pub-6a88122430ec4e08bc70cf4abd6d1f58.r2.dev/pune-trees-full.pmtiles';
+  'https://pub-6a88122430ec4e08bc70cf4abd6d1f58.r2.dev/pune-trees-complete.pmtiles';
 
 /**
  * Build MapLibre filter expression from TreeFilters
@@ -38,6 +38,15 @@ const PMTILES_URL = import.meta.env.VITE_PMTILES_URL ||
  */
 function buildFilterExpression(filters: TreeFilters): ExpressionSpecification | null {
   const conditions: ExpressionSpecification[] = ['all'];
+  
+  // Location type filter (street trees vs non-street trees)
+  // Uses is_street_tree boolean attribute in tileset
+  if (filters.locationType === 'street') {
+    conditions.push(['==', ['get', 'is_street_tree'], true]);
+  } else if (filters.locationType === 'non-street') {
+    conditions.push(['==', ['get', 'is_street_tree'], false]);
+  }
+  // 'all' means no location filter applied
   
   // Ward filter - using 'in' operator for multiple wards
   // Note: GeoJSON has ward as "1.0", "2.0" etc.
