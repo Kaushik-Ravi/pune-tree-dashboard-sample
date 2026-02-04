@@ -292,3 +292,25 @@ export function getScoreEmoji(score: number): string {
   if (score >= 30) return '⚠️';
   return '🚨';
 }
+
+// ============================================================================
+// INITIALIZATION HOOK
+// ============================================================================
+
+/**
+ * Hook to prefetch Green Cover data on app load
+ * Similar to how TreeStore fetches data on mount
+ */
+export function useGreenCoverInit() {
+  const { fetchAllData, isInitialized } = useGreenCoverStore();
+  
+  // Fetch data once on app initialization
+  React.useEffect(() => {
+    if (!isInitialized) {
+      fetchAllData();
+    }
+  }, [fetchAllData, isInitialized]);
+}
+
+// Need React for the hook
+import React from 'react';

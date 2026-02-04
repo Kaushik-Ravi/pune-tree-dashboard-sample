@@ -10,8 +10,12 @@ import { LightConfig } from './components/sidebar/tabs/LightAndShadowControl';
 import { ShadowQuality } from './components/sidebar/tabs/MapLayers';
 import TourGuide, { TourControlAction } from './components/tour/TourGuide';
 import { getStepRequirements, getTourSteps } from './components/tour/tourConfig';
+import { useGreenCoverInit } from './store/GreenCoverStore';
 
 function App() {
+  // Prefetch Green Cover data on app load (like TreeStore does)
+  useGreenCoverInit();
+  
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedTreeId, setSelectedTreeId] = useState<string | null>(null);
   const [activeTabIndex, setActiveTabIndex] = useState(0);
