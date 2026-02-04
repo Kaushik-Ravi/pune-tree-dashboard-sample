@@ -28,6 +28,7 @@ docs/lst_grid.geojson
 api/ca-certificate.crt
 # PMTiles files (served from Cloudflare R2)
 public/*.pmtiles
-*.pmtiles*.mbtiles
+*.pmtiles
+*.mbtiles
 *.geojson
 !docs/**/*.geojson
