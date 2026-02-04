@@ -729,6 +729,414 @@ app.post('/api/chart-data', async (req, res) => {
 });
 
 
+// =====================================================
+// LAND COVER ANALYSIS ENDPOINTS (Concrete vs Trees)
+// =====================================================
+
+/**
+ * GET /api/ward-boundaries
+ * Returns ward polygons as GeoJSON for map visualization
+ */
+app.get('/api/ward-boundaries', async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        ward_number,
+        ward_office,
+        prabhag_name,
+        zone,
+        tree_count,
+        ST_AsGeoJSON(geometry)::json as geometry
+      FROM ward_polygons
+      ORDER BY ward_number;
+    `;
+    
+    const result = await pool.query(query);
+    logConnection();
+    
+    // Format as GeoJSON FeatureCollection
+    const geojson = {
+      type: 'FeatureCollection',
+      features: result.rows.map(row => ({
+        type: 'Feature',
+        properties: {
+          ward_number: row.ward_number,
+          ward_office: row.ward_office,
+          prabhag_name: row.prabhag_name,
+          zone: row.zone,
+          tree_count: row.tree_count
+        },
+        geometry: row.geometry
+      }))
+    };
+    
+    res.json(geojson);
+  } catch (err) {
+    console.error('Error fetching ward boundaries:', err.message);
+    
+    // If table doesn't exist yet, return empty collection
+    if (err.message.includes('does not exist')) {
+      res.json({
+        type: 'FeatureCollection',
+        features: [],
+        error: 'Ward boundaries not yet imported. Run import-ward-polygons.sql first.'
+      });
+    } else {
+      res.status(500).json({ error: 'Failed to fetch ward boundaries', details: err.message });
+    }
+  }
+});
+
+/**
+ * GET /api/ward-stats
+ * Returns tree statistics aggregated by ward from census data
+ */
+app.get('/api/ward-stats', async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        ROUND(ward::numeric)::integer as ward_number,
+        COUNT(*) as tree_count,
+        COUNT(DISTINCT common_name) as species_count,
+        ROUND(AVG(canopy_dia_m)::numeric, 2) as avg_canopy_m,
+        ROUND(AVG(girth_cm)::numeric, 2) as avg_girth_cm,
+        ROUND(AVG(height_m)::numeric, 2) as avg_height_m,
+        ROUND(SUM(canopy_dia_m * canopy_dia_m * 0.785)::numeric, 2) as total_canopy_area_m2
+      FROM trees
+      WHERE ward IS NOT NULL
+      GROUP BY ROUND(ward::numeric)::integer
+      ORDER BY ROUND(ward::numeric)::integer;
+    `;
+    
+    const result = await pool.query(query);
+    logConnection();
+    
+    // Add derived metrics
+    const stats = result.rows.map(row => ({
+      ...row,
+      tree_count: parseInt(row.tree_count),
+      species_count: parseInt(row.species_count),
+      avg_canopy_m: parseFloat(row.avg_canopy_m) || 0,
+      avg_girth_cm: parseFloat(row.avg_girth_cm) || 0,
+      avg_height_m: parseFloat(row.avg_height_m) || 0,
+      total_canopy_area_m2: parseFloat(row.total_canopy_area_m2) || 0,
+      // Estimated canopy area in hectares
+      total_canopy_area_ha: parseFloat((row.total_canopy_area_m2 / 10000).toFixed(2)) || 0
+    }));
+    
+    res.json({
+      data: stats,
+      total_wards: stats.length,
+      summary: {
+        total_trees: stats.reduce((sum, w) => sum + w.tree_count, 0),
+        total_species: new Set(stats.flatMap(w => w.species_count)).size,
+        total_canopy_area_ha: stats.reduce((sum, w) => sum + w.total_canopy_area_ha, 0).toFixed(2)
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching ward stats:', err.message);
+    res.status(500).json({ error: 'Failed to fetch ward statistics', details: err.message });
+  }
+});
+
+/**
+ * GET /api/land-cover/wards
+ * Returns land cover statistics per ward from GEE export data
+ * Falls back to sample data if GEE data not yet imported
+ */
+app.get('/api/land-cover/wards', async (req, res) => {
+  try {
+    // Check if land_cover_stats table exists
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'land_cover_stats'
+      );
+    `);
+    
+    if (tableCheck.rows[0].exists) {
+      // Fetch from database
+      const result = await pool.query(`
+        SELECT 
+          ward_number,
+          year,
+          total_area_m2,
+          trees_area_m2,
+          built_area_m2,
+          grass_area_m2,
+          bare_area_m2,
+          trees_pct,
+          built_pct,
+          grass_pct,
+          bare_pct
+        FROM land_cover_stats
+        ORDER BY ward_number, year;
+      `);
+      
+      res.json({
+        source: 'database',
+        data: result.rows
+      });
+    } else {
+      // Return placeholder message
+      res.json({
+        source: 'pending',
+        message: 'Land cover data not yet imported. Run GEE export scripts first.',
+        instructions: [
+          '1. Open scripts/gee-land-cover-export.js in Google Earth Engine',
+          '2. Run the exports to Google Drive',
+          '3. Download the CSV files',
+          '4. Import using scripts/import-land-cover.cjs'
+        ],
+        sampleData: generateSampleLandCoverData()
+      });
+    }
+  } catch (err) {
+    console.error('Error fetching land cover data:', err.message);
+    res.status(500).json({ error: 'Failed to fetch land cover data', details: err.message });
+  }
+});
+
+/**
+ * GET /api/land-cover/comparison
+ * Returns comparison between years - supports year-over-year and overall change
+ * Query params: from_year, to_year (defaults to 2019-2025 overall)
+ */
+app.get('/api/land-cover/comparison', async (req, res) => {
+  try {
+    const fromYear = parseInt(req.query.from_year) || 2019;
+    const toYear = parseInt(req.query.to_year) || 2025;
+    
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'land_cover_change'
+      );
+    `);
+    
+    if (tableCheck.rows[0].exists) {
+      const result = await pool.query(`
+        SELECT 
+          ward_number,
+          from_year,
+          to_year,
+          period,
+          trees_lost_m2,
+          trees_gained_m2,
+          net_tree_change_m2,
+          built_gained_m2,
+          trees_to_built_m2
+        FROM land_cover_change
+        WHERE from_year = $1 AND to_year = $2
+        ORDER BY ward_number;
+      `, [fromYear, toYear]);
+      
+      // Calculate summary
+      const summary = result.rows.reduce((acc, row) => ({
+        total_trees_lost_m2: acc.total_trees_lost_m2 + (parseFloat(row.trees_lost_m2) || 0),
+        total_trees_gained_m2: acc.total_trees_gained_m2 + (parseFloat(row.trees_gained_m2) || 0),
+        total_built_gained_m2: acc.total_built_gained_m2 + (parseFloat(row.built_gained_m2) || 0),
+        total_trees_to_built_m2: acc.total_trees_to_built_m2 + (parseFloat(row.trees_to_built_m2) || 0)
+      }), {
+        total_trees_lost_m2: 0,
+        total_trees_gained_m2: 0,
+        total_built_gained_m2: 0,
+        total_trees_to_built_m2: 0
+      });
+      
+      summary.net_tree_change_m2 = summary.total_trees_gained_m2 - summary.total_trees_lost_m2;
+      summary.net_tree_change_ha = (summary.net_tree_change_m2 / 10000).toFixed(2);
+      summary.total_trees_lost_ha = (summary.total_trees_lost_m2 / 10000).toFixed(2);
+      summary.total_trees_gained_ha = (summary.total_trees_gained_m2 / 10000).toFixed(2);
+      summary.total_built_gained_ha = (summary.total_built_gained_m2 / 10000).toFixed(2);
+      summary.period = `${fromYear} to ${toYear}`;
+      
+      res.json({
+        source: 'database',
+        from_year: fromYear,
+        to_year: toYear,
+        data: result.rows,
+        summary: summary
+      });
+    } else {
+      res.json({
+        source: 'pending',
+        message: 'Land cover change data not yet imported.',
+        instructions: [
+          '1. Run scripts/gee-ward-analysis.js in Google Earth Engine',
+          '2. Export the change detection CSV',
+          '3. Import using scripts/import-land-cover.cjs'
+        ]
+      });
+    }
+  } catch (err) {
+    console.error('Error fetching land cover comparison:', err.message);
+    res.status(500).json({ error: 'Failed to fetch comparison data', details: err.message });
+  }
+});
+
+/**
+ * GET /api/land-cover/timeline
+ * Returns historical timeline of land cover changes (2019-2025)
+ */
+app.get('/api/land-cover/timeline', async (req, res) => {
+  try {
+    // Get city-wide averages per year
+    const yearlyStats = await pool.query(`
+      SELECT 
+        year,
+        COUNT(*) as ward_count,
+        ROUND(AVG(trees_pct)::numeric, 2) as avg_trees_pct,
+        ROUND(AVG(built_pct)::numeric, 2) as avg_built_pct,
+        ROUND(AVG(grass_pct)::numeric, 2) as avg_grass_pct,
+        ROUND(AVG(bare_pct)::numeric, 2) as avg_bare_pct,
+        ROUND(SUM(trees_area_m2)::numeric, 0) as total_trees_area_m2,
+        ROUND(SUM(built_area_m2)::numeric, 0) as total_built_area_m2
+      FROM land_cover_stats
+      GROUP BY year
+      ORDER BY year;
+    `);
+    
+    // Get year-over-year changes
+    const yoyChanges = await pool.query(`
+      SELECT 
+        from_year,
+        to_year,
+        period,
+        ROUND(SUM(trees_lost_m2)::numeric, 0) as total_trees_lost_m2,
+        ROUND(SUM(trees_gained_m2)::numeric, 0) as total_trees_gained_m2,
+        ROUND(SUM(net_tree_change_m2)::numeric, 0) as net_tree_change_m2,
+        ROUND(SUM(built_gained_m2)::numeric, 0) as total_built_gained_m2,
+        ROUND(SUM(trees_to_built_m2)::numeric, 0) as trees_to_built_m2
+      FROM land_cover_change
+      WHERE from_year != 2019 OR to_year != 2025  -- Exclude overall
+      GROUP BY from_year, to_year, period
+      ORDER BY from_year;
+    `);
+    
+    // Get overall 2019-2025 change
+    const overallChange = await pool.query(`
+      SELECT 
+        ROUND(SUM(trees_lost_m2)::numeric, 0) as total_trees_lost_m2,
+        ROUND(SUM(trees_gained_m2)::numeric, 0) as total_trees_gained_m2,
+        ROUND(SUM(net_tree_change_m2)::numeric, 0) as net_tree_change_m2,
+        ROUND(SUM(built_gained_m2)::numeric, 0) as total_built_gained_m2,
+        ROUND(SUM(trees_to_built_m2)::numeric, 0) as trees_to_built_m2
+      FROM land_cover_change
+      WHERE from_year = 2019 AND to_year = 2025;
+    `);
+    
+    res.json({
+      source: 'database',
+      years: yearlyStats.rows.map(r => ({
+        ...r,
+        total_trees_area_ha: (r.total_trees_area_m2 / 10000).toFixed(2),
+        total_built_area_ha: (r.total_built_area_m2 / 10000).toFixed(2)
+      })),
+      year_over_year_changes: yoyChanges.rows.map(r => ({
+        ...r,
+        net_tree_change_ha: (r.net_tree_change_m2 / 10000).toFixed(2)
+      })),
+      overall_2019_2025: overallChange.rows[0] ? {
+        ...overallChange.rows[0],
+        total_trees_lost_ha: (overallChange.rows[0].total_trees_lost_m2 / 10000).toFixed(2),
+        total_trees_gained_ha: (overallChange.rows[0].total_trees_gained_m2 / 10000).toFixed(2),
+        net_tree_change_ha: (overallChange.rows[0].net_tree_change_m2 / 10000).toFixed(2),
+        total_built_gained_ha: (overallChange.rows[0].total_built_gained_m2 / 10000).toFixed(2)
+      } : null
+    });
+  } catch (err) {
+    console.error('Error fetching land cover timeline:', err.message);
+    res.status(500).json({ error: 'Failed to fetch timeline data', details: err.message });
+  }
+});
+
+/**
+ * GET /api/census-validation
+ * Returns tree census validation data comparing census trees to satellite detection
+ */
+app.get('/api/census-validation', async (req, res) => {
+  try {
+    // This query finds trees in areas currently classified as non-tree by satellite
+    // Requires land_cover raster or point samples to be imported
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'land_cover_points'
+      );
+    `);
+    
+    if (tableCheck.rows[0].exists) {
+      // Join trees with land cover classification
+      const result = await pool.query(`
+        SELECT 
+          t.ward::integer as ward_number,
+          COUNT(*) as total_trees,
+          SUM(CASE WHEN lc.land_class = 'trees' THEN 1 ELSE 0 END) as confirmed_trees,
+          SUM(CASE WHEN lc.land_class = 'built' THEN 1 ELSE 0 END) as now_built,
+          SUM(CASE WHEN lc.land_class = 'bare' THEN 1 ELSE 0 END) as now_bare,
+          SUM(CASE WHEN lc.land_class IS NULL THEN 1 ELSE 0 END) as unclassified
+        FROM trees t
+        LEFT JOIN land_cover_points lc 
+          ON ST_DWithin(t.geom, lc.geom, 0.0001)
+        WHERE t.ward IS NOT NULL
+        GROUP BY t.ward::integer
+        ORDER BY t.ward::integer;
+      `);
+      
+      res.json({
+        source: 'database',
+        data: result.rows,
+        validation_date: new Date().toISOString()
+      });
+    } else {
+      res.json({
+        source: 'pending',
+        message: 'Census validation requires land cover point data. This will be available after GEE analysis.',
+        methodology: {
+          step1: 'Export Dynamic World classification for tree locations',
+          step2: 'Create point samples at each census tree location',
+          step3: 'Compare census tree presence with satellite classification',
+          step4: 'Flag discrepancies for field verification'
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error fetching census validation:', err.message);
+    res.status(500).json({ error: 'Failed to fetch validation data', details: err.message });
+  }
+});
+
+/**
+ * Helper: Generate sample land cover data for UI development
+ * This will be replaced with real GEE data
+ */
+function generateSampleLandCoverData() {
+  const sampleWards = [];
+  for (let i = 1; i <= 77; i++) {
+    // Generate realistic-ish percentages for Pune
+    const builtPct = 40 + Math.random() * 35; // 40-75% built
+    const treesPct = 8 + Math.random() * 20;  // 8-28% trees
+    const grassPct = 5 + Math.random() * 15;  // 5-20% grass
+    const barePct = 100 - builtPct - treesPct - grassPct; // remainder
+    
+    sampleWards.push({
+      ward_number: i,
+      year: 2025,
+      trees_pct: parseFloat(treesPct.toFixed(1)),
+      built_pct: parseFloat(builtPct.toFixed(1)),
+      grass_pct: parseFloat(grassPct.toFixed(1)),
+      bare_pct: parseFloat(Math.max(0, barePct).toFixed(1)),
+      is_sample: true
+    });
+  }
+  return sampleWards;
+}
+
+
 // --- Start Server ---
 // Only start server if not in Vercel serverless environment
 if (process.env.VERCEL !== '1') {

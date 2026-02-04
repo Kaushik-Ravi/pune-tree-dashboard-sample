@@ -25,6 +25,11 @@ function App() {
   const [shadowQuality, setShadowQuality] = useState<ShadowQuality>('high');
   const [showTreeShadows, setShowTreeShadows] = useState(false);
   const [showBuildingShadows, setShowBuildingShadows] = useState(false);
+  
+  // Green Cover Monitor state - shared between sidebar and map
+  const [showWardBoundaries, setShowWardBoundaries] = useState(false);
+  const [greenCoverYear, setGreenCoverYear] = useState(2025);
+  const [wardColorBy, setWardColorBy] = useState<'green_score' | 'trees_pct' | 'change'>('green_score');
 
   // Get data from TreeStore for loading overlay
   const { cityStats, wardCO2Data } = useTreeStore();
@@ -256,6 +261,9 @@ function App() {
           shadowQuality={shadowQuality}
           showTreeShadows={showTreeShadows}
           showBuildingShadows={showBuildingShadows}
+          showWardBoundaries={showWardBoundaries}
+          greenCoverYear={greenCoverYear}
+          wardColorBy={wardColorBy}
         />
 
         {sidebarOpen && (
@@ -292,6 +300,12 @@ function App() {
           showBuildingShadows={showBuildingShadows}
           onBuildingShadowsToggle={setShowBuildingShadows}
           tourFocusMode={sidebarNeedsTourFocus}
+          showWardBoundaries={showWardBoundaries}
+          onWardBoundariesToggle={setShowWardBoundaries}
+          greenCoverYear={greenCoverYear}
+          onGreenCoverYearChange={setGreenCoverYear}
+          wardColorBy={wardColorBy}
+          onWardColorByChange={setWardColorBy}
         />
       </div>
       {showTemperatureChart && activeSpeciesCooling && (

@@ -17,6 +17,7 @@ import { useTreeStore } from '../../store/TreeStore';
 import { useFilterStore } from '../../store/FilterStore';
 import { TreeFilters, hasActiveFilters } from '../../types/filters';
 import SimulatedTreesLayer from './SimulatedTreesLayer';
+import WardBoundaryLayer from './WardBoundaryLayer';
 import DrawControl, { DrawEvent, DrawActionEvent } from './DrawControl';
 import MapboxDraw from 'maplibre-gl-draw';
 import ViewModeToggle from './ViewModeToggle';
@@ -172,6 +173,10 @@ interface MapViewProps {
   shadowQuality?: ShadowQuality;
   showTreeShadows?: boolean;
   showBuildingShadows?: boolean;
+  // Green Cover Monitor props
+  showWardBoundaries?: boolean;
+  greenCoverYear?: number;
+  wardColorBy?: 'green_score' | 'trees_pct' | 'change';
 }
 
 const MapView: React.FC<MapViewProps> = ({
@@ -189,6 +194,9 @@ const MapView: React.FC<MapViewProps> = ({
   shadowQuality = 'high',
   showTreeShadows: _showTreeShadows = true,
   showBuildingShadows: _showBuildingShadows = true,
+  showWardBoundaries = false,
+  greenCoverYear = 2025,
+  wardColorBy = 'green_score',
 }) => {
   const mapRef = useRef<MapRef | null>(null);
   const { setSelectedArea } = useTreeStore();
@@ -676,6 +684,16 @@ const MapView: React.FC<MapViewProps> = ({
           onDelete={onDrawDelete}
         />
         <SimulatedTreesLayer />
+        
+        {/* Ward Boundary Layer for Green Cover Monitor */}
+        <WardBoundaryLayer
+          mapRef={mapRef}
+          visible={showWardBoundaries}
+          selectedYear={greenCoverYear}
+          colorBy={wardColorBy}
+          opacity={0.5}
+        />
+        
         <ScaleControl unit="metric" position="bottom-left" />
         <NavigationControl position="top-left" showCompass={true} />
       </Map>

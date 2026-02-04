@@ -5,6 +5,7 @@ import {
   Trees as TreeIcon,
   Scaling as SeedlingIcon,
   Layers as LayersIcon,
+  Map as MapAnalysisIcon,
   ChevronLeft,
   ChevronRight,
   X,
@@ -16,6 +17,7 @@ import CityOverview from './tabs/CityOverview';
 import TreeDetails from './tabs/TreeDetails';
 import PlantingAdvisor from './tabs/PlantingAdvisor';
 import MapLayers, { ShadowQuality } from './tabs/MapLayers';
+import GreenCoverMonitor from './tabs/GreenCoverMonitor';
 import { TreeFilterBar } from '../filters';
 import { ArchetypeData } from '../../store/TreeStore';
 import { LightConfig } from './tabs/LightAndShadowControl';
@@ -46,6 +48,13 @@ interface SidebarProps {
   onBuildingShadowsToggle?: (enabled: boolean) => void;
   /** When true, raises z-index above Joyride overlay so spotlight reveals this element */
   tourFocusMode?: boolean;
+  // Green Cover Monitor props
+  showWardBoundaries?: boolean;
+  onWardBoundariesToggle?: (enabled: boolean) => void;
+  greenCoverYear?: number;
+  onGreenCoverYearChange?: (year: number) => void;
+  wardColorBy?: 'green_score' | 'trees_pct' | 'change';
+  onWardColorByChange?: (colorBy: 'green_score' | 'trees_pct' | 'change') => void;
 }
 
 const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
@@ -73,10 +82,17 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
   showBuildingShadows,
   onBuildingShadowsToggle,
   tourFocusMode,
+  showWardBoundaries,
+  onWardBoundariesToggle,
+  greenCoverYear,
+  onGreenCoverYearChange,
+  wardColorBy,
+  onWardColorByChange,
 }, ref) => {
   const tabs = [
     { id: 'city-overview', label: 'City Overview', icon: <BarChartBig size={18} /> },
     { id: 'tree-details', label: 'Tree Details', icon: <TreeIcon size={18} /> },
+    { id: 'green-cover', label: 'Green Cover', icon: <MapAnalysisIcon size={18} />, tourId: 'tab-green-cover' },
     { id: 'planting-advisor', label: 'Planting Advisor', icon: <SeedlingIcon size={18} />, tourId: 'tab-planting-advisor' },
     { id: 'map-layers', label: 'Map Layers', icon: <LayersIcon size={18} />, tourId: 'tab-map-layers' }
   ];
@@ -94,12 +110,22 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
     switch (activeTabIndex) {
       case 0: return <CityOverview />;
       case 1: return <TreeDetails treeId={selectedTreeId} />;
-      case 2:
+      case 2: return (
+        <GreenCoverMonitor
+          showWardBoundaries={showWardBoundaries}
+          onWardBoundariesToggle={onWardBoundariesToggle}
+          selectedYear={greenCoverYear}
+          onYearChange={onGreenCoverYearChange}
+          colorBy={wardColorBy}
+          onColorByChange={onWardColorByChange}
+        />
+      );
+      case 3:
         return <PlantingAdvisor
           setShowTemperatureChart={setShowTemperatureChart}
           onSpeciesChangeForChart={onActiveSpeciesChangeForChart}
         />;
-      case 3: return (
+      case 4: return (
         <MapLayers
           baseMap={baseMap}
           changeBaseMap={changeBaseMap}
