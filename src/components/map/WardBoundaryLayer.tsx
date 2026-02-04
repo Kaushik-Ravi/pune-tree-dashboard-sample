@@ -14,8 +14,8 @@ import type { MapRef } from 'react-map-gl/maplibre';
 import * as turf from '@turf/turf';
 import { useGreenCoverStore } from '../../store/GreenCoverStore';
 
-// API base URL
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// API base URL - empty string in production uses relative URLs
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
 // Types
 interface WardBoundaryFeature {

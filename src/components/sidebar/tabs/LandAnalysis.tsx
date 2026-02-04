@@ -76,7 +76,8 @@ interface WardStatsResponse {
 }
 
 // API base URL
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+// API base URL - empty string in production uses relative URLs
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
 // Color palette for land cover classes
 const LAND_COVER_COLORS = {
