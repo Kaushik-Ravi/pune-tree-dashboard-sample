@@ -27,7 +27,6 @@ import {
   ChevronUp,
   RefreshCw,
   Calendar,
-  Award,
   ChevronLeft,
   ChevronRight,
   Settings2,
@@ -35,7 +34,11 @@ import {
   Map,
   Eye,
   EyeOff,
-  ArrowUpDown
+  ArrowUp,
+  ArrowDown,
+  BarChart3,
+  Flame,
+  Target
 } from 'lucide-react';
 import { useGreenCoverStore } from '../../../store/GreenCoverStore';
 
@@ -222,85 +225,6 @@ const TimelineSlider: React.FC<{
   );
 };
 
-// Alert Card Component - Enhanced with more details
-const AlertCard: React.FC<{
-  wardNumber: number;
-  wardName?: string;
-  changeHa: number;
-  changePct: number;
-  builtChangeHa?: number;
-  treesPct?: number;
-  builtPct?: number;
-  type: 'loss' | 'gain';
-  onClick?: () => void;
-}> = ({ wardNumber, wardName, changeHa, changePct, builtChangeHa, treesPct, builtPct, type, onClick }) => {
-  const isLoss = type === 'loss';
-  const greenBuiltRatio = builtPct && builtPct > 0 ? (treesPct || 0) / builtPct : 0;
-  
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full p-3 rounded-lg border text-left transition-all hover:shadow-md ${
-        isLoss 
-          ? 'bg-red-50 border-red-200 hover:border-red-300' 
-          : 'bg-green-50 border-green-200 hover:border-green-300'
-      }`}
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-            isLoss ? 'bg-red-200 text-red-700' : 'bg-green-200 text-green-700'
-          }`}>
-            {wardNumber}
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-800">
-              Ward {wardNumber}
-            </p>
-            {wardName && (
-              <p className="text-xs text-gray-500 truncate max-w-[120px]">{wardName}</p>
-            )}
-          </div>
-        </div>
-        <div className="text-right">
-          <div className={`flex items-center gap-1 ${isLoss ? 'text-red-600' : 'text-green-600'}`}>
-            {isLoss ? <TrendingDown size={14} /> : <TrendingUp size={14} />}
-            <span className="font-bold">{Math.abs(changePct).toFixed(1)}%</span>
-          </div>
-          <p className="text-xs text-gray-500">
-            Green: {isLoss ? '-' : '+'}{Math.abs(changeHa).toFixed(1)} ha
-          </p>
-        </div>
-      </div>
-      
-      {/* Additional details row */}
-      <div className="mt-2 pt-2 border-t border-gray-200 grid grid-cols-3 gap-2 text-xs">
-        <div className="text-center">
-          <p className="text-gray-500">Tree Cover</p>
-          <p className="font-medium text-green-600">{(treesPct ?? 0).toFixed(1)}%</p>
-        </div>
-        <div className="text-center">
-          <p className="text-gray-500">Built-up</p>
-          <p className="font-medium text-gray-600">{(builtPct ?? 0).toFixed(1)}%</p>
-        </div>
-        <div className="text-center">
-          <p className="text-gray-500">Green:Built</p>
-          <p className={`font-medium ${greenBuiltRatio >= 0.2 ? 'text-green-600' : 'text-red-600'}`}>
-            1:{greenBuiltRatio > 0 ? (1/greenBuiltRatio).toFixed(1) : '∞'}
-          </p>
-        </div>
-      </div>
-      
-      {builtChangeHa !== undefined && builtChangeHa !== 0 && (
-        <div className="mt-1 text-xs text-gray-500 flex items-center gap-1">
-          <Building2 size={10} />
-          Built-up: {builtChangeHa > 0 ? '+' : ''}{builtChangeHa.toFixed(1)} ha
-        </div>
-      )}
-    </button>
-  );
-};
-
 // Key Insight Component
 const KeyInsight: React.FC<{
   icon: React.ReactNode;
@@ -358,6 +282,318 @@ const TrendSparkline: React.FC<{
         fill={color}
       />
     </svg>
+  );
+};
+
+// ============================================================================
+// WARD LEADERBOARD - Stock Market Style Unified Table
+// ============================================================================
+
+type SortColumn = 'rank' | 'ward' | 'score' | 'trees' | 'built' | 'ratio' | 'change';
+type SortDirection = 'asc' | 'desc';
+type FilterType = 'all' | 'critical' | 'at-risk' | 'moderate' | 'good' | 'gaining' | 'losing';
+
+interface WardLeaderboardProps {
+  wardScores: Array<{
+    ward_number: number;
+    treesPct: number;
+    builtPct: number;
+    score: number;
+    netChangeHa: number;
+    builtChangeHa: number;
+    changePct: number;
+    censusTreeCount: number;
+    censusSpecies: number;
+  }>;
+  onWardClick: (wardNumber: number) => void;
+  selectedYear: number;
+}
+
+const WardLeaderboard: React.FC<WardLeaderboardProps> = ({
+  wardScores,
+  onWardClick,
+  selectedYear
+}) => {
+  const [sortColumn, setSortColumn] = useState<SortColumn>('score');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [filterType, setFilterType] = useState<FilterType>('all');
+  const [showAllRows, setShowAllRows] = useState(false);
+  const [hoveredWard, setHoveredWard] = useState<number | null>(null);
+  
+  // Handle column header click for sorting
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      // Default direction based on column type
+      setSortDirection(column === 'change' || column === 'score' || column === 'trees' || column === 'ratio' ? 'desc' : 'asc');
+    }
+  };
+  
+  // Filter wards based on selected filter
+  const filteredWards = useMemo(() => {
+    switch (filterType) {
+      case 'critical': return wardScores.filter(w => w.score < 30);
+      case 'at-risk': return wardScores.filter(w => w.score >= 30 && w.score < 50);
+      case 'moderate': return wardScores.filter(w => w.score >= 50 && w.score < 70);
+      case 'good': return wardScores.filter(w => w.score >= 70);
+      case 'gaining': return wardScores.filter(w => w.changePct > 2);
+      case 'losing': return wardScores.filter(w => w.changePct < -2);
+      default: return wardScores;
+    }
+  }, [wardScores, filterType]);
+  
+  // Sort wards
+  const sortedWards = useMemo(() => {
+    const sorted = [...filteredWards].sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortColumn) {
+        case 'ward':
+          comparison = a.ward_number - b.ward_number;
+          break;
+        case 'score':
+          comparison = a.score - b.score;
+          break;
+        case 'trees':
+          comparison = a.treesPct - b.treesPct;
+          break;
+        case 'built':
+          comparison = a.builtPct - b.builtPct;
+          break;
+        case 'ratio':
+          const ratioA = a.builtPct > 0 ? a.treesPct / a.builtPct : 0;
+          const ratioB = b.builtPct > 0 ? b.treesPct / b.builtPct : 0;
+          comparison = ratioA - ratioB;
+          break;
+        case 'change':
+          comparison = a.changePct - b.changePct;
+          break;
+        default:
+          comparison = a.score - b.score;
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+    
+    return sorted;
+  }, [filteredWards, sortColumn, sortDirection]);
+  
+  // Display count
+  const displayedWards = showAllRows ? sortedWards : sortedWards.slice(0, 10);
+  
+  // Quick stats
+  const quickStats = useMemo(() => {
+    const critical = wardScores.filter(w => w.score < 30).length;
+    const gaining = wardScores.filter(w => w.changePct > 2).length;
+    const losing = wardScores.filter(w => w.changePct < -2).length;
+    return { critical, gaining, losing };
+  }, [wardScores]);
+  
+  // Column header component
+  const ColumnHeader: React.FC<{
+    column: SortColumn;
+    label: string;
+    icon?: React.ReactNode;
+    className?: string;
+  }> = ({ column, label, icon, className = '' }) => (
+    <button
+      onClick={() => handleSort(column)}
+      className={`flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors ${className}`}
+    >
+      {icon}
+      <span>{label}</span>
+      {sortColumn === column && (
+        sortDirection === 'desc' ? <ArrowDown size={12} /> : <ArrowUp size={12} />
+      )}
+    </button>
+  );
+  
+  // Get row background based on performance
+  const getRowBg = (ward: typeof wardScores[0], isHovered: boolean) => {
+    if (isHovered) return 'bg-blue-50';
+    if (ward.changePct < -5) return 'bg-red-50/50';
+    if (ward.changePct > 5) return 'bg-green-50/50';
+    return 'bg-white';
+  };
+  
+  return (
+    <div className="border rounded-lg overflow-hidden bg-white">
+      {/* Header */}
+      <div className="p-3 bg-gradient-to-r from-gray-50 to-slate-50 border-b">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <BarChart3 size={18} className="text-blue-600" />
+            <span className="font-semibold text-gray-800">Ward Leaderboard</span>
+          </div>
+          <span className="text-xs text-gray-500 bg-white px-2 py-0.5 rounded border">
+            {selectedYear}
+          </span>
+        </div>
+        
+        {/* Quick Stats Pills */}
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => setFilterType(filterType === 'all' ? 'all' : 'all')}
+            className={`px-2 py-1 text-xs rounded-full transition-colors ${
+              filterType === 'all' 
+                ? 'bg-blue-100 text-blue-700 border border-blue-300' 
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            All {wardScores.length}
+          </button>
+          <button
+            onClick={() => setFilterType(filterType === 'critical' ? 'all' : 'critical')}
+            className={`px-2 py-1 text-xs rounded-full transition-colors flex items-center gap-1 ${
+              filterType === 'critical' 
+                ? 'bg-red-100 text-red-700 border border-red-300' 
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <Flame size={10} /> Critical {quickStats.critical}
+          </button>
+          <button
+            onClick={() => setFilterType(filterType === 'losing' ? 'all' : 'losing')}
+            className={`px-2 py-1 text-xs rounded-full transition-colors flex items-center gap-1 ${
+              filterType === 'losing' 
+                ? 'bg-orange-100 text-orange-700 border border-orange-300' 
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <TrendingDown size={10} /> Losing {quickStats.losing}
+          </button>
+          <button
+            onClick={() => setFilterType(filterType === 'gaining' ? 'all' : 'gaining')}
+            className={`px-2 py-1 text-xs rounded-full transition-colors flex items-center gap-1 ${
+              filterType === 'gaining' 
+                ? 'bg-green-100 text-green-700 border border-green-300' 
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <TrendingUp size={10} /> Gaining {quickStats.gaining}
+          </button>
+        </div>
+      </div>
+      
+      {/* Table Header */}
+      <div className="grid grid-cols-12 gap-1 px-3 py-2 bg-gray-50 border-b text-xs sticky top-0">
+        <ColumnHeader column="rank" label="#" className="col-span-1 justify-center" />
+        <ColumnHeader column="ward" label="Ward" className="col-span-2" />
+        <ColumnHeader column="score" label="Score" icon={<Target size={10} />} className="col-span-2 justify-center" />
+        <ColumnHeader column="trees" label="Trees" icon={<TreePine size={10} />} className="col-span-2 justify-center" />
+        <ColumnHeader column="built" label="Built" icon={<Building2 size={10} />} className="col-span-2 justify-center" />
+        <ColumnHeader column="change" label="Δ2019" icon={<TrendingUp size={10} />} className="col-span-3 justify-center" />
+      </div>
+      
+      {/* Table Body */}
+      <div className="max-h-80 overflow-y-auto">
+        {displayedWards.length === 0 ? (
+          <div className="p-4 text-center text-gray-500 text-sm">
+            No wards match the current filter
+          </div>
+        ) : (
+          displayedWards.map((ward) => {
+            const rank = sortedWards.indexOf(ward) + 1;
+            const isHovered = hoveredWard === ward.ward_number;
+            
+            return (
+              <button
+                key={ward.ward_number}
+                onClick={() => onWardClick(ward.ward_number)}
+                onMouseEnter={() => setHoveredWard(ward.ward_number)}
+                onMouseLeave={() => setHoveredWard(null)}
+                className={`w-full grid grid-cols-12 gap-1 px-3 py-2 border-b border-gray-100 transition-all hover:shadow-sm cursor-pointer text-left ${getRowBg(ward, isHovered)}`}
+              >
+                {/* Rank */}
+                <div className="col-span-1 flex items-center justify-center">
+                  <span className={`w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center ${
+                    rank <= 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {rank}
+                  </span>
+                </div>
+                
+                {/* Ward Number */}
+                <div className="col-span-2 flex items-center">
+                  <span className="font-medium text-sm text-gray-800">W{ward.ward_number}</span>
+                </div>
+                
+                {/* Green Score with ring */}
+                <div className="col-span-2 flex items-center justify-center">
+                  <div className="relative w-8 h-8">
+                    <svg className="w-8 h-8 transform -rotate-90" viewBox="0 0 32 32">
+                      <circle cx="16" cy="16" r="12" fill="none" stroke="#e5e7eb" strokeWidth="3" />
+                      <circle
+                        cx="16" cy="16" r="12" fill="none"
+                        stroke={getScoreColor(ward.score)}
+                        strokeWidth="3"
+                        strokeDasharray={`${(ward.score / 100) * 75.4} 75.4`}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold" style={{ color: getScoreColor(ward.score) }}>
+                      {ward.score}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Trees % */}
+                <div className="col-span-2 flex flex-col items-center justify-center">
+                  <span className="text-sm font-medium text-green-700">{ward.treesPct.toFixed(1)}%</span>
+                  <div className="w-full h-1 bg-gray-200 rounded-full mt-0.5">
+                    <div
+                      className="h-full bg-green-500 rounded-full"
+                      style={{ width: `${Math.min(100, ward.treesPct * 4)}%` }}
+                    />
+                  </div>
+                </div>
+                
+                {/* Built % */}
+                <div className="col-span-2 flex flex-col items-center justify-center">
+                  <span className="text-sm font-medium text-gray-600">{ward.builtPct.toFixed(1)}%</span>
+                  <div className="w-full h-1 bg-gray-200 rounded-full mt-0.5">
+                    <div
+                      className="h-full bg-gray-500 rounded-full"
+                      style={{ width: `${Math.min(100, ward.builtPct)}%` }}
+                    />
+                  </div>
+                </div>
+                
+                {/* Change */}
+                <div className="col-span-3 flex items-center justify-center gap-1">
+                  <span className={`flex items-center gap-0.5 text-sm font-medium ${
+                    ward.changePct > 0 ? 'text-green-600' : ward.changePct < 0 ? 'text-red-600' : 'text-gray-500'
+                  }`}>
+                    {ward.changePct > 0 ? <TrendingUp size={12} /> : ward.changePct < 0 ? <TrendingDown size={12} /> : null}
+                    {ward.changePct > 0 ? '+' : ''}{ward.changePct.toFixed(1)}%
+                  </span>
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
+      
+      {/* Footer */}
+      {sortedWards.length > 10 && (
+        <div className="p-2 border-t bg-gray-50">
+          <button
+            onClick={() => setShowAllRows(!showAllRows)}
+            className="w-full text-center text-sm text-blue-600 hover:text-blue-700 py-1 hover:bg-blue-50 rounded transition-colors"
+          >
+            {showAllRows ? 'Show Top 10' : `Show All ${sortedWards.length} Wards`}
+          </button>
+        </div>
+      )}
+      
+      {/* Info footer */}
+      <div className="px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-t text-xs text-gray-500 flex items-center gap-2">
+        <Info size={12} />
+        <span>Click any row to fly to ward on map. Sort by clicking column headers.</span>
+      </div>
+    </div>
   );
 };
 
@@ -425,14 +661,6 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [expandedSection, setExpandedSection] = useState<string | null>('overview');
-  const [showAllAlerts, setShowAllAlerts] = useState(false);
-  
-  // Sorting options for alerts and rankings
-  const [alertSortBy, setAlertSortBy] = useState<'change' | 'ratio'>('change');
-  const [alertSortOrder, setAlertSortOrder] = useState<'worst' | 'best'>('worst');
-  const [rankingSortBy, setRankingSortBy] = useState<'score' | 'change' | 'ratio'>('score');
-  const [rankingSortOrder, setRankingSortOrder] = useState<'best' | 'worst'>('best');
-  const [showAllRankings, setShowAllRankings] = useState(false);
   
   // Years for timeline
   const years = [2019, 2020, 2021, 2022, 2023, 2024, 2025];
@@ -527,81 +755,6 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
       };
     }).sort((a, b) => b.score - a.score);
   }, [wardData, selectedYear, comparisonData, wardStats]);
-  
-  // Calculate green:built ratio for sorting
-  const getGreenBuiltRatio = (ward: typeof wardScores[0]) => {
-    if (!ward.builtPct || ward.builtPct === 0) return 0;
-    return ward.treesPct / ward.builtPct;
-  };
-  
-  // Sorted alerts based on user selection
-  const sortedAlerts = useMemo(() => {
-    // Get all wards with change (not just losses)
-    const allChangedWards = wardScores.filter(w => Math.abs(w.changePct) > 0.5);
-    
-    // Sort based on selected criteria
-    let sorted = [...allChangedWards];
-    
-    if (alertSortBy === 'ratio') {
-      // Sort by green:built ratio
-      sorted = sorted.sort((a, b) => {
-        const ratioA = getGreenBuiltRatio(a);
-        const ratioB = getGreenBuiltRatio(b);
-        return alertSortOrder === 'worst' ? ratioA - ratioB : ratioB - ratioA;
-      });
-    } else {
-      // Sort by change percentage
-      sorted = sorted.sort((a, b) => {
-        return alertSortOrder === 'worst' 
-          ? a.changePct - b.changePct  // Most negative first
-          : b.changePct - a.changePct; // Most positive first
-      });
-    }
-    
-    return sorted;
-  }, [wardScores, alertSortBy, alertSortOrder]);
-  
-  // Split into loss and gain for display
-  const allLossWards = useMemo(() => {
-    return sortedAlerts.filter(w => w.changePct < -2);
-  }, [sortedAlerts]);
-  
-  const allGainWards = useMemo(() => {
-    return sortedAlerts.filter(w => w.changePct > 2);
-  }, [sortedAlerts]);
-  
-  // Alerts displayed (limited or all)
-  const lossAlerts = showAllAlerts ? allLossWards : allLossWards.slice(0, 5);
-  const gainAlerts = showAllAlerts ? allGainWards : allGainWards.slice(0, 5);
-  
-  // Sorted rankings based on user selection
-  const sortedRankings = useMemo(() => {
-    let sorted = [...wardScores];
-    
-    if (rankingSortBy === 'ratio') {
-      sorted = sorted.sort((a, b) => {
-        const ratioA = getGreenBuiltRatio(a);
-        const ratioB = getGreenBuiltRatio(b);
-        return rankingSortOrder === 'best' ? ratioB - ratioA : ratioA - ratioB;
-      });
-    } else if (rankingSortBy === 'change') {
-      sorted = sorted.sort((a, b) => {
-        return rankingSortOrder === 'best' 
-          ? b.changePct - a.changePct  // Most positive first
-          : a.changePct - b.changePct; // Most negative first
-      });
-    } else {
-      // Sort by score (default)
-      sorted = sorted.sort((a, b) => {
-        return rankingSortOrder === 'best' ? b.score - a.score : a.score - b.score;
-      });
-    }
-    
-    return sorted;
-  }, [wardScores, rankingSortBy, rankingSortOrder]);
-  
-  // Rankings displayed (limited or all) - default to 5, expandable
-  const displayedRankings = showAllRankings ? sortedRankings : sortedRankings.slice(0, 5);
   
   // Tree cover trend values for sparkline
   const treesTrend = useMemo(() => {
@@ -817,285 +970,12 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
         )}
       </div>
       
-      {/* Change Alerts Section */}
-      <div className="border rounded-lg overflow-hidden">
-        <button
-          className="w-full p-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-          onClick={() => toggleSection('alerts')}
-        >
-          <span className="font-medium text-gray-700 flex items-center gap-2">
-            <AlertTriangle size={16} className="text-amber-500" />
-            Change Alerts (2019→2025)
-          </span>
-          {expandedSection === 'alerts' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-        
-        {expandedSection === 'alerts' && (
-          <div className="p-3 space-y-3">
-            {/* Sorting Controls */}
-            <div className="flex flex-wrap gap-2 p-2 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-1 text-xs text-gray-600">
-                <ArrowUpDown size={12} />
-                <span>Sort by:</span>
-              </div>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => setAlertSortBy('change')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    alertSortBy === 'change'
-                      ? 'bg-green-600 text-white'
-                      : 'bg-white text-gray-600 hover:bg-gray-100 border'
-                  }`}
-                >
-                  Change %
-                </button>
-                <button
-                  onClick={() => setAlertSortBy('ratio')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    alertSortBy === 'ratio'
-                      ? 'bg-green-600 text-white'
-                      : 'bg-white text-gray-600 hover:bg-gray-100 border'
-                  }`}
-                >
-                  Green:Built Ratio
-                </button>
-              </div>
-              <div className="flex gap-1 ml-auto">
-                <button
-                  onClick={() => setAlertSortOrder('worst')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    alertSortOrder === 'worst'
-                      ? 'bg-red-600 text-white'
-                      : 'bg-white text-gray-600 hover:bg-gray-100 border'
-                  }`}
-                >
-                  Worst First
-                </button>
-                <button
-                  onClick={() => setAlertSortOrder('best')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    alertSortOrder === 'best'
-                      ? 'bg-green-600 text-white'
-                      : 'bg-white text-gray-600 hover:bg-gray-100 border'
-                  }`}
-                >
-                  Best First
-                </button>
-              </div>
-            </div>
-            
-            {lossAlerts.length > 0 && (
-              <div>
-                <p className="text-xs text-red-600 font-medium mb-2 flex items-center gap-1">
-                  <TrendingDown size={12} />
-                  Wards with Significant Green Cover Loss
-                </p>
-                <div className="space-y-2">
-                  {lossAlerts.map(ward => (
-                    <AlertCard
-                      key={ward.ward_number}
-                      wardNumber={ward.ward_number}
-                      changeHa={ward.netChangeHa}
-                      changePct={ward.changePct}
-                      builtChangeHa={ward.builtChangeHa}
-                      treesPct={ward.treesPct}
-                      builtPct={ward.builtPct}
-                      type="loss"
-                      onClick={() => handleWardClick(ward.ward_number)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {gainAlerts.length > 0 && (
-              <div>
-                <p className="text-xs text-green-600 font-medium mb-2 flex items-center gap-1">
-                  <TrendingUp size={12} />
-                  Wards with Green Cover Gains
-                </p>
-                <div className="space-y-2">
-                  {gainAlerts.map(ward => (
-                    <AlertCard
-                      key={ward.ward_number}
-                      wardNumber={ward.ward_number}
-                      changeHa={ward.netChangeHa}
-                      changePct={ward.changePct}
-                      builtChangeHa={ward.builtChangeHa}
-                      treesPct={ward.treesPct}
-                      builtPct={ward.builtPct}
-                      type="gain"
-                      onClick={() => handleWardClick(ward.ward_number)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {lossAlerts.length === 0 && gainAlerts.length === 0 && (
-              <p className="text-sm text-gray-500 text-center py-4">
-                No significant changes detected
-              </p>
-            )}
-            
-            {/* Show All / Show Less Button */}
-            {(allLossWards.length > 5 || allGainWards.length > 5) && (
-              <button
-                onClick={() => setShowAllAlerts(!showAllAlerts)}
-                className="w-full text-center text-sm text-blue-600 hover:text-blue-700 py-2 hover:bg-blue-50 rounded transition-colors"
-              >
-                {showAllAlerts 
-                  ? 'Show Less' 
-                  : `Show All (${allLossWards.length} loss, ${allGainWards.length} gain)`
-                }
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-      
-      {/* Ward Rankings Section */}
-      <div className="border rounded-lg overflow-hidden">
-        <button
-          className="w-full p-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-          onClick={() => toggleSection('rankings')}
-        >
-          <span className="font-medium text-gray-700 flex items-center gap-2">
-            <Award size={16} className="text-yellow-500" />
-            Ward Rankings ({selectedYear})
-          </span>
-          {expandedSection === 'rankings' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-        
-        {expandedSection === 'rankings' && (
-          <div className="p-3">
-            {/* Sorting Controls */}
-            <div className="flex flex-wrap gap-2 p-2 mb-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-1 text-xs text-gray-600">
-                <ArrowUpDown size={12} />
-                <span>Sort by:</span>
-              </div>
-              <div className="flex gap-1 flex-wrap">
-                <button
-                  onClick={() => setRankingSortBy('score')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    rankingSortBy === 'score'
-                      ? 'bg-green-600 text-white'
-                      : 'bg-white text-gray-600 hover:bg-gray-100 border'
-                  }`}
-                >
-                  Green Score
-                </button>
-                <button
-                  onClick={() => setRankingSortBy('ratio')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    rankingSortBy === 'ratio'
-                      ? 'bg-green-600 text-white'
-                      : 'bg-white text-gray-600 hover:bg-gray-100 border'
-                  }`}
-                >
-                  Green:Built Ratio
-                </button>
-                <button
-                  onClick={() => setRankingSortBy('change')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    rankingSortBy === 'change'
-                      ? 'bg-green-600 text-white'
-                      : 'bg-white text-gray-600 hover:bg-gray-100 border'
-                  }`}
-                >
-                  Change %
-                </button>
-              </div>
-              <div className="flex gap-1 ml-auto">
-                <button
-                  onClick={() => setRankingSortOrder('best')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    rankingSortOrder === 'best'
-                      ? 'bg-green-600 text-white'
-                      : 'bg-white text-gray-600 hover:bg-gray-100 border'
-                  }`}
-                >
-                  Best First
-                </button>
-                <button
-                  onClick={() => setRankingSortOrder('worst')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    rankingSortOrder === 'worst'
-                      ? 'bg-red-600 text-white'
-                      : 'bg-white text-gray-600 hover:bg-gray-100 border'
-                  }`}
-                >
-                  Worst First
-                </button>
-              </div>
-            </div>
-            
-            <div className="text-xs text-gray-500 mb-2 flex items-center justify-between">
-              <span>Sorted by {rankingSortBy === 'score' ? 'Green Score' : rankingSortBy === 'ratio' ? 'Green:Built Ratio' : 'Change %'}</span>
-              <span>Showing {displayedRankings.length} of {sortedRankings.length} wards</span>
-            </div>
-            <div className="max-h-64 overflow-y-auto space-y-1">
-              {displayedRankings.map((ward, index) => {
-                const greenBuiltRatio = ward.builtPct > 0 ? ward.treesPct / ward.builtPct : 0;
-                return (
-                <button
-                  key={ward.ward_number}
-                  onClick={() => handleWardClick(ward.ward_number)}
-                  className="w-full flex items-center gap-2 p-2 hover:bg-green-50 rounded-lg transition-colors cursor-pointer text-left group"
-                >
-                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    index < 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'
-                  }`}>
-                    {index + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm group-hover:text-green-700">Ward {ward.ward_number}</span>
-                      <span className="text-xs text-gray-400">
-                        {(ward.treesPct ?? 0).toFixed(1)}% trees
-                      </span>
-                      {rankingSortBy === 'ratio' && (
-                        <span className={`text-xs ${greenBuiltRatio >= 0.2 ? 'text-green-600' : 'text-red-600'}`}>
-                          1:{greenBuiltRatio > 0 ? (1/greenBuiltRatio).toFixed(1) : '∞'}
-                        </span>
-                      )}
-                      {rankingSortBy === 'change' && (
-                        <span className={`text-xs ${ward.changePct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {ward.changePct >= 0 ? '+' : ''}{ward.changePct.toFixed(1)}%
-                        </span>
-                      )}
-                    </div>
-                    <div className="h-1.5 bg-gray-200 rounded-full mt-1 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-300"
-                        style={{
-                          width: `${ward.score}%`,
-                          backgroundColor: getScoreColor(ward.score)
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <ScoreRing score={ward.score} size="sm" showLabel={false} />
-                </button>
-              )})}
-            </div>
-            
-            {/* Show More / Show Less Button */}
-            {sortedRankings.length > 5 && (
-              <button
-                onClick={() => setShowAllRankings(!showAllRankings)}
-                className="w-full text-center text-sm text-blue-600 hover:text-blue-700 py-2 mt-2 hover:bg-blue-50 rounded transition-colors"
-              >
-                {showAllRankings 
-                  ? 'Show Less' 
-                  : `Show All ${sortedRankings.length} Wards`
-                }
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      {/* Ward Leaderboard - Unified View (replaces Change Alerts + Ward Rankings) */}
+      <WardLeaderboard
+        wardScores={wardScores}
+        onWardClick={handleWardClick}
+        selectedYear={selectedYear}
+      />
       
       {/* Advanced Mode */}
       {showAdvanced && (
