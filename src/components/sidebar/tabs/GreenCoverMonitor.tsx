@@ -601,6 +601,15 @@ const WardLeaderboard: React.FC<WardLeaderboardProps> = ({
 // MAIN COMPONENT
 // ============================================================================
 
+// Hotspot configuration type
+export interface HotspotConfig {
+  lossThreshold: number;
+  colorScheme: 'red' | 'orange' | 'heatmap';
+  opacity: number;
+  showLabels: boolean;
+  pulseAnimation: boolean;
+}
+
 interface GreenCoverMonitorProps {
   // Map integration props - controlled from parent
   showWardBoundaries?: boolean;
@@ -609,6 +618,11 @@ interface GreenCoverMonitorProps {
   onYearChange?: (year: number) => void;
   colorBy?: 'green_score' | 'trees_pct' | 'change';
   onColorByChange?: (colorBy: 'green_score' | 'trees_pct' | 'change') => void;
+  // Deforestation hotspots layer
+  showDeforestationHotspots?: boolean;
+  onDeforestationHotspotsToggle?: (enabled: boolean) => void;
+  hotspotConfig?: HotspotConfig;
+  onHotspotConfigChange?: (config: HotspotConfig) => void;
 }
 
 const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
@@ -618,6 +632,10 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
   onYearChange,
   colorBy = 'green_score',
   onColorByChange,
+  showDeforestationHotspots = false,
+  onDeforestationHotspotsToggle,
+  hotspotConfig = { lossThreshold: 5, colorScheme: 'red', opacity: 0.6, showLabels: true, pulseAnimation: true },
+  onHotspotConfigChange,
 }) => {
   // Use Zustand store for data (cached in localStorage)
   const {
@@ -1154,6 +1172,150 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
             <p className="text-xs text-blue-600 flex items-center gap-1">
               <Info size={12} />
               Hover over wards on the map to see details
+            </p>
+          </div>
+        )}
+      </div>
+      
+      {/* Deforestation Hotspots Layer Control */}
+      <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-lg p-4 border border-red-200 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Flame size={18} className="text-red-500" />
+            <div>
+              <span className="font-medium text-gray-800">Deforestation Hotspots</span>
+              <p className="text-xs text-gray-500">Areas with significant tree loss (2019-2025)</p>
+            </div>
+          </div>
+          <button
+            onClick={() => onDeforestationHotspotsToggle?.(!showDeforestationHotspots)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              showDeforestationHotspots
+                ? 'bg-red-600 text-white hover:bg-red-700'
+                : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            {showDeforestationHotspots ? <EyeOff size={14} /> : <Eye size={14} />}
+            {showDeforestationHotspots ? 'Hide Hotspots' : 'Show Hotspots'}
+          </button>
+        </div>
+        
+        {showDeforestationHotspots && (
+          <div className="space-y-3">
+            {/* Color Scheme */}
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Color scheme:</p>
+              <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                <button
+                  className={`flex-1 px-2 py-1.5 text-xs transition-colors ${
+                    hotspotConfig.colorScheme === 'red'
+                      ? 'bg-red-100 text-red-700 font-medium'
+                      : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                  onClick={() => onHotspotConfigChange?.({ ...hotspotConfig, colorScheme: 'red' })}
+                >
+                  🔴 Red
+                </button>
+                <button
+                  className={`flex-1 px-2 py-1.5 text-xs transition-colors ${
+                    hotspotConfig.colorScheme === 'orange'
+                      ? 'bg-orange-100 text-orange-700 font-medium'
+                      : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                  onClick={() => onHotspotConfigChange?.({ ...hotspotConfig, colorScheme: 'orange' })}
+                >
+                  🟠 Orange
+                </button>
+                <button
+                  className={`flex-1 px-2 py-1.5 text-xs transition-colors ${
+                    hotspotConfig.colorScheme === 'heatmap'
+                      ? 'bg-amber-100 text-amber-700 font-medium'
+                      : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                  onClick={() => onHotspotConfigChange?.({ ...hotspotConfig, colorScheme: 'heatmap' })}
+                >
+                  🌡️ Heat
+                </button>
+              </div>
+            </div>
+            
+            {/* Opacity Slider */}
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-gray-500">Opacity:</span>
+                <span className="text-gray-700 font-medium">{Math.round(hotspotConfig.opacity * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="20"
+                max="100"
+                value={hotspotConfig.opacity * 100}
+                onChange={(e) => onHotspotConfigChange?.({ 
+                  ...hotspotConfig, 
+                  opacity: parseInt(e.target.value) / 100 
+                })}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-500"
+              />
+            </div>
+            
+            {/* Threshold Slider */}
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-gray-500">Loss threshold:</span>
+                <span className="text-gray-700 font-medium">≥{hotspotConfig.lossThreshold}% loss</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="15"
+                value={hotspotConfig.lossThreshold}
+                onChange={(e) => onHotspotConfigChange?.({ 
+                  ...hotspotConfig, 
+                  lossThreshold: parseInt(e.target.value) 
+                })}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-500"
+              />
+            </div>
+            
+            {/* Options */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-600">Show ward labels</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  className="sr-only peer" 
+                  checked={hotspotConfig.showLabels}
+                  onChange={(e) => onHotspotConfigChange?.({ 
+                    ...hotspotConfig, 
+                    showLabels: e.target.checked 
+                  })}
+                />
+                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500"></div>
+              </label>
+            </div>
+            
+            {/* Legend */}
+            <div className="bg-white rounded-lg p-2 border border-gray-200">
+              <p className="text-xs text-gray-500 mb-2 font-medium">Severity Legend</p>
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded" style={{ backgroundColor: hotspotConfig.colorScheme === 'heatmap' ? '#fbbf24' : hotspotConfig.colorScheme === 'orange' ? '#fdba74' : '#fca5a5' }}></div>
+                  <span>Minor</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded" style={{ backgroundColor: hotspotConfig.colorScheme === 'heatmap' ? '#f59e0b' : hotspotConfig.colorScheme === 'orange' ? '#fb923c' : '#ef4444' }}></div>
+                  <span>Moderate</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded" style={{ backgroundColor: hotspotConfig.colorScheme === 'heatmap' ? '#dc2626' : hotspotConfig.colorScheme === 'orange' ? '#ea580c' : '#991b1b' }}></div>
+                  <span>Severe</span>
+                </div>
+              </div>
+            </div>
+            
+            <p className="text-xs text-red-600 flex items-center gap-1">
+              <AlertTriangle size={12} />
+              Hover over hotspots to see deforestation details
             </p>
           </div>
         )}

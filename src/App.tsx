@@ -34,6 +34,22 @@ function App() {
   const [showWardBoundaries, setShowWardBoundaries] = useState(false);
   const [greenCoverYear, setGreenCoverYear] = useState(2025);
   const [wardColorBy, setWardColorBy] = useState<'green_score' | 'trees_pct' | 'change'>('green_score');
+  
+  // Deforestation Hotspots Layer state
+  const [showDeforestationHotspots, setShowDeforestationHotspots] = useState(false);
+  const [hotspotConfig, setHotspotConfig] = useState<{
+    lossThreshold: number;
+    colorScheme: 'red' | 'orange' | 'heatmap';
+    opacity: number;
+    showLabels: boolean;
+    pulseAnimation: boolean;
+  }>({
+    lossThreshold: 3,
+    colorScheme: 'red',
+    opacity: 0.6,
+    showLabels: true,
+    pulseAnimation: false,
+  });
 
   // Get data from TreeStore for loading overlay
   const { cityStats, wardCO2Data } = useTreeStore();
@@ -268,6 +284,8 @@ function App() {
           showWardBoundaries={showWardBoundaries}
           greenCoverYear={greenCoverYear}
           wardColorBy={wardColorBy}
+          showDeforestationHotspots={showDeforestationHotspots}
+          hotspotConfig={hotspotConfig}
         />
 
         {sidebarOpen && (
@@ -310,6 +328,10 @@ function App() {
           onGreenCoverYearChange={setGreenCoverYear}
           wardColorBy={wardColorBy}
           onWardColorByChange={setWardColorBy}
+          showDeforestationHotspots={showDeforestationHotspots}
+          onDeforestationHotspotsToggle={setShowDeforestationHotspots}
+          hotspotConfig={hotspotConfig}
+          onHotspotConfigChange={setHotspotConfig}
         />
       </div>
       {showTemperatureChart && activeSpeciesCooling && (

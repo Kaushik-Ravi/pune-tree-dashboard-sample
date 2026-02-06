@@ -18,6 +18,7 @@ import { useFilterStore } from '../../store/FilterStore';
 import { TreeFilters, hasActiveFilters } from '../../types/filters';
 import SimulatedTreesLayer from './SimulatedTreesLayer';
 import WardBoundaryLayer from './WardBoundaryLayer';
+import DeforestationHotspotsLayer, { HotspotConfig } from './DeforestationHotspotsLayer';
 import DrawControl, { DrawEvent, DrawActionEvent } from './DrawControl';
 import MapboxDraw from 'maplibre-gl-draw';
 import ViewModeToggle from './ViewModeToggle';
@@ -177,6 +178,9 @@ interface MapViewProps {
   showWardBoundaries?: boolean;
   greenCoverYear?: number;
   wardColorBy?: 'green_score' | 'trees_pct' | 'change';
+  // Deforestation Hotspots props
+  showDeforestationHotspots?: boolean;
+  hotspotConfig?: HotspotConfig;
 }
 
 const MapView: React.FC<MapViewProps> = ({
@@ -197,6 +201,8 @@ const MapView: React.FC<MapViewProps> = ({
   showWardBoundaries = false,
   greenCoverYear = 2025,
   wardColorBy = 'green_score',
+  showDeforestationHotspots = false,
+  hotspotConfig,
 }) => {
   const mapRef = useRef<MapRef | null>(null);
   const { setSelectedArea } = useTreeStore();
@@ -692,6 +698,13 @@ const MapView: React.FC<MapViewProps> = ({
           selectedYear={greenCoverYear}
           colorBy={wardColorBy}
           opacity={0.5}
+        />
+        
+        {/* Deforestation Hotspots Layer */}
+        <DeforestationHotspotsLayer
+          mapRef={mapRef}
+          visible={showDeforestationHotspots}
+          config={hotspotConfig}
         />
         
         <ScaleControl unit="metric" position="bottom-left" />

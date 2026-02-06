@@ -55,6 +55,23 @@ interface SidebarProps {
   onGreenCoverYearChange?: (year: number) => void;
   wardColorBy?: 'green_score' | 'trees_pct' | 'change';
   onWardColorByChange?: (colorBy: 'green_score' | 'trees_pct' | 'change') => void;
+  // Deforestation Hotspots props
+  showDeforestationHotspots?: boolean;
+  onDeforestationHotspotsToggle?: (enabled: boolean) => void;
+  hotspotConfig?: {
+    lossThreshold: number;
+    colorScheme: 'red' | 'orange' | 'heatmap';
+    opacity: number;
+    showLabels: boolean;
+    pulseAnimation: boolean;
+  };
+  onHotspotConfigChange?: (config: {
+    lossThreshold: number;
+    colorScheme: 'red' | 'orange' | 'heatmap';
+    opacity: number;
+    showLabels: boolean;
+    pulseAnimation: boolean;
+  }) => void;
 }
 
 const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
@@ -88,6 +105,10 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
   onGreenCoverYearChange,
   wardColorBy,
   onWardColorByChange,
+  showDeforestationHotspots,
+  onDeforestationHotspotsToggle,
+  hotspotConfig,
+  onHotspotConfigChange,
 }, ref) => {
   const tabs = [
     { id: 'city-overview', label: 'City Overview', icon: <BarChartBig size={18} /> },
@@ -118,6 +139,10 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
           onYearChange={onGreenCoverYearChange}
           colorBy={wardColorBy}
           onColorByChange={onWardColorByChange}
+          showDeforestationHotspots={showDeforestationHotspots}
+          onDeforestationHotspotsToggle={onDeforestationHotspotsToggle}
+          hotspotConfig={hotspotConfig}
+          onHotspotConfigChange={onHotspotConfigChange}
         />
       );
       case 3:
