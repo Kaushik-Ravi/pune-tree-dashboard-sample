@@ -23,8 +23,6 @@ app.use(express.json());
 
 // --- Database Connection ---
 // Configured for serverless (Vercel) + PgBouncer connection pooling
-const isProduction = process.env.VERCEL === '1';
-
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
@@ -36,15 +34,12 @@ const pool = new Pool({
     ca: process.env.DB_CA_CERT.replace(/\\n/g, '\n'),
   } : { rejectUnauthorized: false }, // Default SSL for DigitalOcean
   
-  // Connection pool configuration
-  max: isProduction ? 3 : 10,     // More connections for local dev
+  // Serverless-friendly pool configuration (matches stable production)
+  max: 3,                          // Low max - PgBouncer handles pooling
   min: 0,                          // Don't keep idle connections in serverless
-  idleTimeoutMillis: 30000,        // Close idle connections after 30s
-  connectionTimeoutMillis: 30000,  // Wait up to 30s for connection
+  idleTimeoutMillis: 10000,        // Close idle connections after 10s
+  connectionTimeoutMillis: 10000,  // Fail fast if can't connect in 10s
   allowExitOnIdle: true,           // Allow serverless function to exit
-  
-  // Statement timeout to prevent long-running queries
-  statement_timeout: 60000,        // 60 second query timeout
 });
 
 // Handle pool errors gracefully (prevents crashes on idle connection issues)
@@ -61,45 +56,17 @@ const logConnection = () => {
   }
 };
 
-// --- Query Helper with Retry Logic ---
-async function queryWithRetry(queryText, params = [], retries = 3, delay = 1000) {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const result = await pool.query(queryText, params);
-      logConnection();
-      return result;
-    } catch (err) {
-      const isConnectionError = err.message.includes('timeout') || 
-                                 err.message.includes('connection') ||
-                                 err.code === 'ECONNREFUSED';
-      
-      if (isConnectionError && attempt < retries) {
-        console.warn(`[Query] Attempt ${attempt}/${retries} failed: ${err.message}. Retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay * attempt)); // Exponential backoff
-        continue;
-      }
-      throw err;
-    }
-  }
-}
-
 // --- Health Check Endpoint ---
 app.get('/api/health', async (req, res) => {
-  const startTime = Date.now();
   try {
-    const result = await queryWithRetry('SELECT NOW() as time, current_database() as db');
-    const queryTime = Date.now() - startTime;
-    
+    const result = await pool.query('SELECT NOW() as time, current_database() as db');
+    logConnection();
     res.json({ 
       status: 'ok', 
       database: result.rows[0].db,
       time: result.rows[0].time,
-      queryTimeMs: queryTime,
       poolConfig: {
-        max: isProduction ? 3 : 10,
-        totalCount: pool.totalCount,
-        idleCount: pool.idleCount,
-        waitingCount: pool.waitingCount,
+        max: 3,
         usingPgBouncer: true
       },
       env: {
@@ -107,27 +74,19 @@ app.get('/api/health', async (req, res) => {
         hasDbUser: !!process.env.DB_USER,
         hasDbPassword: !!process.env.DB_PASSWORD,
         hasDbDatabase: !!process.env.DB_DATABASE,
-        isVercel: isProduction
+        isVercel: process.env.VERCEL === '1'
       }
     });
   } catch (err) {
-    const queryTime = Date.now() - startTime;
     res.status(500).json({ 
       status: 'error', 
       message: err.message,
-      queryTimeMs: queryTime,
-      poolConfig: {
-        max: isProduction ? 3 : 10,
-        totalCount: pool.totalCount,
-        idleCount: pool.idleCount,
-        waitingCount: pool.waitingCount
-      },
       env: {
         hasDbHost: !!process.env.DB_HOST,
         hasDbUser: !!process.env.DB_USER,
         hasDbPassword: !!process.env.DB_PASSWORD,
         hasDbDatabase: !!process.env.DB_DATABASE,
-        isVercel: isProduction
+        isVercel: process.env.VERCEL === '1'
       }
     });
   }
