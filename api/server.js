@@ -23,6 +23,8 @@ app.use(express.json());
 
 // --- Database Connection ---
 // Configured for serverless (Vercel) + PgBouncer connection pooling
+const isProduction = process.env.VERCEL === '1';
+
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
@@ -34,12 +36,15 @@ const pool = new Pool({
     ca: process.env.DB_CA_CERT.replace(/\\n/g, '\n'),
   } : { rejectUnauthorized: false }, // Default SSL for DigitalOcean
   
-  // Serverless-friendly pool configuration
-  max: 3,                        // Low max - PgBouncer handles pooling
-  min: 0,                        // Don't keep idle connections in serverless
-  idleTimeoutMillis: 10000,      // Close idle connections after 10s
-  connectionTimeoutMillis: 10000, // Fail fast if can't connect in 10s
-  allowExitOnIdle: true,         // Allow serverless function to exit
+  // Connection pool configuration
+  max: isProduction ? 3 : 10,     // More connections for local dev
+  min: 0,                          // Don't keep idle connections in serverless
+  idleTimeoutMillis: 30000,        // Close idle connections after 30s
+  connectionTimeoutMillis: 30000,  // Wait up to 30s for connection
+  allowExitOnIdle: true,           // Allow serverless function to exit
+  
+  // Statement timeout to prevent long-running queries
+  statement_timeout: 60000,        // 60 second query timeout
 });
 
 // Handle pool errors gracefully (prevents crashes on idle connection issues)
@@ -56,17 +61,45 @@ const logConnection = () => {
   }
 };
 
+// --- Query Helper with Retry Logic ---
+async function queryWithRetry(queryText, params = [], retries = 3, delay = 1000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const result = await pool.query(queryText, params);
+      logConnection();
+      return result;
+    } catch (err) {
+      const isConnectionError = err.message.includes('timeout') || 
+                                 err.message.includes('connection') ||
+                                 err.code === 'ECONNREFUSED';
+      
+      if (isConnectionError && attempt < retries) {
+        console.warn(`[Query] Attempt ${attempt}/${retries} failed: ${err.message}. Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay * attempt)); // Exponential backoff
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 // --- Health Check Endpoint ---
 app.get('/api/health', async (req, res) => {
+  const startTime = Date.now();
   try {
-    const result = await pool.query('SELECT NOW() as time, current_database() as db');
-    logConnection();
+    const result = await queryWithRetry('SELECT NOW() as time, current_database() as db');
+    const queryTime = Date.now() - startTime;
+    
     res.json({ 
       status: 'ok', 
       database: result.rows[0].db,
       time: result.rows[0].time,
+      queryTimeMs: queryTime,
       poolConfig: {
-        max: 3,
+        max: isProduction ? 3 : 10,
+        totalCount: pool.totalCount,
+        idleCount: pool.idleCount,
+        waitingCount: pool.waitingCount,
         usingPgBouncer: true
       },
       env: {
@@ -74,19 +107,27 @@ app.get('/api/health', async (req, res) => {
         hasDbUser: !!process.env.DB_USER,
         hasDbPassword: !!process.env.DB_PASSWORD,
         hasDbDatabase: !!process.env.DB_DATABASE,
-        isVercel: process.env.VERCEL === '1'
+        isVercel: isProduction
       }
     });
   } catch (err) {
+    const queryTime = Date.now() - startTime;
     res.status(500).json({ 
       status: 'error', 
       message: err.message,
+      queryTimeMs: queryTime,
+      poolConfig: {
+        max: isProduction ? 3 : 10,
+        totalCount: pool.totalCount,
+        idleCount: pool.idleCount,
+        waitingCount: pool.waitingCount
+      },
       env: {
         hasDbHost: !!process.env.DB_HOST,
         hasDbUser: !!process.env.DB_USER,
         hasDbPassword: !!process.env.DB_PASSWORD,
         hasDbDatabase: !!process.env.DB_DATABASE,
-        isVercel: process.env.VERCEL === '1'
+        isVercel: isProduction
       }
     });
   }
@@ -108,7 +149,7 @@ app.get('/api/trees/:id', async (req, res) => {
       FROM public.trees
       WHERE id = $1
     `;
-    const result = await pool.query(query, [id]);
+    const result = await queryWithRetry(query, [id]);
 
     if (result.rows.length > 0) {
       res.json(result.rows[0]);
@@ -129,7 +170,7 @@ app.get('/api/city-stats', async (req, res) => {
                 SUM("CO2_sequestered_kg") AS total_co2_annual_kg
             FROM public.trees;
         `;
-        const result = await pool.query(query);
+        const result = await queryWithRetry(query);
         res.json(result.rows[0]);
     } catch (err) {
         console.error('Error executing query for /api/city-stats', err.stack);
@@ -149,7 +190,7 @@ app.get('/api/ward-data', async (req, res) => {
             GROUP BY ward
             ORDER BY ward::double precision::int;
         `;
-        const result = await pool.query(query);
+        const result = await queryWithRetry(query);
         res.json(result.rows);
     } catch (err) {
         console.error('Error executing query for /api/ward-data', err.stack);
@@ -172,7 +213,7 @@ app.post('/api/stats-in-polygon', async (req, res) => {
             FROM public.trees
             WHERE ST_Contains(ST_GeomFromGeoJSON($1), geom);
         `;
-        const result = await pool.query(query, [polygonGeoJSON]);
+        const result = await queryWithRetry(query, [polygonGeoJSON]);
         res.json(result.rows[0]);
     } catch (err)        {
         console.error('Error executing query for /api/stats-in-polygon', err.stack);
@@ -190,7 +231,7 @@ app.get('/api/tree-archetypes', async (req, res) => {
       WHERE season = 'Summer'
       ORDER BY common_name, id;
     `;
-    const { rows } = await pool.query(query);
+    const { rows } = await queryWithRetry(query);
 
     // Group the flat list of archetypes by the truncated botanical_name, which is our unique species key
     const groupedBySpecies = rows.reduce((acc, archetype) => {
@@ -272,7 +313,7 @@ app.post('/api/trees-in-bounds', async (req, res) => {
       ) AS t;
     `;
 
-    const result = await pool.query(query, [swLon, swLat, neLon, neLat, MAX_TREES_RETURN]);
+    const result = await queryWithRetry(query, [swLon, swLat, neLon, neLat, MAX_TREES_RETURN]);
     
     if (result.rows.length > 0 && result.rows[0].json_build_object) {
       res.json(result.rows[0].json_build_object);
@@ -384,13 +425,12 @@ app.get('/api/filter-metadata', async (req, res) => {
     
     // Run queries - species first (largest), then others in parallel
     // This reduces connection pressure vs all 4 at once
-    const speciesResult = await pool.query(speciesQuery);
-    logConnection(); // Log on first successful query
+    const speciesResult = await queryWithRetry(speciesQuery);
     
     const [wardsResult, rangesResult, economicResult] = await Promise.all([
-      pool.query(wardsQuery),
-      pool.query(rangesQuery),
-      pool.query(economicQuery)
+      queryWithRetry(wardsQuery),
+      queryWithRetry(rangesQuery),
+      queryWithRetry(economicQuery)
     ]);
     
     const ranges = rangesResult.rows[0] || {};
@@ -424,7 +464,7 @@ app.get('/api/filter-metadata', async (req, res) => {
           COUNT(*) as total_count
         FROM public.trees;
       `;
-      const locationCountsResult = await pool.query(locationCountsQuery);
+      const locationCountsResult = await queryWithRetry(locationCountsQuery);
       if (locationCountsResult.rows[0]) {
         locationCounts = {
           street: parseInt(locationCountsResult.rows[0].street_count) || 0,
@@ -590,7 +630,7 @@ app.post('/api/filtered-stats', async (req, res) => {
       ${whereClause};
     `;
     
-    const result = await pool.query(query, params);
+    const result = await queryWithRetry(query, params);
     res.json({
       total_trees: parseInt(result.rows[0]?.total_trees) || 0,
       total_co2_kg: parseFloat(result.rows[0]?.total_co2_kg) || 0
@@ -706,11 +746,11 @@ app.post('/api/chart-data', async (req, res) => {
       ${limitClause};
     `;
     
-    const result = await pool.query(query);
+    const result = await queryWithRetry(query);
     
     // Also get total for context
     const totalQuery = `SELECT COUNT(*) as total FROM public.trees;`;
-    const totalResult = await pool.query(totalQuery);
+    const totalResult = await queryWithRetry(totalQuery);
     
     res.json({
       data: result.rows.map(row => ({
@@ -751,8 +791,7 @@ app.get('/api/ward-boundaries', async (req, res) => {
       ORDER BY ward_number;
     `;
     
-    const result = await pool.query(query);
-    logConnection();
+    const result = await queryWithRetry(query);
     
     // Format as GeoJSON FeatureCollection
     const geojson = {
@@ -808,8 +847,7 @@ app.get('/api/ward-stats', async (req, res) => {
       ORDER BY ROUND(ward::numeric)::integer;
     `;
     
-    const result = await pool.query(query);
-    logConnection();
+    const result = await queryWithRetry(query);
     
     // Add derived metrics
     const stats = result.rows.map(row => ({
@@ -847,7 +885,7 @@ app.get('/api/ward-stats', async (req, res) => {
 app.get('/api/land-cover/wards', async (req, res) => {
   try {
     // Check if land_cover_stats table exists
-    const tableCheck = await pool.query(`
+    const tableCheck = await queryWithRetry(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
@@ -857,7 +895,7 @@ app.get('/api/land-cover/wards', async (req, res) => {
     
     if (tableCheck.rows[0].exists) {
       // Fetch from database
-      const result = await pool.query(`
+      const result = await queryWithRetry(`
         SELECT 
           ward_number,
           year,
@@ -908,7 +946,7 @@ app.get('/api/land-cover/comparison', async (req, res) => {
     const fromYear = parseInt(req.query.from_year) || 2019;
     const toYear = parseInt(req.query.to_year) || 2025;
     
-    const tableCheck = await pool.query(`
+    const tableCheck = await queryWithRetry(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
@@ -917,7 +955,7 @@ app.get('/api/land-cover/comparison', async (req, res) => {
     `);
     
     if (tableCheck.rows[0].exists) {
-      const result = await pool.query(`
+      const result = await queryWithRetry(`
         SELECT 
           ward_number,
           from_year,
@@ -984,7 +1022,7 @@ app.get('/api/land-cover/comparison', async (req, res) => {
 app.get('/api/land-cover/timeline', async (req, res) => {
   try {
     // Get city-wide averages per year
-    const yearlyStats = await pool.query(`
+    const yearlyStats = await queryWithRetry(`
       SELECT 
         year,
         COUNT(*) as ward_count,
@@ -1000,7 +1038,7 @@ app.get('/api/land-cover/timeline', async (req, res) => {
     `);
     
     // Get year-over-year changes
-    const yoyChanges = await pool.query(`
+    const yoyChanges = await queryWithRetry(`
       SELECT 
         from_year,
         to_year,
@@ -1017,7 +1055,7 @@ app.get('/api/land-cover/timeline', async (req, res) => {
     `);
     
     // Get overall 2019-2025 change
-    const overallChange = await pool.query(`
+    const overallChange = await queryWithRetry(`
       SELECT 
         ROUND(SUM(trees_lost_m2)::numeric, 0) as total_trees_lost_m2,
         ROUND(SUM(trees_gained_m2)::numeric, 0) as total_trees_gained_m2,
@@ -1061,7 +1099,7 @@ app.get('/api/census-validation', async (req, res) => {
   try {
     // This query finds trees in areas currently classified as non-tree by satellite
     // Requires land_cover raster or point samples to be imported
-    const tableCheck = await pool.query(`
+    const tableCheck = await queryWithRetry(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
@@ -1071,7 +1109,7 @@ app.get('/api/census-validation', async (req, res) => {
     
     if (tableCheck.rows[0].exists) {
       // Join trees with land cover classification
-      const result = await pool.query(`
+      const result = await queryWithRetry(`
         SELECT 
           t.ward::integer as ward_number,
           COUNT(*) as total_trees,

@@ -44,11 +44,41 @@ function App() {
     showLabels: boolean;
     pulseAnimation: boolean;
   }>({
-    lossThreshold: 3,
+    lossThreshold: 0.1,
     colorScheme: 'red',
     opacity: 0.6,
     showLabels: true,
     pulseAnimation: false,
+  });
+  
+  // Land Cover Overlay state
+  const [landCoverConfig, setLandCoverConfig] = useState<{
+    visible: boolean;
+    mode: 'green' | 'built' | 'bivariate' | 'change';
+    year: number;
+    opacity: number;
+    showLabels: boolean;
+    greenColorScale: [string, string];
+    builtColorScale: [string, string];
+  }>({
+    visible: false,
+    mode: 'bivariate',
+    year: 2025,
+    opacity: 0.7,
+    showLabels: true,
+    greenColorScale: ['#f7fcf5', '#00441b'],
+    builtColorScale: ['#fff5f0', '#67000d'],
+  });
+  
+  // Raster Overlay state (continuous heatmap visualization)
+  const [rasterConfig, setRasterConfig] = useState<{
+    visible: boolean;
+    layer: 'tree_probability_2025' | 'tree_probability_2019' | 'tree_change' | 'tree_loss_gain' | 'ndvi' | 'landcover';
+    opacity: number;
+  }>({
+    visible: false,
+    layer: 'tree_probability_2025',
+    opacity: 0.7,
   });
 
   // Get data from TreeStore for loading overlay
@@ -286,6 +316,8 @@ function App() {
           wardColorBy={wardColorBy}
           showDeforestationHotspots={showDeforestationHotspots}
           hotspotConfig={hotspotConfig}
+          landCoverConfig={landCoverConfig}
+          rasterConfig={rasterConfig}
         />
 
         {sidebarOpen && (
@@ -332,6 +364,10 @@ function App() {
           onDeforestationHotspotsToggle={setShowDeforestationHotspots}
           hotspotConfig={hotspotConfig}
           onHotspotConfigChange={setHotspotConfig}
+          landCoverConfig={landCoverConfig}
+          onLandCoverConfigChange={setLandCoverConfig}
+          rasterConfig={rasterConfig}
+          onRasterConfigChange={setRasterConfig}
         />
       </div>
       {showTemperatureChart && activeSpeciesCooling && (

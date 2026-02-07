@@ -8,7 +8,14 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
-  build: { // Add this build object
-    outDir: 'docs' // Specify the output directory as 'docs'
+  build: {
+    outDir: 'docs'
+  },
+  server: {
+    // Enable headers for COG range requests
+    headers: {
+      'Accept-Ranges': 'bytes',
+      'Access-Control-Allow-Origin': '*',
+    }
   }
 });

@@ -32,3 +32,14 @@ public/*.pmtiles
 *.mbtiles
 *.geojson
 !docs/**/*.geojson
+
+# Raster files (served from Cloudflare R2)
+# These are ~40MB each, must be uploaded to R2 separately
+public/rasters/*.tif
+docs/rasters/*.tif
+data/processed-rasters/
+data/New data/
+
+# Large data files
+*.tif
+*.tiff

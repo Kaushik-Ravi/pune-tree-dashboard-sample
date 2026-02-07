@@ -38,7 +38,12 @@ import {
   ArrowDown,
   BarChart3,
   Flame,
-  Target
+  Target,
+  Layers,
+  Palette,
+  Thermometer,
+  Image,
+  Leaf
 } from 'lucide-react';
 import { useGreenCoverStore } from '../../../store/GreenCoverStore';
 
@@ -610,6 +615,26 @@ export interface HotspotConfig {
   pulseAnimation: boolean;
 }
 
+// Land Cover Overlay configuration
+interface LandCoverOverlayConfig {
+  visible: boolean;
+  mode: 'green' | 'built' | 'bivariate' | 'change';
+  year: number;
+  opacity: number;
+  showLabels: boolean;
+  greenColorScale: [string, string];
+  builtColorScale: [string, string];
+}
+
+// Raster Overlay configuration (continuous heatmap)
+type RasterLayerType = 'tree_probability_2025' | 'tree_probability_2019' | 'tree_change' | 'tree_loss_gain' | 'ndvi' | 'landcover';
+
+interface RasterOverlayConfig {
+  visible: boolean;
+  layer: RasterLayerType;
+  opacity: number;
+}
+
 interface GreenCoverMonitorProps {
   // Map integration props - controlled from parent
   showWardBoundaries?: boolean;
@@ -623,6 +648,12 @@ interface GreenCoverMonitorProps {
   onDeforestationHotspotsToggle?: (enabled: boolean) => void;
   hotspotConfig?: HotspotConfig;
   onHotspotConfigChange?: (config: HotspotConfig) => void;
+  // Land Cover Overlay
+  landCoverConfig?: LandCoverOverlayConfig;
+  onLandCoverConfigChange?: (config: LandCoverOverlayConfig) => void;
+  // Raster Overlay (continuous heatmap)
+  rasterConfig?: RasterOverlayConfig;
+  onRasterConfigChange?: (config: RasterOverlayConfig) => void;
 }
 
 const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
@@ -634,8 +665,24 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
   onColorByChange,
   showDeforestationHotspots = false,
   onDeforestationHotspotsToggle,
-  hotspotConfig = { lossThreshold: 5, colorScheme: 'red', opacity: 0.6, showLabels: true, pulseAnimation: true },
+  hotspotConfig = { lossThreshold: 0.1, colorScheme: 'red', opacity: 0.6, showLabels: true, pulseAnimation: true },
   onHotspotConfigChange,
+  landCoverConfig = { 
+    visible: false, 
+    mode: 'bivariate', 
+    year: 2025, 
+    opacity: 0.7, 
+    showLabels: true, 
+    greenColorScale: ['#f7fcf5', '#00441b'],
+    builtColorScale: ['#fff5f0', '#67000d']
+  },
+  onLandCoverConfigChange,
+  rasterConfig = {
+    visible: false,
+    layer: 'tree_probability_2025',
+    opacity: 0.7
+  },
+  onRasterConfigChange,
 }) => {
   // Use Zustand store for data (cached in localStorage)
   const {
@@ -840,12 +887,47 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
     setExpandedSection(expandedSection === section ? null : section);
   };
   
-  // Loading state
+  // Loading state - Engaging tree-themed animation
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3">
-        <RefreshCw className="animate-spin text-green-500" size={32} />
-        <span className="text-gray-500">Loading Pune Green Cover Monitor...</span>
+      <div className="flex flex-col items-center justify-center h-80 gap-4 px-4">
+        {/* Animated tree growing effect */}
+        <div className="relative">
+          {/* Background pulse */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-20 h-20 bg-green-100 rounded-full animate-ping opacity-30"></div>
+          </div>
+          
+          {/* Main icon with bounce */}
+          <div className="relative z-10 flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full shadow-lg">
+            <TreePine className="text-white animate-bounce" size={32} />
+          </div>
+          
+          {/* Orbiting leaf */}
+          <div className="absolute -top-2 -right-2 animate-spin" style={{ animationDuration: '3s' }}>
+            <div className="w-6 h-6 bg-green-200 rounded-full flex items-center justify-center">
+              <Leaf className="text-green-600" size={14} />
+            </div>
+          </div>
+        </div>
+        
+        {/* Loading text with rotating messages */}
+        <div className="text-center space-y-2">
+          <p className="font-medium text-gray-700">Loading Green Cover Monitor</p>
+          <p className="text-sm text-gray-500 animate-pulse">
+            Analyzing satellite data for {wardData.length > 0 ? wardData.length : 77} wards...
+          </p>
+        </div>
+        
+        {/* Progress indicator */}
+        <div className="w-48 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full animate-loading-bar"></div>
+        </div>
+        
+        {/* Fun fact */}
+        <div className="text-xs text-gray-400 text-center max-w-xs mt-2">
+          💡 Pune has over 1.7 million cataloged trees spanning 77 administrative wards
+        </div>
       </div>
     );
   }
@@ -1262,16 +1344,17 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
                 <span className="text-gray-500">Loss threshold:</span>
-                <span className="text-gray-700 font-medium">≥{hotspotConfig.lossThreshold}% loss</span>
+                <span className="text-gray-700 font-medium">≥{hotspotConfig.lossThreshold.toFixed(2)}% loss</span>
               </div>
               <input
                 type="range"
-                min="1"
-                max="15"
+                min="0.01"
+                max="1"
+                step="0.01"
                 value={hotspotConfig.lossThreshold}
                 onChange={(e) => onHotspotConfigChange?.({ 
                   ...hotspotConfig, 
-                  lossThreshold: parseInt(e.target.value) 
+                  lossThreshold: parseFloat(e.target.value) 
                 })}
                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-500"
               />
@@ -1316,6 +1399,454 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
             <p className="text-xs text-red-600 flex items-center gap-1">
               <AlertTriangle size={12} />
               Hover over hotspots to see deforestation details
+            </p>
+          </div>
+        )}
+      </div>
+      
+      {/* Land Cover Overlay - Built vs Green with Time Slider */}
+      <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg p-4 border border-emerald-200 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers size={18} className="text-emerald-600" />
+            <div>
+              <span className="font-medium text-gray-800">Land Cover Overlay</span>
+              <p className="text-xs text-gray-500">Compare Built vs Green over time</p>
+            </div>
+          </div>
+          <button
+            onClick={() => onLandCoverConfigChange?.({ ...landCoverConfig, visible: !landCoverConfig.visible })}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              landCoverConfig.visible
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            {landCoverConfig.visible ? <EyeOff size={14} /> : <Eye size={14} />}
+            {landCoverConfig.visible ? 'Hide Overlay' : 'Show Overlay'}
+          </button>
+        </div>
+        
+        {landCoverConfig.visible && (
+          <div className="space-y-3">
+            {/* View Mode Toggle */}
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Visualization mode:</p>
+              <div className="grid grid-cols-4 gap-1">
+                <button
+                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                    landCoverConfig.mode === 'green'
+                      ? 'bg-green-100 text-green-700 font-medium ring-2 ring-green-400'
+                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                  onClick={() => onLandCoverConfigChange?.({ ...landCoverConfig, mode: 'green' })}
+                >
+                  <TreePine size={14} />
+                  <span>Green</span>
+                </button>
+                <button
+                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                    landCoverConfig.mode === 'built'
+                      ? 'bg-red-100 text-red-700 font-medium ring-2 ring-red-400'
+                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                  onClick={() => onLandCoverConfigChange?.({ ...landCoverConfig, mode: 'built' })}
+                >
+                  <Building2 size={14} />
+                  <span>Built</span>
+                </button>
+                <button
+                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                    landCoverConfig.mode === 'bivariate'
+                      ? 'bg-purple-100 text-purple-700 font-medium ring-2 ring-purple-400'
+                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                  onClick={() => onLandCoverConfigChange?.({ ...landCoverConfig, mode: 'bivariate' })}
+                >
+                  <Palette size={14} />
+                  <span>Both</span>
+                </button>
+                <button
+                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                    landCoverConfig.mode === 'change'
+                      ? 'bg-amber-100 text-amber-700 font-medium ring-2 ring-amber-400'
+                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                  onClick={() => onLandCoverConfigChange?.({ ...landCoverConfig, mode: 'change' })}
+                >
+                  <TrendingUp size={14} />
+                  <span>Change</span>
+                </button>
+              </div>
+            </div>
+            
+            {/* Year Timeline Slider */}
+            {landCoverConfig.mode !== 'change' && (
+              <div className="bg-white rounded-lg p-3 border border-gray-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">
+                    <Calendar size={14} className="inline mr-1" />
+                    Year: {landCoverConfig.year}
+                  </span>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        const years = [2019, 2020, 2021, 2022, 2023, 2024, 2025];
+                        const idx = years.indexOf(landCoverConfig.year);
+                        if (idx > 0) {
+                          onLandCoverConfigChange?.({ ...landCoverConfig, year: years[idx - 1] });
+                        }
+                      }}
+                      disabled={landCoverConfig.year === 2019}
+                      className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        const years = [2019, 2020, 2021, 2022, 2023, 2024, 2025];
+                        const idx = years.indexOf(landCoverConfig.year);
+                        if (idx < years.length - 1) {
+                          onLandCoverConfigChange?.({ ...landCoverConfig, year: years[idx + 1] });
+                        }
+                      }}
+                      disabled={landCoverConfig.year === 2025}
+                      className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min={2019}
+                  max={2025}
+                  value={landCoverConfig.year}
+                  onChange={(e) => onLandCoverConfigChange?.({ ...landCoverConfig, year: parseInt(e.target.value) })}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span>2019</span>
+                  <span>2025</span>
+                </div>
+              </div>
+            )}
+            
+            {/* Opacity Slider */}
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-gray-500">Opacity:</span>
+                <span className="text-gray-700 font-medium">{Math.round(landCoverConfig.opacity * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="20"
+                max="100"
+                value={landCoverConfig.opacity * 100}
+                onChange={(e) => onLandCoverConfigChange?.({ 
+                  ...landCoverConfig, 
+                  opacity: parseInt(e.target.value) / 100 
+                })}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+              />
+            </div>
+            
+            {/* Mode-specific Legends */}
+            <div className="bg-white rounded-lg p-2 border border-gray-200">
+              <p className="text-xs text-gray-500 mb-2 font-medium">Color Legend</p>
+              
+              {landCoverConfig.mode === 'green' && (
+                <div>
+                  <div className="h-3 rounded" style={{ 
+                    background: `linear-gradient(90deg, ${landCoverConfig.greenColorScale[0]}, ${landCoverConfig.greenColorScale[1]})` 
+                  }}></div>
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>0% Tree Cover</span>
+                    <span>30%+ Tree Cover</span>
+                  </div>
+                </div>
+              )}
+              
+              {landCoverConfig.mode === 'built' && (
+                <div>
+                  <div className="h-3 rounded" style={{ 
+                    background: `linear-gradient(90deg, ${landCoverConfig.builtColorScale[0]}, ${landCoverConfig.builtColorScale[1]})` 
+                  }}></div>
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>0% Built-up</span>
+                    <span>90%+ Built-up</span>
+                  </div>
+                </div>
+              )}
+              
+              {landCoverConfig.mode === 'bivariate' && (
+                <div>
+                  <p className="text-xs text-gray-600 mb-2">Green (↑) vs Built (→)</p>
+                  <div className="grid grid-cols-3 gap-0.5 w-20 h-20 mx-auto">
+                    {/* Bivariate legend grid */}
+                    <div className="rounded-tl" style={{ backgroundColor: '#5ac8c8' }}></div>
+                    <div style={{ backgroundColor: '#5698b9' }}></div>
+                    <div className="rounded-tr" style={{ backgroundColor: '#3b4994' }}></div>
+                    <div style={{ backgroundColor: '#ace4e4' }}></div>
+                    <div style={{ backgroundColor: '#a5add3' }}></div>
+                    <div style={{ backgroundColor: '#8c62aa' }}></div>
+                    <div className="rounded-bl" style={{ backgroundColor: '#e8e8e8' }}></div>
+                    <div style={{ backgroundColor: '#dfb0d6' }}></div>
+                    <div className="rounded-br" style={{ backgroundColor: '#be64ac' }}></div>
+                  </div>
+                  <div className="flex justify-between text-xs mt-1">
+                    <span className="text-green-600">↑ Green</span>
+                    <span className="text-purple-600">Built →</span>
+                  </div>
+                </div>
+              )}
+              
+              {landCoverConfig.mode === 'change' && (
+                <div>
+                  <div className="flex gap-0.5 h-4">
+                    <div className="flex-1 rounded-l" style={{ backgroundColor: '#d73027' }}></div>
+                    <div className="flex-1" style={{ backgroundColor: '#fc8d59' }}></div>
+                    <div className="flex-1" style={{ backgroundColor: '#fee08b' }}></div>
+                    <div className="flex-1" style={{ backgroundColor: '#ffffbf' }}></div>
+                    <div className="flex-1" style={{ backgroundColor: '#d9ef8b' }}></div>
+                    <div className="flex-1" style={{ backgroundColor: '#91cf60' }}></div>
+                    <div className="flex-1 rounded-r" style={{ backgroundColor: '#1a9850' }}></div>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>-5%+ Loss</span>
+                    <span>No Change</span>
+                    <span>+5%+ Gain</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1 text-center">2019 → 2025 change</p>
+                </div>
+              )}
+            </div>
+            
+            <p className="text-xs text-emerald-600 flex items-center gap-1">
+              <Info size={12} />
+              Hover over wards to see detailed land cover breakdown
+            </p>
+          </div>
+        )}
+      </div>
+      
+      {/* High-Resolution Raster Overlay - NEW: Continuous pixel-level visualization */}
+      <div className="bg-gradient-to-br from-cyan-50 to-sky-50 rounded-lg p-4 border border-cyan-200 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Image size={18} className="text-cyan-600" />
+            <div>
+              <span className="font-medium text-gray-800">Satellite Raster</span>
+              <p className="text-xs text-gray-500">10m resolution continuous heatmap</p>
+            </div>
+          </div>
+          <button
+            onClick={() => onRasterConfigChange?.({ ...rasterConfig, visible: !rasterConfig.visible })}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              rasterConfig.visible
+                ? 'bg-cyan-600 text-white hover:bg-cyan-700'
+                : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            {rasterConfig.visible ? <EyeOff size={14} /> : <Eye size={14} />}
+            {rasterConfig.visible ? 'Hide Raster' : 'Show Raster'}
+          </button>
+        </div>
+        
+        {rasterConfig.visible && (
+          <div className="space-y-3">
+            {/* Layer Selection */}
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Select layer:</p>
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                    rasterConfig.layer === 'tree_probability_2025'
+                      ? 'bg-green-100 text-green-700 font-medium ring-2 ring-green-400'
+                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                  onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'tree_probability_2025' })}
+                >
+                  <TreePine size={14} />
+                  <span>Tree 2025</span>
+                </button>
+                <button
+                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                    rasterConfig.layer === 'tree_probability_2019'
+                      ? 'bg-green-100 text-green-700 font-medium ring-2 ring-green-400'
+                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                  onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'tree_probability_2019' })}
+                >
+                  <TreePine size={14} />
+                  <span>Tree 2019</span>
+                </button>
+                <button
+                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                    rasterConfig.layer === 'tree_change'
+                      ? 'bg-amber-100 text-amber-700 font-medium ring-2 ring-amber-400'
+                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                  onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'tree_change' })}
+                >
+                  <TrendingUp size={14} />
+                  <span>Tree Change</span>
+                </button>
+                <button
+                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                    rasterConfig.layer === 'tree_loss_gain'
+                      ? 'bg-red-100 text-red-700 font-medium ring-2 ring-red-400'
+                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                  onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'tree_loss_gain' })}
+                >
+                  <AlertTriangle size={14} />
+                  <span>Loss/Gain</span>
+                </button>
+                <button
+                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                    rasterConfig.layer === 'ndvi'
+                      ? 'bg-lime-100 text-lime-700 font-medium ring-2 ring-lime-400'
+                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                  onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'ndvi' })}
+                >
+                  <Thermometer size={14} />
+                  <span>NDVI</span>
+                </button>
+                <button
+                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                    rasterConfig.layer === 'landcover'
+                      ? 'bg-purple-100 text-purple-700 font-medium ring-2 ring-purple-400'
+                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                  onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'landcover' })}
+                >
+                  <Palette size={14} />
+                  <span>Land Cover</span>
+                </button>
+              </div>
+            </div>
+            
+            {/* Opacity Slider */}
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-gray-500">Opacity:</span>
+                <span className="text-gray-700 font-medium">{Math.round(rasterConfig.opacity * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="20"
+                max="100"
+                value={rasterConfig.opacity * 100}
+                onChange={(e) => onRasterConfigChange?.({ 
+                  ...rasterConfig, 
+                  opacity: parseInt(e.target.value) / 100 
+                })}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+              />
+            </div>
+            
+            {/* Dynamic Legend */}
+            <div className="bg-white rounded-lg p-2 border border-gray-200">
+              <p className="text-xs text-gray-500 mb-2 font-medium">Color Legend</p>
+              
+              {(rasterConfig.layer === 'tree_probability_2025' || rasterConfig.layer === 'tree_probability_2019') && (
+                <div>
+                  <div className="h-3 rounded" style={{ 
+                    background: 'linear-gradient(90deg, #f7fcf5, #c7e9c0, #74c476, #31a354, #006d2c, #00441b)' 
+                  }}></div>
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>0%</span>
+                    <span>50%</span>
+                    <span>100%</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1 text-center">Tree Cover Probability</p>
+                </div>
+              )}
+              
+              {rasterConfig.layer === 'tree_change' && (
+                <div>
+                  <div className="h-3 rounded" style={{ 
+                    background: 'linear-gradient(90deg, #67001f, #d6604d, #f4a582, #f7f7f7, #92c5de, #4393c3, #053061)' 
+                  }}></div>
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>-50%</span>
+                    <span>0</span>
+                    <span>+50%</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1 text-center">2019-2025 Change</p>
+                </div>
+              )}
+              
+              {rasterConfig.layer === 'tree_loss_gain' && (
+                <div className="flex items-center justify-around">
+                  <div className="flex items-center gap-1">
+                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#d73027' }}></div>
+                    <span className="text-xs">Loss</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#ffffbf' }}></div>
+                    <span className="text-xs">No Change</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#1a9850' }}></div>
+                    <span className="text-xs">Gain</span>
+                  </div>
+                </div>
+              )}
+              
+              {rasterConfig.layer === 'ndvi' && (
+                <div>
+                  <div className="h-3 rounded" style={{ 
+                    background: 'linear-gradient(90deg, #d73027, #fee08b, #d9ef8b, #91cf60, #1a9850, #006837)' 
+                  }}></div>
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>-0.2</span>
+                    <span>0.4</span>
+                    <span>0.8</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1 text-center">Vegetation Index</p>
+                </div>
+              )}
+              
+              {rasterConfig.layer === 'landcover' && (
+                <div className="grid grid-cols-3 gap-1 text-xs">
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: '#419bdf' }}></div>
+                    <span>Water</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: '#397d49' }}></div>
+                    <span>Trees</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: '#88b053' }}></div>
+                    <span>Grass</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: '#e49635' }}></div>
+                    <span>Crops</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: '#dfc35a' }}></div>
+                    <span>Shrub</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: '#c4281b' }}></div>
+                    <span>Built</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: '#a59b8f' }}></div>
+                    <span>Bare</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <p className="text-xs text-cyan-600 flex items-center gap-1">
+              <Info size={12} />
+              Source: Google Dynamic World @ 10m resolution
             </p>
           </div>
         )}

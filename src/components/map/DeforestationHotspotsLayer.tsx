@@ -60,7 +60,7 @@ export interface HotspotConfig {
 }
 
 export const DEFAULT_HOTSPOT_CONFIG: HotspotConfig = {
-  lossThreshold: 5, // 5% or more loss marks a hotspot
+  lossThreshold: 0.1, // 0.1% or more loss marks a hotspot
   colorScheme: 'red',
   opacity: 0.6,
   showLabels: true,
@@ -72,32 +72,32 @@ function getSeverityColor(netChangePct: number, scheme: string): string {
   const severity = Math.abs(netChangePct);
   
   if (scheme === 'heatmap') {
-    // Heat map style: yellow -> orange -> red
-    if (severity >= 15) return '#dc2626'; // Red - Severe
-    if (severity >= 10) return '#ea580c'; // Orange - High
-    if (severity >= 5) return '#f59e0b';  // Amber - Moderate
+    // Heat map style: yellow -> orange -> red (scaled for actual data ~0.01-0.5%)
+    if (severity >= 0.3) return '#dc2626'; // Red - Severe
+    if (severity >= 0.2) return '#ea580c'; // Orange - High
+    if (severity >= 0.1) return '#f59e0b';  // Amber - Moderate
     return '#fbbf24'; // Yellow - Minor
   }
   
   if (scheme === 'orange') {
-    if (severity >= 15) return '#ea580c';
-    if (severity >= 10) return '#f97316';
-    if (severity >= 5) return '#fb923c';
+    if (severity >= 0.3) return '#ea580c';
+    if (severity >= 0.2) return '#f97316';
+    if (severity >= 0.1) return '#fb923c';
     return '#fdba74';
   }
   
-  // Default: Red scheme
-  if (severity >= 15) return '#991b1b'; // Dark red - Severe
-  if (severity >= 10) return '#dc2626'; // Red - High
-  if (severity >= 5) return '#ef4444';  // Light red - Moderate
+  // Default: Red scheme (scaled for actual data ~0.01-0.5%)
+  if (severity >= 0.3) return '#991b1b'; // Dark red - Severe
+  if (severity >= 0.2) return '#dc2626'; // Red - High
+  if (severity >= 0.1) return '#ef4444';  // Light red - Moderate
   return '#fca5a5'; // Pale red - Minor
 }
 
 // Get severity level
 function getSeverityLevel(netChangePct: number): 'severe' | 'moderate' | 'minor' {
   const severity = Math.abs(netChangePct);
-  if (severity >= 10) return 'severe';
-  if (severity >= 5) return 'moderate';
+  if (severity >= 0.25) return 'severe';
+  if (severity >= 0.15) return 'moderate';
   return 'minor';
 }
 
@@ -136,8 +136,16 @@ const DeforestationHotspotsLayer: React.FC<DeforestationHotspotsLayerProps> = ({
     details: HotspotDetails;
   } | null>(null);
 
-  // Get data from store
-  const { wardData, comparisonData } = useGreenCoverStore();
+  // Get data from store AND the fetchAllData action
+  const { wardData, comparisonData, fetchAllData, isInitialized } = useGreenCoverStore();
+  
+  // Ensure data is loaded when layer becomes visible
+  useEffect(() => {
+    if (visible && !isInitialized) {
+      console.log('[DeforestationHotspots] Triggering data fetch - store not initialized');
+      fetchAllData();
+    }
+  }, [visible, isInitialized, fetchAllData]);
 
   // Fetch ward boundaries
   useEffect(() => {
@@ -163,7 +171,16 @@ const DeforestationHotspotsLayer: React.FC<DeforestationHotspotsLayerProps> = ({
 
   // Enrich GeoJSON with hotspot data
   const enrichedData = useMemo(() => {
-    if (!geojsonData || !comparisonData) return null;
+    if (!geojsonData || !comparisonData) {
+      console.log('[DeforestationHotspots] Missing data:', { 
+        hasGeojson: !!geojsonData, 
+        hasComparison: !!comparisonData,
+        comparisonLength: comparisonData?.length 
+      });
+      return null;
+    }
+    
+    console.log('[DeforestationHotspots] Processing with', geojsonData.features.length, 'features and', comparisonData.length, 'comparison records');
     
     const wardDataByNumber = new Map(
       (Array.isArray(wardData) ? wardData : [])
@@ -222,6 +239,11 @@ const DeforestationHotspotsLayer: React.FC<DeforestationHotspotsLayerProps> = ({
     
     // Filter to only hotspots
     const hotspotFeatures = enrichedFeatures.filter(f => f.properties.is_hotspot);
+    
+    console.log('[DeforestationHotspots] Found', hotspotFeatures.length, 'hotspots with threshold', config.lossThreshold + '%. Net change range:', 
+      Math.min(...enrichedFeatures.map(f => f.properties.net_change_pct)).toFixed(2) + '% to',
+      Math.max(...enrichedFeatures.map(f => f.properties.net_change_pct)).toFixed(2) + '%'
+    );
     
     return {
       type: 'FeatureCollection' as const,

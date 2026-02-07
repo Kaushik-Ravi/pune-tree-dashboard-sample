@@ -72,6 +72,36 @@ interface SidebarProps {
     showLabels: boolean;
     pulseAnimation: boolean;
   }) => void;
+  // Land Cover Overlay
+  landCoverConfig?: {
+    visible: boolean;
+    mode: 'green' | 'built' | 'bivariate' | 'change';
+    year: number;
+    opacity: number;
+    showLabels: boolean;
+    greenColorScale: [string, string];
+    builtColorScale: [string, string];
+  };
+  onLandCoverConfigChange?: (config: {
+    visible: boolean;
+    mode: 'green' | 'built' | 'bivariate' | 'change';
+    year: number;
+    opacity: number;
+    showLabels: boolean;
+    greenColorScale: [string, string];
+    builtColorScale: [string, string];
+  }) => void;
+  // Raster Overlay (continuous heatmap)
+  rasterConfig?: {
+    visible: boolean;
+    layer: 'tree_probability_2025' | 'tree_probability_2019' | 'tree_change' | 'tree_loss_gain' | 'ndvi' | 'landcover';
+    opacity: number;
+  };
+  onRasterConfigChange?: (config: {
+    visible: boolean;
+    layer: 'tree_probability_2025' | 'tree_probability_2019' | 'tree_change' | 'tree_loss_gain' | 'ndvi' | 'landcover';
+    opacity: number;
+  }) => void;
 }
 
 const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
@@ -109,6 +139,10 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
   onDeforestationHotspotsToggle,
   hotspotConfig,
   onHotspotConfigChange,
+  landCoverConfig,
+  onLandCoverConfigChange,
+  rasterConfig,
+  onRasterConfigChange,
 }, ref) => {
   const tabs = [
     { id: 'city-overview', label: 'City Overview', icon: <BarChartBig size={18} /> },
@@ -143,6 +177,10 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
           onDeforestationHotspotsToggle={onDeforestationHotspotsToggle}
           hotspotConfig={hotspotConfig}
           onHotspotConfigChange={onHotspotConfigChange}
+          landCoverConfig={landCoverConfig}
+          onLandCoverConfigChange={onLandCoverConfigChange}
+          rasterConfig={rasterConfig}
+          onRasterConfigChange={onRasterConfigChange}
         />
       );
       case 3:

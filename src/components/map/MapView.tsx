@@ -9,7 +9,8 @@ import Map, {
   MapLayerMouseEvent,
   MapLayerTouchEvent,
 } from 'react-map-gl/maplibre';
-import type { LayerProps, ExpressionSpecification } from 'react-map-gl/maplibre';
+import type { LayerProps } from 'react-map-gl/maplibre';
+import type { ExpressionSpecification } from 'maplibre-gl';
 import maplibregl from 'maplibre-gl';
 import { Protocol } from 'pmtiles';
 import { ChevronLeft, ChevronRight, LayoutDashboard } from 'lucide-react';
@@ -19,6 +20,10 @@ import { TreeFilters, hasActiveFilters } from '../../types/filters';
 import SimulatedTreesLayer from './SimulatedTreesLayer';
 import WardBoundaryLayer from './WardBoundaryLayer';
 import DeforestationHotspotsLayer, { HotspotConfig } from './DeforestationHotspotsLayer';
+import LandCoverOverlay from './LandCoverOverlay';
+import RasterOverlay, { RasterOverlayConfig } from './RasterOverlay';
+import RasterTooltip from './RasterTooltip';
+import { useRasterPixelValue } from '../../hooks/useRasterPixelValue';
 import DrawControl, { DrawEvent, DrawActionEvent } from './DrawControl';
 import MapboxDraw from 'maplibre-gl-draw';
 import ViewModeToggle from './ViewModeToggle';
@@ -39,7 +44,8 @@ const PMTILES_URL = import.meta.env.VITE_PMTILES_URL ||
  * Returns null if no filters are active (show all trees)
  */
 function buildFilterExpression(filters: TreeFilters): ExpressionSpecification | null {
-  const conditions: ExpressionSpecification[] = ['all'];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const conditions: any[] = ['all'];
   
   // Location type filter (street trees vs non-street trees)
   // Uses is_street_tree boolean attribute in tileset
@@ -104,7 +110,7 @@ function buildFilterExpression(filters: TreeFilters): ExpressionSpecification | 
   }
   
   // Return null if no filters (just the 'all' operator), otherwise return the expression
-  return conditions.length > 1 ? conditions : null;
+  return conditions.length > 1 ? conditions as ExpressionSpecification : null;
 }
 
 // Main tree layer - shows matching trees with full opacity
@@ -181,6 +187,18 @@ interface MapViewProps {
   // Deforestation Hotspots props
   showDeforestationHotspots?: boolean;
   hotspotConfig?: HotspotConfig;
+  // Land Cover Overlay props
+  landCoverConfig?: {
+    visible: boolean;
+    mode: 'green' | 'built' | 'bivariate' | 'change';
+    year: number;
+    opacity: number;
+    showLabels: boolean;
+    greenColorScale: [string, string];
+    builtColorScale: [string, string];
+  };
+  // Raster Overlay props (continuous heatmap)
+  rasterConfig?: RasterOverlayConfig;
 }
 
 const MapView: React.FC<MapViewProps> = ({
@@ -203,6 +221,8 @@ const MapView: React.FC<MapViewProps> = ({
   wardColorBy = 'green_score',
   showDeforestationHotspots = false,
   hotspotConfig,
+  landCoverConfig,
+  rasterConfig,
 }) => {
   const mapRef = useRef<MapRef | null>(null);
   const { setSelectedArea } = useTreeStore();
@@ -215,6 +235,21 @@ const MapView: React.FC<MapViewProps> = ({
   const [isLoading3DTrees, setIsLoading3DTrees] = useState(false);
   const [isLoadingShadows, setIsLoadingShadows] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
+  
+  // Raster tooltip state
+  const [rasterTooltipPosition, setRasterTooltipPosition] = useState<{ x: number; y: number } | null>(null);
+  
+  // Raster pixel value hook for tooltip
+  const { 
+    pixelInfo: rasterPixelInfo, 
+    isLoading: isRasterLoading,
+    readPixelValue: readRasterPixelValue,
+    clearPixelInfo: clearRasterPixelInfo
+  } = useRasterPixelValue({
+    layer: rasterConfig?.visible ? rasterConfig.layer : null,
+    visible: rasterConfig?.visible ?? false,
+    debounceMs: 150,
+  });
 
   // Initialize PMTiles protocol once
   useEffect(() => {
@@ -604,13 +639,31 @@ const MapView: React.FC<MapViewProps> = ({
   }, [onTreeSelect, is3D]);
 
   const handleMouseMove = useCallback((event: MapLayerMouseEvent) => {
-    if (is3D) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
-    const treeFeature = event.features?.find(f => f.layer.id === treeLayerStyle.id);
-    map.getCanvas().style.cursor = treeFeature ? 'pointer' : '';
-    map.setFilter('trees-point-highlight', ['==', 'Tree_ID', treeFeature ? treeFeature.properties.Tree_ID : '']);
-  }, [is3D]);
+    
+    // Handle tree hover (2D mode only)
+    if (!is3D) {
+      const treeFeature = event.features?.find(f => f.layer.id === treeLayerStyle.id);
+      map.getCanvas().style.cursor = treeFeature ? 'pointer' : '';
+      map.setFilter('trees-point-highlight', ['==', 'Tree_ID', treeFeature ? treeFeature.properties.Tree_ID : '']);
+    }
+    
+    // Handle raster tooltip
+    if (rasterConfig?.visible) {
+      const { lngLat, point } = event;
+      setRasterTooltipPosition({ x: point.x, y: point.y });
+      readRasterPixelValue(lngLat.lng, lngLat.lat);
+    }
+  }, [is3D, rasterConfig?.visible, readRasterPixelValue]);
+  
+  // Clear raster tooltip when mouse leaves map
+  const handleMouseLeave = useCallback(() => {
+    if (rasterConfig?.visible) {
+      setRasterTooltipPosition(null);
+      clearRasterPixelInfo();
+    }
+  }, [rasterConfig?.visible, clearRasterPixelInfo]);
   
   const handleDragStart = useCallback(() => {
     isDraggingRef.current = true;
@@ -644,6 +697,7 @@ const MapView: React.FC<MapViewProps> = ({
         interactiveLayerIds={interactiveLayers}
         onClick={handleMapClick}  
         onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
         onZoom={(e) => setZoom(e.viewState.zoom)}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
@@ -707,9 +761,32 @@ const MapView: React.FC<MapViewProps> = ({
           config={hotspotConfig}
         />
         
+        {/* Land Cover Overlay */}
+        {landCoverConfig && (
+          <LandCoverOverlay
+            config={landCoverConfig}
+          />
+        )}
+        
+        {/* Raster Overlay - Continuous heatmap visualization from COG files */}
+        {rasterConfig && (
+          <RasterOverlay
+            config={rasterConfig}
+          />
+        )}
+        
         <ScaleControl unit="metric" position="bottom-left" />
         <NavigationControl position="top-left" showCompass={true} />
       </Map>
+      
+      {/* Raster Tooltip - Shows pixel values on hover */}
+      {rasterConfig?.visible && (
+        <RasterTooltip
+          pixelInfo={rasterPixelInfo}
+          isLoading={isRasterLoading}
+          position={rasterTooltipPosition}
+        />
+      )}
       
       <ViewModeToggle is3D={is3D} onToggle={handleToggle3D} zoom={zoom} />
       
