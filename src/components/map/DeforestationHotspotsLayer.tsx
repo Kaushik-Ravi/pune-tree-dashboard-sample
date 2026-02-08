@@ -17,6 +17,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Source, Layer, Popup } from 'react-map-gl/maplibre';
 import type { MapRef } from 'react-map-gl/maplibre';
 import { useGreenCoverStore } from '../../store/GreenCoverStore';
+import { useLayerLoadingStore } from '../../store/LayerLoadingStore';
 
 // API base URL - empty string in production uses relative URLs
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
@@ -139,6 +140,9 @@ const DeforestationHotspotsLayer: React.FC<DeforestationHotspotsLayerProps> = ({
   // Get data from store AND the fetchAllData action
   const { wardData, comparisonData, fetchAllData, isInitialized } = useGreenCoverStore();
   
+  // Global loading store for UI feedback
+  const setGlobalLoading = useLayerLoadingStore(state => state.setLoading);
+  
   // Ensure data is loaded when layer becomes visible
   useEffect(() => {
     if (visible && !isInitialized) {
@@ -149,10 +153,14 @@ const DeforestationHotspotsLayer: React.FC<DeforestationHotspotsLayerProps> = ({
 
   // Fetch ward boundaries
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      setGlobalLoading('deforestation_hotspots', false);
+      return;
+    }
     
     const fetchBoundaries = async () => {
       setLoading(true);
+      setGlobalLoading('deforestation_hotspots', true);
       try {
         const response = await fetch(`${API_BASE}/api/ward-boundaries`);
         if (!response.ok) throw new Error('Failed to fetch ward boundaries');
@@ -163,11 +171,16 @@ const DeforestationHotspotsLayer: React.FC<DeforestationHotspotsLayerProps> = ({
         console.error('Failed to fetch ward boundaries:', err);
       } finally {
         setLoading(false);
+        setGlobalLoading('deforestation_hotspots', false);
       }
     };
     
     fetchBoundaries();
-  }, [visible]);
+    
+    return () => {
+      setGlobalLoading('deforestation_hotspots', false);
+    };
+  }, [visible, setGlobalLoading]);
 
   // Enrich GeoJSON with hotspot data
   const enrichedData = useMemo(() => {

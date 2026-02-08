@@ -17,6 +17,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Source, Layer } from 'react-map-gl/maplibre';
 import * as GeoTIFF from 'geotiff';
+import { useLayerLoadingStore, rasterLayerToStoreType } from '../../store/LayerLoadingStore';
 
 // ============================================================================
 // TYPES
@@ -232,15 +233,24 @@ const RasterOverlay: React.FC<RasterOverlayProps> = ({
   const [_error, setError] = useState<string | null>(null);
   const tiffRef = useRef<GeoTIFF.GeoTIFF | null>(null);
   const imageRef = useRef<GeoTIFF.GeoTIFFImage | null>(null);
+  
+  // Global loading store for UI feedback
+  const setGlobalLoading = useLayerLoadingStore(state => state.setLoading);
 
   const layerConfig = LAYER_CONFIGS[config.layer];
 
   // Load and render the raster
   useEffect(() => {
-    if (!config.visible || !layerConfig) return;
+    if (!config.visible || !layerConfig) {
+      // Clear loading state when layer is hidden
+      setGlobalLoading(rasterLayerToStoreType(config.layer), false);
+      return;
+    }
 
     const loadRaster = async () => {
+      const storeLayerType = rasterLayerToStoreType(config.layer);
       setLoading(true);
+      setGlobalLoading(storeLayerType, true);
       setError(null);
 
       try {
@@ -318,13 +328,15 @@ const RasterOverlay: React.FC<RasterOverlayProps> = ({
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
         setLoading(false);
+        setGlobalLoading(storeLayerType, false);
       }
     };
 
     loadRaster();
     
     return () => {
-      // Cleanup
+      // Cleanup - also clear loading state on unmount
+      setGlobalLoading(rasterLayerToStoreType(config.layer), false);
       tiffRef.current = null;
       imageRef.current = null;
     };

@@ -16,6 +16,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Source, Layer, Popup, useMap } from 'react-map-gl/maplibre';
 import type { FillLayerSpecification } from 'maplibre-gl';
 import { useGreenCoverStore } from '../../store/GreenCoverStore';
+import { useLayerLoadingStore } from '../../store/LayerLoadingStore';
 
 // API base URL
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
@@ -120,6 +121,7 @@ const LandCoverOverlay: React.FC<LandCoverOverlayProps> = ({ config }) => {
   const [popupCoords, setPopupCoords] = useState<{ lng: number; lat: number } | null>(null);
   
   const { wardData, comparisonData } = useGreenCoverStore();
+  const setGlobalLoading = useLayerLoadingStore(state => state.setLoading);
   
   // Debug logging
   useEffect(() => {
@@ -135,9 +137,14 @@ const LandCoverOverlay: React.FC<LandCoverOverlayProps> = ({ config }) => {
   
   // Fetch ward boundaries
   useEffect(() => {
-    if (!config.visible) return;
+    if (!config.visible) {
+      setGlobalLoading('ward_overlay', false);
+      return;
+    }
     
     console.log('[LandCoverOverlay] Fetching ward boundaries...');
+    setGlobalLoading('ward_overlay', true);
+    
     fetch(`${API_BASE}/api/ward-boundaries`)
       .then(res => res.json())
       .then((data: WardBoundaryGeoJSON) => {
@@ -146,8 +153,15 @@ const LandCoverOverlay: React.FC<LandCoverOverlayProps> = ({ config }) => {
           setGeojsonData(data);
         }
       })
-      .catch(err => console.error('[LandCoverOverlay] Failed to fetch ward boundaries:', err));
-  }, [config.visible]);
+      .catch(err => console.error('[LandCoverOverlay] Failed to fetch ward boundaries:', err))
+      .finally(() => {
+        setGlobalLoading('ward_overlay', false);
+      });
+    
+    return () => {
+      setGlobalLoading('ward_overlay', false);
+    };
+  }, [config.visible, setGlobalLoading]);
   
   // Process and enhance GeoJSON with land cover data
   const enhancedGeojson = useMemo<WardBoundaryGeoJSON | null>(() => {

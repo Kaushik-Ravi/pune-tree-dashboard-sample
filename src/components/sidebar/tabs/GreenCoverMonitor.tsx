@@ -43,9 +43,11 @@ import {
   Palette,
   Thermometer,
   Image,
-  Leaf
+  Leaf,
+  Loader2
 } from 'lucide-react';
 import { useGreenCoverStore } from '../../../store/GreenCoverStore';
+import { useLayerLoadingStore, rasterLayerToStoreType } from '../../../store/LayerLoadingStore';
 
 // ============================================================================
 // GREEN SCORE CALCULATION
@@ -696,6 +698,14 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
     flyToWard
   } = useGreenCoverStore();
   
+  // Layer loading states for UI feedback
+  const isWardOverlayLoading = useLayerLoadingStore(state => state.isLoading('ward_overlay'));
+  const isDeforestationHotspotsLoading = useLayerLoadingStore(state => state.isLoading('deforestation_hotspots'));
+  const isAnyRasterLoading = useLayerLoadingStore(state => state.isAnyRasterLoading());
+  const isCurrentRasterLoading = useLayerLoadingStore(state => 
+    rasterConfig?.layer ? state.isLoading(rasterLayerToStoreType(rasterConfig.layer)) : false
+  );
+  
   // Fetch data on mount (uses cache if fresh)
   useEffect(() => {
     fetchAllData();
@@ -1271,14 +1281,25 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
           </div>
           <button
             onClick={() => onDeforestationHotspotsToggle?.(!showDeforestationHotspots)}
+            disabled={isDeforestationHotspotsLoading}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               showDeforestationHotspots
                 ? 'bg-red-600 text-white hover:bg-red-700'
                 : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
-            }`}
+            } ${isDeforestationHotspotsLoading ? 'opacity-75 cursor-wait' : ''}`}
           >
-            {showDeforestationHotspots ? <EyeOff size={14} /> : <Eye size={14} />}
-            {showDeforestationHotspots ? 'Hide Hotspots' : 'Show Hotspots'}
+            {isDeforestationHotspotsLoading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : showDeforestationHotspots ? (
+              <EyeOff size={14} />
+            ) : (
+              <Eye size={14} />
+            )}
+            {isDeforestationHotspotsLoading 
+              ? 'Loading...' 
+              : showDeforestationHotspots 
+                ? 'Hide Hotspots' 
+                : 'Show Hotspots'}
           </button>
         </div>
         
@@ -1416,14 +1437,25 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
           </div>
           <button
             onClick={() => onLandCoverConfigChange?.({ ...landCoverConfig, visible: !landCoverConfig.visible })}
+            disabled={isWardOverlayLoading}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               landCoverConfig.visible
                 ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                 : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
-            }`}
+            } ${isWardOverlayLoading ? 'opacity-75 cursor-wait' : ''}`}
           >
-            {landCoverConfig.visible ? <EyeOff size={14} /> : <Eye size={14} />}
-            {landCoverConfig.visible ? 'Hide Overlay' : 'Show Overlay'}
+            {isWardOverlayLoading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : landCoverConfig.visible ? (
+              <EyeOff size={14} />
+            ) : (
+              <Eye size={14} />
+            )}
+            {isWardOverlayLoading 
+              ? 'Loading...' 
+              : landCoverConfig.visible 
+                ? 'Hide Overlay' 
+                : 'Show Overlay'}
           </button>
         </div>
         
@@ -1478,6 +1510,14 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
                   <span>Change</span>
                 </button>
               </div>
+              
+              {/* Loading indicator for ward overlay */}
+              {isWardOverlayLoading && (
+                <div className="flex items-center justify-center gap-2 py-2 text-emerald-600">
+                  <Loader2 size={16} className="animate-spin" />
+                  <span className="text-xs font-medium">Loading ward boundaries...</span>
+                </div>
+              )}
             </div>
             
             {/* Year Timeline Slider */}
@@ -1642,14 +1682,25 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
           </div>
           <button
             onClick={() => onRasterConfigChange?.({ ...rasterConfig, visible: !rasterConfig.visible })}
+            disabled={isCurrentRasterLoading}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               rasterConfig.visible
                 ? 'bg-cyan-600 text-white hover:bg-cyan-700'
                 : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
-            }`}
+            } ${isCurrentRasterLoading ? 'opacity-75 cursor-wait' : ''}`}
           >
-            {rasterConfig.visible ? <EyeOff size={14} /> : <Eye size={14} />}
-            {rasterConfig.visible ? 'Hide Raster' : 'Show Raster'}
+            {isCurrentRasterLoading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : rasterConfig.visible ? (
+              <EyeOff size={14} />
+            ) : (
+              <Eye size={14} />
+            )}
+            {isCurrentRasterLoading 
+              ? 'Loading...' 
+              : rasterConfig.visible 
+                ? 'Hide Raster' 
+                : 'Show Raster'}
           </button>
         </div>
         
@@ -1726,6 +1777,14 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
                   <span>Land Cover</span>
                 </button>
               </div>
+              
+              {/* Loading indicator for layer */}
+              {isCurrentRasterLoading && (
+                <div className="flex items-center justify-center gap-2 py-2 text-cyan-600">
+                  <Loader2 size={16} className="animate-spin" />
+                  <span className="text-xs font-medium">Loading satellite imagery...</span>
+                </div>
+              )}
             </div>
             
             {/* Opacity Slider */}
