@@ -9,6 +9,81 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const SunCalc = require('suncalc'); // --- ADDED: For sun position calculations ---
 
+// ============================================================================
+// OPTIONAL REDIS CACHING LAYER
+// ============================================================================
+// Set REDIS_URL in environment to enable Redis caching
+// Works without Redis - just falls back to database queries
+// Supported: DigitalOcean Redis, Upstash, or any Redis-compatible service
+//
+// Example REDIS_URL formats:
+// - DigitalOcean: rediss://default:password@host:port
+// - Upstash: rediss://default:password@host:port
+// ============================================================================
+
+let redis = null;
+let redisEnabled = false;
+
+if (process.env.REDIS_URL) {
+  try {
+    // Dynamic import for optional Redis dependency
+    const Redis = require('ioredis');
+    redis = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: 1,
+      retryDelayOnFailover: 100,
+      connectTimeout: 5000,
+      // TLS for DigitalOcean Redis
+      tls: process.env.REDIS_URL.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+    });
+    
+    redis.on('connect', () => {
+      console.log('[Redis] Connected successfully');
+      redisEnabled = true;
+    });
+    
+    redis.on('error', (err) => {
+      console.warn('[Redis] Connection error (falling back to DB):', err.message);
+      redisEnabled = false;
+    });
+  } catch (err) {
+    console.log('[Redis] ioredis not installed - caching disabled. Run: npm install ioredis');
+  }
+} else {
+  console.log('[Redis] REDIS_URL not set - caching disabled');
+}
+
+// Cache helper with automatic fallback
+async function cachedQuery(cacheKey, ttlSeconds, queryFn) {
+  // If Redis not available, just run the query
+  if (!redisEnabled || !redis) {
+    return await queryFn();
+  }
+  
+  try {
+    // Check cache first
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      console.log(`[Cache] HIT: ${cacheKey}`);
+      return JSON.parse(cached);
+    }
+    
+    // Cache miss - run query
+    console.log(`[Cache] MISS: ${cacheKey}`);
+    const result = await queryFn();
+    
+    // Store in cache (don't await - fire and forget)
+    redis.setex(cacheKey, ttlSeconds, JSON.stringify(result)).catch(() => {});
+    
+    return result;
+  } catch (err) {
+    console.warn(`[Cache] Error for ${cacheKey}:`, err.message);
+    // Fallback to direct query on cache error
+    return await queryFn();
+  }
+}
+
+// ============================================================================
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -140,6 +215,10 @@ app.get('/api/health', async (req, res) => {
 
 app.get('/api/trees/:id', async (req, res) => {
   const { id } = req.params;
+  
+  // Short cache - individual tree data could change
+  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=3600');
+  
   try {
     const query = `
       SELECT
@@ -229,6 +308,9 @@ app.post('/api/stats-in-polygon', async (req, res) => {
 
 // --- NEW API ENDPOINT FOR PLANTING ADVISOR ---
 app.get('/api/tree-archetypes', async (req, res) => {
+  // Long cache - archetype reference data rarely changes
+  res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
+  
   try {
     // We only select Summer data for direct comparison, as it represents the peak cooling need.
     const query = `
@@ -337,6 +419,9 @@ app.post('/api/trees-in-bounds', async (req, res) => {
 app.get('/api/sun-path', (req, res) => {
     const { date, lat, lon } = req.query;
 
+    // Medium cache - sun positions are deterministic for same inputs
+    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+
     if (!date || !lat || !lon) {
         return res.status(400).json({ error: 'Missing required query parameters: date, lat, lon.' });
     }
@@ -378,7 +463,7 @@ app.get('/api/sun-path', (req, res) => {
 
 // --- NEW API ENDPOINT FOR FILTER METADATA ---
 // Returns available options for dropdowns, ranges for sliders
-// Cached on Vercel CDN for fast global access
+// Cached on Vercel CDN for fast global access, also uses Redis if available
 app.get('/api/filter-metadata', async (req, res) => {
   console.log('[filter-metadata] Request received');
   const startTime = Date.now();
@@ -390,39 +475,41 @@ app.get('/api/filter-metadata', async (req, res) => {
   res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
   
   try {
-    // Get distinct species names
-    const speciesQuery = `
-      SELECT DISTINCT common_name 
-      FROM public.trees 
-      WHERE common_name IS NOT NULL AND common_name != ''
-      ORDER BY common_name
-      LIMIT 500;
-    `;
-    
-    // Get distinct wards - simple query, sort in JavaScript
-    // (Avoids PostgreSQL DISTINCT + ORDER BY expression mismatch error)
-    const wardsQuery = `
-      SELECT DISTINCT ward
-      FROM public.trees 
-      WHERE ward IS NOT NULL AND ward != '';
-    `;
-    
-    // Get range values for numeric filters
-    const rangesQuery = `
-      SELECT
-        COALESCE(MIN(height_m), 0) as height_min,
-        COALESCE(MAX(height_m), 30) as height_max,
-        COALESCE(MIN(canopy_dia_m), 0) as canopy_min,
-        COALESCE(MAX(canopy_dia_m), 20) as canopy_max,
-        COALESCE(MIN(girth_cm), 0) as girth_min,
-        COALESCE(MAX(girth_cm), 500) as girth_max,
-        COALESCE(MIN("CO2_sequestered_kg"), 0) as co2_min,
-        COALESCE(MAX("CO2_sequestered_kg"), 10000) as co2_max
-      FROM public.trees;
-    `;
-    
-    // Get distinct economic importance values
-    const economicQuery = `
+    // Use Redis cache if available (1 hour TTL) - this is expensive data to compute
+    const responseData = await cachedQuery('filter-metadata', 3600, async () => {
+      // Get distinct species names
+      const speciesQuery = `
+        SELECT DISTINCT common_name 
+        FROM public.trees 
+        WHERE common_name IS NOT NULL AND common_name != ''
+        ORDER BY common_name
+        LIMIT 500;
+      `;
+      
+      // Get distinct wards - simple query, sort in JavaScript
+      // (Avoids PostgreSQL DISTINCT + ORDER BY expression mismatch error)
+      const wardsQuery = `
+        SELECT DISTINCT ward
+        FROM public.trees 
+        WHERE ward IS NOT NULL AND ward != '';
+      `;
+      
+      // Get range values for numeric filters
+      const rangesQuery = `
+        SELECT
+          COALESCE(MIN(height_m), 0) as height_min,
+          COALESCE(MAX(height_m), 30) as height_max,
+          COALESCE(MIN(canopy_dia_m), 0) as canopy_min,
+          COALESCE(MAX(canopy_dia_m), 20) as canopy_max,
+          COALESCE(MIN(girth_cm), 0) as girth_min,
+          COALESCE(MAX(girth_cm), 500) as girth_max,
+          COALESCE(MIN("CO2_sequestered_kg"), 0) as co2_min,
+          COALESCE(MAX("CO2_sequestered_kg"), 10000) as co2_max
+        FROM public.trees;
+      `;
+      
+      // Get distinct economic importance values
+      const economicQuery = `
       SELECT DISTINCT economic_i 
       FROM public.trees 
       WHERE economic_i IS NOT NULL AND economic_i != ''
@@ -483,28 +570,29 @@ app.get('/api/filter-metadata', async (req, res) => {
       // Continue without location counts - they're optional
     }
     
-    const responseData = {
-      species: speciesResult.rows.map(r => r.common_name),
-      wards: sortedWards,
-      heightRange: {
-        min: Math.floor(parseFloat(ranges.height_min) || 0),
-        max: Math.ceil(parseFloat(ranges.height_max) || 30)
-      },
-      canopyRange: {
-        min: Math.floor(parseFloat(ranges.canopy_min) || 0),
-        max: Math.ceil(parseFloat(ranges.canopy_max) || 20)
-      },
-      girthRange: {
-        min: Math.floor(parseFloat(ranges.girth_min) || 0),
-        max: Math.ceil(parseFloat(ranges.girth_max) || 500)
-      },
-      co2Range: {
-        min: Math.floor(parseFloat(ranges.co2_min) || 0),
-        max: Math.ceil(parseFloat(ranges.co2_max) || 10000)
-      },
-      economicImportanceOptions: economicResult.rows.map(r => r.economic_i),
-      locationCounts
-    };
+      return {
+        species: speciesResult.rows.map(r => r.common_name),
+        wards: sortedWards,
+        heightRange: {
+          min: Math.floor(parseFloat(ranges.height_min) || 0),
+          max: Math.ceil(parseFloat(ranges.height_max) || 30)
+        },
+        canopyRange: {
+          min: Math.floor(parseFloat(ranges.canopy_min) || 0),
+          max: Math.ceil(parseFloat(ranges.canopy_max) || 20)
+        },
+        girthRange: {
+          min: Math.floor(parseFloat(ranges.girth_min) || 0),
+          max: Math.ceil(parseFloat(ranges.girth_max) || 500)
+        },
+        co2Range: {
+          min: Math.floor(parseFloat(ranges.co2_min) || 0),
+          max: Math.ceil(parseFloat(ranges.co2_max) || 10000)
+        },
+        economicImportanceOptions: economicResult.rows.map(r => r.economic_i),
+        locationCounts
+      };
+    }); // End of cachedQuery callback
     
     console.log(`[filter-metadata] Success in ${Date.now() - startTime}ms - Species: ${responseData.species.length}, Wards: ${responseData.wards.length}`);
     res.json(responseData);
@@ -1178,15 +1266,26 @@ app.get('/api/census-validation', async (req, res) => {
 
 /**
  * GET /api/warm-up
- * Warms up database connection pool to reduce cold start latency
+ * Warms up database connection pool and Redis to reduce cold start latency
  * Call this endpoint periodically (e.g., every 5 min via cron) to keep connections warm
  */
 app.get('/api/warm-up', async (req, res) => {
   const startTime = Date.now();
   
   try {
-    // Run a simple query to warm up the connection
+    // Warm up database connection
     await queryWithRetry('SELECT 1 as ping');
+    
+    // Warm up Redis if available
+    let redisStatus = 'disabled';
+    if (redis && redisEnabled) {
+      try {
+        await redis.ping();
+        redisStatus = 'connected';
+      } catch (e) {
+        redisStatus = 'error: ' + e.message;
+      }
+    }
     
     const warmupTime = Date.now() - startTime;
     
@@ -1198,7 +1297,8 @@ app.get('/api/warm-up', async (req, res) => {
         total: pool.totalCount,
         idle: pool.idleCount,
         waiting: pool.waitingCount
-      }
+      },
+      redis: redisStatus
     });
   } catch (err) {
     res.status(500).json({
