@@ -163,6 +163,9 @@ app.get('/api/trees/:id', async (req, res) => {
 });
 
 app.get('/api/city-stats', async (req, res) => {
+    // CDN caching: City stats are aggregates that rarely change
+    res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400');
+    
     try {
         const query = `
             SELECT
@@ -179,6 +182,9 @@ app.get('/api/city-stats', async (req, res) => {
 });
 
 app.get('/api/ward-data', async (req, res) => {
+    // CDN caching: Ward-level data rarely changes
+    res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400');
+    
     try {
         const query = `
             SELECT
@@ -776,8 +782,12 @@ app.post('/api/chart-data', async (req, res) => {
 /**
  * GET /api/ward-boundaries
  * Returns ward polygons as GeoJSON for map visualization
+ * Cached for 1 hour, stale for 24 hours (polygon data rarely changes)
  */
 app.get('/api/ward-boundaries', async (req, res) => {
+  // CDN caching: Ward boundaries are static data, cache heavily
+  res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+  
   try {
     const query = `
       SELECT 
@@ -829,8 +839,12 @@ app.get('/api/ward-boundaries', async (req, res) => {
 /**
  * GET /api/ward-stats
  * Returns tree statistics aggregated by ward from census data
+ * Cached for 30 min (census data updates infrequently)
  */
 app.get('/api/ward-stats', async (req, res) => {
+  // CDN caching: Ward stats change rarely
+  res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400');
+  
   try {
     const query = `
       SELECT 
@@ -880,9 +894,12 @@ app.get('/api/ward-stats', async (req, res) => {
 /**
  * GET /api/land-cover/wards
  * Returns land cover statistics per ward from GEE export data
- * Falls back to sample data if GEE data not yet imported
+ * Cached for 1 hour (satellite data updates infrequently)
  */
 app.get('/api/land-cover/wards', async (req, res) => {
+  // CDN caching: Land cover data is quasi-static
+  res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+  
   try {
     // Check if land_cover_stats table exists
     const tableCheck = await queryWithRetry(`
@@ -939,9 +956,12 @@ app.get('/api/land-cover/wards', async (req, res) => {
 /**
  * GET /api/land-cover/comparison
  * Returns comparison between years - supports year-over-year and overall change
- * Query params: from_year, to_year (defaults to 2019-2025 overall)
+ * Cached for 1 hour (historical data doesn't change)
  */
 app.get('/api/land-cover/comparison', async (req, res) => {
+  // CDN caching: Historical comparison data is static
+  res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+  
   try {
     const fromYear = parseInt(req.query.from_year) || 2019;
     const toYear = parseInt(req.query.to_year) || 2025;
@@ -1018,8 +1038,12 @@ app.get('/api/land-cover/comparison', async (req, res) => {
 /**
  * GET /api/land-cover/timeline
  * Returns historical timeline of land cover changes (2019-2025)
+ * Cached for 1 hour (timeline data is historical)
  */
 app.get('/api/land-cover/timeline', async (req, res) => {
+  // CDN caching: Timeline data is historical/static
+  res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+  
   try {
     // Get city-wide averages per year
     const yearlyStats = await queryWithRetry(`
@@ -1145,6 +1169,248 @@ app.get('/api/census-validation', async (req, res) => {
   } catch (err) {
     console.error('Error fetching census validation:', err.message);
     res.status(500).json({ error: 'Failed to fetch validation data', details: err.message });
+  }
+});
+
+// ============================================================================
+// PERFORMANCE OPTIMIZATION ENDPOINTS
+// ============================================================================
+
+/**
+ * GET /api/warm-up
+ * Warms up database connection pool to reduce cold start latency
+ * Call this endpoint periodically (e.g., every 5 min via cron) to keep connections warm
+ */
+app.get('/api/warm-up', async (req, res) => {
+  const startTime = Date.now();
+  
+  try {
+    // Run a simple query to warm up the connection
+    await queryWithRetry('SELECT 1 as ping');
+    
+    const warmupTime = Date.now() - startTime;
+    
+    res.json({
+      status: 'warm',
+      latency_ms: warmupTime,
+      timestamp: new Date().toISOString(),
+      pool_stats: {
+        total: pool.totalCount,
+        idle: pool.idleCount,
+        waiting: pool.waitingCount
+      }
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'cold',
+      error: err.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * GET /api/green-cover/bundle
+ * Returns ALL Green Cover Monitor data in a single request
+ * This eliminates 4 separate API calls and reduces cold start impact
+ * Cached for 1 hour with 24h stale-while-revalidate
+ */
+app.get('/api/green-cover/bundle', async (req, res) => {
+  const startTime = Date.now();
+  
+  // Heavy CDN caching - this is the most impactful optimization
+  res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+  
+  try {
+    console.log('[green-cover/bundle] Fetching bundled data...');
+    
+    // Run all queries in parallel for maximum speed
+    const [timelineResult, wardsResult, comparisonResult, statsResult] = await Promise.all([
+      // Timeline data
+      (async () => {
+        const yearlyStats = await queryWithRetry(`
+          SELECT 
+            year, COUNT(*) as ward_count,
+            ROUND(AVG(trees_pct)::numeric, 2) as avg_trees_pct,
+            ROUND(AVG(built_pct)::numeric, 2) as avg_built_pct,
+            ROUND(SUM(trees_area_m2)::numeric, 0) as total_trees_area_m2,
+            ROUND(SUM(built_area_m2)::numeric, 0) as total_built_area_m2
+          FROM land_cover_stats GROUP BY year ORDER BY year;
+        `);
+        
+        const yoyChanges = await queryWithRetry(`
+          SELECT from_year, to_year, period,
+            ROUND(SUM(trees_lost_m2)::numeric, 0) as total_trees_lost_m2,
+            ROUND(SUM(trees_gained_m2)::numeric, 0) as total_trees_gained_m2,
+            ROUND(SUM(net_tree_change_m2)::numeric, 0) as net_tree_change_m2
+          FROM land_cover_change
+          WHERE from_year != 2019 OR to_year != 2025
+          GROUP BY from_year, to_year, period ORDER BY from_year;
+        `);
+        
+        const overall = await queryWithRetry(`
+          SELECT 
+            ROUND(SUM(trees_lost_m2)::numeric, 0) as total_trees_lost_m2,
+            ROUND(SUM(trees_gained_m2)::numeric, 0) as total_trees_gained_m2,
+            ROUND(SUM(net_tree_change_m2)::numeric, 0) as net_tree_change_m2,
+            ROUND(SUM(built_gained_m2)::numeric, 0) as total_built_gained_m2
+          FROM land_cover_change WHERE from_year = 2019 AND to_year = 2025;
+        `);
+        
+        return {
+          source: 'database',
+          years: yearlyStats.rows.map(r => ({
+            ...r,
+            total_trees_area_ha: (r.total_trees_area_m2 / 10000).toFixed(2),
+            total_built_area_ha: (r.total_built_area_m2 / 10000).toFixed(2)
+          })),
+          year_over_year_changes: yoyChanges.rows.map(r => ({
+            ...r,
+            net_tree_change_ha: (r.net_tree_change_m2 / 10000).toFixed(2)
+          })),
+          overall_2019_2025: overall.rows[0] ? {
+            ...overall.rows[0],
+            total_trees_lost_ha: (overall.rows[0].total_trees_lost_m2 / 10000).toFixed(2),
+            total_trees_gained_ha: (overall.rows[0].total_trees_gained_m2 / 10000).toFixed(2),
+            net_tree_change_ha: (overall.rows[0].net_tree_change_m2 / 10000).toFixed(2),
+            total_built_gained_ha: (overall.rows[0].total_built_gained_m2 / 10000).toFixed(2)
+          } : null
+        };
+      })(),
+      
+      // Wards land cover data
+      queryWithRetry(`
+        SELECT ward_number, year, total_area_m2, trees_area_m2, built_area_m2,
+               grass_area_m2, bare_area_m2, trees_pct, built_pct, grass_pct, bare_pct
+        FROM land_cover_stats ORDER BY ward_number, year;
+      `),
+      
+      // Comparison data
+      queryWithRetry(`
+        SELECT ward_number, from_year, to_year, trees_lost_m2, trees_gained_m2,
+               net_tree_change_m2, built_gained_m2
+        FROM land_cover_change WHERE from_year = 2019 AND to_year = 2025
+        ORDER BY ward_number;
+      `),
+      
+      // Ward stats from tree census
+      queryWithRetry(`
+        SELECT 
+          ROUND(ward::numeric)::integer as ward_number,
+          COUNT(*) as tree_count,
+          COUNT(DISTINCT common_name) as species_count,
+          ROUND(AVG(canopy_dia_m)::numeric, 2) as avg_canopy_m,
+          ROUND(AVG(girth_cm)::numeric, 2) as avg_girth_cm,
+          ROUND(AVG(height_m)::numeric, 2) as avg_height_m,
+          ROUND(SUM(canopy_dia_m * canopy_dia_m * 0.785)::numeric, 2) as total_canopy_area_m2
+        FROM trees WHERE ward IS NOT NULL
+        GROUP BY ROUND(ward::numeric)::integer
+        ORDER BY ROUND(ward::numeric)::integer;
+      `)
+    ]);
+    
+    const queryTime = Date.now() - startTime;
+    console.log(`[green-cover/bundle] Completed in \${queryTime}ms`);
+    
+    res.json({
+      timeline: timelineResult,
+      wards: { source: 'database', data: wardsResult.rows },
+      comparison: { source: 'database', data: comparisonResult.rows },
+      wardStats: {
+        data: statsResult.rows.map(row => ({
+          ...row,
+          tree_count: parseInt(row.tree_count),
+          species_count: parseInt(row.species_count),
+          total_canopy_area_ha: parseFloat((row.total_canopy_area_m2 / 10000).toFixed(2)) || 0
+        }))
+      },
+      _meta: {
+        query_time_ms: queryTime,
+        cached: false,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (err) {
+    console.error('[green-cover/bundle] Error:', err.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch green cover data', 
+      details: err.message 
+    });
+  }
+});
+
+/**
+ * GET /api/startup-bundle
+ * Returns ALL essential data for app startup in a single request
+ * Includes: city stats, ward data, filter metadata
+ * This is called on app load to pre-populate stores
+ */
+app.get('/api/startup-bundle', async (req, res) => {
+  const startTime = Date.now();
+  
+  // Cache for 30 min, serve stale for 24h
+  res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400');
+  
+  try {
+    console.log('[startup-bundle] Fetching essential startup data...');
+    
+    const [cityStats, wardData, filterMetadata] = await Promise.all([
+      // City stats
+      queryWithRetry(`
+        SELECT COUNT(*) AS total_trees, SUM("CO2_sequestered_kg") AS total_co2_annual_kg
+        FROM public.trees;
+      `),
+      
+      // Ward data
+      queryWithRetry(`
+        SELECT ward, COUNT(*) AS tree_count, SUM("CO2_sequestered_kg") AS co2_kg
+        FROM public.trees WHERE ward IS NOT NULL
+        GROUP BY ward ORDER BY ward::double precision::int;
+      `),
+      
+      // Filter metadata (species, wards, ranges)
+      (async () => {
+        const [species, wards, ranges, economic] = await Promise.all([
+          queryWithRetry(`SELECT DISTINCT common_name FROM public.trees WHERE common_name IS NOT NULL AND common_name != '' ORDER BY common_name LIMIT 500;`),
+          queryWithRetry(`SELECT DISTINCT ward FROM public.trees WHERE ward IS NOT NULL AND ward != '';`),
+          queryWithRetry(`SELECT COALESCE(MIN(height_m), 0) as height_min, COALESCE(MAX(height_m), 30) as height_max, COALESCE(MIN(canopy_dia_m), 0) as canopy_min, COALESCE(MAX(canopy_dia_m), 20) as canopy_max, COALESCE(MIN(girth_cm), 0) as girth_min, COALESCE(MAX(girth_cm), 500) as girth_max, COALESCE(MIN("CO2_sequestered_kg"), 0) as co2_min, COALESCE(MAX("CO2_sequestered_kg"), 10000) as co2_max FROM public.trees;`),
+          queryWithRetry(`SELECT DISTINCT economic_i FROM public.trees WHERE economic_i IS NOT NULL AND economic_i != '' ORDER BY economic_i;`)
+        ]);
+        
+        const sortedWards = wards.rows.map(r => r.ward).map(ward => {
+          const num = parseFloat(ward);
+          return { original: ward, display: !isNaN(num) ? String(Math.floor(num)) : ward, sortKey: !isNaN(num) ? num : 999999 };
+        }).sort((a, b) => a.sortKey !== b.sortKey ? a.sortKey - b.sortKey : a.display.localeCompare(b.display))
+          .map(w => w.display).filter((v, i, arr) => arr.indexOf(v) === i);
+        
+        const r = ranges.rows[0] || {};
+        return {
+          species: species.rows.map(row => row.common_name),
+          wards: sortedWards,
+          heightRange: { min: Math.floor(parseFloat(r.height_min) || 0), max: Math.ceil(parseFloat(r.height_max) || 30) },
+          canopyRange: { min: Math.floor(parseFloat(r.canopy_min) || 0), max: Math.ceil(parseFloat(r.canopy_max) || 20) },
+          girthRange: { min: Math.floor(parseFloat(r.girth_min) || 0), max: Math.ceil(parseFloat(r.girth_max) || 500) },
+          co2Range: { min: Math.floor(parseFloat(r.co2_min) || 0), max: Math.ceil(parseFloat(r.co2_max) || 10000) },
+          economicImportanceOptions: economic.rows.map(row => row.economic_i)
+        };
+      })()
+    ]);
+    
+    const queryTime = Date.now() - startTime;
+    console.log(`[startup-bundle] Completed in \${queryTime}ms`);
+    
+    res.json({
+      cityStats: cityStats.rows[0],
+      wardData: wardData.rows,
+      filterMetadata,
+      _meta: {
+        query_time_ms: queryTime,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (err) {
+    console.error('[startup-bundle] Error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch startup data', details: err.message });
   }
 });
 

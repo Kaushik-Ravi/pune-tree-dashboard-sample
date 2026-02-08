@@ -12,6 +12,11 @@ import TourGuide, { TourControlAction } from './components/tour/TourGuide';
 import { getStepRequirements, getTourSteps } from './components/tour/tourConfig';
 import { useGreenCoverInit } from './store/GreenCoverStore';
 
+// API warm-up: Send a lightweight ping to warm up database connections
+// This runs once on module load, before React even mounts
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+fetch(`${API_BASE}/api/warm-up`).catch(() => {}); // Fire and forget
+
 function App() {
   // Prefetch Green Cover data on app load (like TreeStore does)
   useGreenCoverInit();

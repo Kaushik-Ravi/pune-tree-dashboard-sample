@@ -99,20 +99,25 @@ interface GreenCoverState {
   
   // Loading states
   isLoading: boolean;
+  isBackgroundRefreshing: boolean; // For stale-while-revalidate pattern
   isInitialized: boolean;
   error: string | null;
   lastFetchTime: number | null;
   
   // Actions
   fetchAllData: () => Promise<void>;
+  fetchFresh: () => Promise<void>;
+  refreshInBackground: () => Promise<void>;
   refreshData: () => Promise<void>;
   clearCache: () => void;
   flyToWard: (wardNumber: number) => void;
   clearSelectedWard: () => void;
 }
 
-// Cache duration: 5 minutes
+// Cache duration: 5 minutes (show stale data immediately, refresh in background if older)
 const CACHE_DURATION_MS = 5 * 60 * 1000;
+// Stale duration: 30 minutes (beyond this, force fresh fetch)
+const STALE_DURATION_MS = 30 * 60 * 1000;
 
 // ============================================================================
 // STORE CREATION
@@ -129,66 +134,109 @@ export const useGreenCoverStore = create<GreenCoverState>()(
       selectedWardNumber: null,
       flyToWardTrigger: 0,
       isLoading: false,
+      isBackgroundRefreshing: false,
       isInitialized: false,
       error: null,
       lastFetchTime: null,
       
-      // Fetch all data (with cache check)
+      // Fetch all data with stale-while-revalidate pattern
+      // Shows cached data immediately, refreshes in background if stale
       fetchAllData: async () => {
         const state = get();
+        const now = Date.now();
+        const hasData = state.isInitialized && state.timelineData && state.wardData.length > 0;
+        const isFresh = state.lastFetchTime && (now - state.lastFetchTime < CACHE_DURATION_MS);
+        const isStale = state.lastFetchTime && (now - state.lastFetchTime >= CACHE_DURATION_MS);
+        const isVeryStale = !state.lastFetchTime || (now - state.lastFetchTime >= STALE_DURATION_MS);
         
-        // Check if we have fresh cached data
-        if (
-          state.isInitialized &&
-          state.lastFetchTime &&
-          Date.now() - state.lastFetchTime < CACHE_DURATION_MS &&
-          state.timelineData &&
-          state.wardData.length > 0
-        ) {
-          console.log('[GreenCoverStore] Using cached data');
+        // Fresh data - nothing to do
+        if (hasData && isFresh) {
+          console.log('[GreenCoverStore] Using fresh cached data');
           return;
         }
         
-        // Fetch fresh data
-        set({ isLoading: true, error: null });
-        
-        try {
-          console.log('[GreenCoverStore] Fetching fresh data...');
+        // Stale but usable data - refresh in background
+        if (hasData && isStale && !isVeryStale) {
+          console.log('[GreenCoverStore] Showing stale data, refreshing in background...');
+          set({ isBackgroundRefreshing: true });
           
-          const [timelineRes, wardsRes, comparisonRes, statsRes] = await Promise.all([
-            axios.get(`${API_BASE_URL}/api/land-cover/timeline`, { timeout: 60000 }),
-            axios.get(`${API_BASE_URL}/api/land-cover/wards`, { timeout: 60000 }),
-            axios.get(`${API_BASE_URL}/api/land-cover/comparison?from_year=2019&to_year=2025`, { timeout: 60000 }),
-            axios.get(`${API_BASE_URL}/api/ward-stats`, { timeout: 60000 }),
-          ]);
+          // Background fetch - don't await, let it complete in background
+          get().refreshInBackground();
+          return;
+        }
+        
+        // No data or very stale - full loading state
+        set({ isLoading: true, error: null });
+        await get().fetchFresh();
+      },
+      
+      // Internal: fetch fresh data from API
+      fetchFresh: async () => {
+        try {
+          console.log('[GreenCoverStore] Fetching fresh bundled data...');
+          
+          const response = await axios.get(`${API_BASE_URL}/api/green-cover/bundle`, { 
+            timeout: 90000
+          });
+          
+          const { timeline, wards, comparison, wardStats, _meta } = response.data;
           
           set({
-            timelineData: timelineRes.data,
-            wardData: wardsRes.data?.data || [],
-            comparisonData: comparisonRes.data?.data || [],
-            wardStats: statsRes.data?.data || [],
+            timelineData: timeline,
+            wardData: wards?.data || [],
+            comparisonData: comparison?.data || [],
+            wardStats: wardStats?.data || [],
             isLoading: false,
+            isBackgroundRefreshing: false,
             isInitialized: true,
             error: null,
             lastFetchTime: Date.now(),
           });
           
           console.log('[GreenCoverStore] Data loaded successfully', {
-            timelineYears: timelineRes.data?.years?.length || 0,
-            wardDataCount: wardsRes.data?.data?.length || 0,
-            comparisonCount: comparisonRes.data?.data?.length || 0,
-            wardStatsCount: statsRes.data?.data?.length || 0,
+            timelineYears: timeline?.years?.length || 0,
+            wardDataCount: wards?.data?.length || 0,
+            queryTimeMs: _meta?.query_time_ms
           });
         } catch (error: any) {
           console.error('[GreenCoverStore] Error fetching data:', error);
           // Reset to safe defaults on error to prevent .map() on undefined
           set({
             isLoading: false,
+            isBackgroundRefreshing: false,
             error: error.message || 'Failed to load green cover data',
             wardData: [],
             comparisonData: [],
             wardStats: [],
           });
+        }
+      },
+      
+      // Internal: refresh data in background without blocking UI
+      refreshInBackground: async () => {
+        try {
+          const response = await axios.get(`${API_BASE_URL}/api/green-cover/bundle`, { 
+            timeout: 90000
+          });
+          
+          const { timeline, wards, comparison, wardStats, _meta } = response.data;
+          
+          set({
+            timelineData: timeline,
+            wardData: wards?.data || [],
+            comparisonData: comparison?.data || [],
+            wardStats: wardStats?.data || [],
+            isBackgroundRefreshing: false,
+            lastFetchTime: Date.now(),
+          });
+          
+          console.log('[GreenCoverStore] Background refresh completed', {
+            queryTimeMs: _meta?.query_time_ms
+          });
+        } catch (error: any) {
+          console.error('[GreenCoverStore] Background refresh failed (using stale data):', error.message);
+          set({ isBackgroundRefreshing: false });
+          // Don't update data or show error - keep using stale data
         }
       },
       
