@@ -174,6 +174,15 @@ const renderPieLabel = (props: {
 const DynamicChart: React.FC<DynamicChartProps> = ({ data, config }) => {
   const { chartType, showDataLabels, metric, groupBy } = config;
 
+  // Guard against invalid data
+  if (!Array.isArray(data) || data.length === 0) {
+    return (
+      <div className="h-[300px] flex items-center justify-center text-gray-400">
+        No data available
+      </div>
+    );
+  }
+
   // Add colors to data
   const coloredData = data.map((item, index) => ({
     ...item,

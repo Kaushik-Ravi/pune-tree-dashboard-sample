@@ -184,12 +184,19 @@ const DeforestationHotspotsLayer: React.FC<DeforestationHotspotsLayerProps> = ({
 
   // Enrich GeoJSON with hotspot data
   const enrichedData = useMemo(() => {
-    if (!geojsonData || !comparisonData) {
+    if (!geojsonData?.features || !Array.isArray(geojsonData.features) || !comparisonData) {
       console.log('[DeforestationHotspots] Missing data:', { 
         hasGeojson: !!geojsonData, 
+        hasFeatures: !!geojsonData?.features,
         hasComparison: !!comparisonData,
         comparisonLength: comparisonData?.length 
       });
+      return null;
+    }
+    
+    // Additional guard for empty features
+    if (geojsonData.features.length === 0) {
+      console.log('[DeforestationHotspots] No features to process');
       return null;
     }
     

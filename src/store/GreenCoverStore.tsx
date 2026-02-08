@@ -156,10 +156,10 @@ export const useGreenCoverStore = create<GreenCoverState>()(
           console.log('[GreenCoverStore] Fetching fresh data...');
           
           const [timelineRes, wardsRes, comparisonRes, statsRes] = await Promise.all([
-            axios.get(`${API_BASE_URL}/api/land-cover/timeline`, { timeout: 30000 }),
-            axios.get(`${API_BASE_URL}/api/land-cover/wards`, { timeout: 30000 }),
-            axios.get(`${API_BASE_URL}/api/land-cover/comparison?from_year=2019&to_year=2025`, { timeout: 30000 }),
-            axios.get(`${API_BASE_URL}/api/ward-stats`, { timeout: 30000 }),
+            axios.get(`${API_BASE_URL}/api/land-cover/timeline`, { timeout: 60000 }),
+            axios.get(`${API_BASE_URL}/api/land-cover/wards`, { timeout: 60000 }),
+            axios.get(`${API_BASE_URL}/api/land-cover/comparison?from_year=2019&to_year=2025`, { timeout: 60000 }),
+            axios.get(`${API_BASE_URL}/api/ward-stats`, { timeout: 60000 }),
           ]);
           
           set({
@@ -181,9 +181,13 @@ export const useGreenCoverStore = create<GreenCoverState>()(
           });
         } catch (error: any) {
           console.error('[GreenCoverStore] Error fetching data:', error);
+          // Reset to safe defaults on error to prevent .map() on undefined
           set({
             isLoading: false,
             error: error.message || 'Failed to load green cover data',
+            wardData: [],
+            comparisonData: [],
+            wardStats: [],
           });
         }
       },
@@ -230,6 +234,18 @@ export const useGreenCoverStore = create<GreenCoverState>()(
         isInitialized: state.isInitialized,
         lastFetchTime: state.lastFetchTime,
       }),
+      // Validate persisted data to ensure arrays remain arrays
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<GreenCoverState> | undefined;
+        return {
+          ...currentState,
+          ...persisted,
+          // Ensure arrays are always arrays - defend against corrupted localStorage
+          wardData: Array.isArray(persisted?.wardData) ? persisted.wardData : [],
+          comparisonData: Array.isArray(persisted?.comparisonData) ? persisted.comparisonData : [],
+          wardStats: Array.isArray(persisted?.wardStats) ? persisted.wardStats : [],
+        };
+      },
     }
   )
 );

@@ -146,11 +146,18 @@ const LandCoverOverlay: React.FC<LandCoverOverlayProps> = ({ config }) => {
     setGlobalLoading('ward_overlay', true);
     
     fetch(`${API_BASE}/api/ward-boundaries`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP error: ${res.status}`);
+        }
+        return res.json();
+      })
       .then((data: WardBoundaryGeoJSON) => {
-        console.log('[LandCoverOverlay] Ward boundaries loaded:', data.features?.length || 0);
-        if (data.features && data.features.length > 0) {
+        console.log('[LandCoverOverlay] Ward boundaries loaded:', data?.features?.length || 0);
+        if (data?.features && Array.isArray(data.features) && data.features.length > 0) {
           setGeojsonData(data);
+        } else {
+          console.warn('[LandCoverOverlay] No valid features in response');
         }
       })
       .catch(err => console.error('[LandCoverOverlay] Failed to fetch ward boundaries:', err))
@@ -165,12 +172,19 @@ const LandCoverOverlay: React.FC<LandCoverOverlayProps> = ({ config }) => {
   
   // Process and enhance GeoJSON with land cover data
   const enhancedGeojson = useMemo<WardBoundaryGeoJSON | null>(() => {
-    if (!geojsonData || !wardData) {
+    if (!geojsonData?.features || !Array.isArray(geojsonData.features) || !wardData) {
       console.log('[LandCoverOverlay] Cannot create enhanced geojson:', {
         hasGeojson: !!geojsonData,
+        hasFeatures: !!geojsonData?.features,
         hasWardData: !!wardData,
         wardDataLength: wardData?.length
       });
+      return null;
+    }
+    
+    // Additional safety - ensure features is a valid array
+    if (geojsonData.features.length === 0) {
+      console.log('[LandCoverOverlay] No features in geojson');
       return null;
     }
     

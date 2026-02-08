@@ -272,7 +272,8 @@ const TrendSparkline: React.FC<{
   color: string;
   height?: number;
 }> = ({ values, color, height = 32 }) => {
-  if (values.length < 2) return null;
+  // Guard against undefined or invalid values
+  if (!values || !Array.isArray(values) || values.length < 2) return null;
   
   const max = Math.max(...values);
   const min = Math.min(...values);
@@ -1160,6 +1161,11 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
     // Ensure wardData is an array
     const wardDataArray = Array.isArray(wardData) ? wardData : [];
     const currentYearData = wardDataArray.filter(w => w.year === selectedYear);
+    
+    // Early return if no data
+    if (currentYearData.length === 0) {
+      return [];
+    }
     
     // Ensure wardStats is an array
     const statsArray = Array.isArray(wardStats) ? wardStats : [];

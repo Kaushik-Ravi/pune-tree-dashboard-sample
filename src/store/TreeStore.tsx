@@ -139,12 +139,24 @@ export const TreeStoreProvider: React.FC<{ children: ReactNode }> = ({ children 
     try {
         const response = await axios.get<WardData[]>(`${API_BASE_URL}/api/ward-data`);
         const wardsData = response.data;
+        
+        // Guard against non-array response
+        if (!Array.isArray(wardsData)) {
+          console.warn('Ward data is not an array:', wardsData);
+          setWardCO2Data([]);
+          setWardTreeCountData([]);
+          return;
+        }
+        
         const co2Data = wardsData.map(w => ({ ward: w.ward, co2_kg: parseFloat(String(w.co2_kg)) }));
         const treeCountData = wardsData.map(w => ({ ward: w.ward, tree_count: parseInt(String(w.tree_count), 10) }));
         setWardCO2Data(co2Data);
         setWardTreeCountData(treeCountData);
     } catch (error) {
         console.error('Error fetching ward data:', error);
+        // Reset to safe defaults on error
+        setWardCO2Data([]);
+        setWardTreeCountData([]);
     }
   }, []);
 
