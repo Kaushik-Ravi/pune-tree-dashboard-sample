@@ -39,7 +39,7 @@ interface LayerLoadingState {
 
 // Safety timeout - auto-clear loading state after 30s (in case of errors)
 const LOADING_TIMEOUT_MS = 30000;
-const layerTimeouts = new Map<LayerType, NodeJS.Timeout>();
+const layerTimeouts = new Map<LayerType, ReturnType<typeof setTimeout>>();
 
 export const useLayerLoadingStore = create<LayerLoadingState>((set, get) => ({
   loadingLayers: new Set(),

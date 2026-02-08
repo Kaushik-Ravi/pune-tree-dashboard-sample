@@ -3,12 +3,14 @@
  * RASTER TOOLTIP COMPONENT
  * ========================
  * 
- * Displays raster pixel information on hover.
+ * Displays raster pixel information on hover/touch.
  * Shows layer name, value, unit, and contextual description.
- * Positioned relative to cursor position on the map.
+ * 
+ * Desktop: Positioned relative to cursor position on the map.
+ * Mobile: Shows as a card at the bottom of the screen with close button.
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { RasterPixelInfo } from '../../hooks/useRasterPixelValue';
 import { 
   TreeDeciduous, 
@@ -21,13 +23,15 @@ import {
   Droplets,
   Mountain,
   Wheat,
-  Loader2
+  Loader2,
+  X
 } from 'lucide-react';
 
 interface RasterTooltipProps {
   pixelInfo: RasterPixelInfo | null;
   isLoading?: boolean;
   position: { x: number; y: number } | null;
+  onClose?: () => void;
 }
 
 // ============================================================================
@@ -99,14 +103,38 @@ function getChangeIndicator(value: number, layer: string) {
 const RasterTooltip: React.FC<RasterTooltipProps> = ({
   pixelInfo,
   isLoading = false,
-  position
+  position,
+  onClose
 }) => {
+  // Detect if on mobile device - use ONLY screen width, not touch capability
+  // (Many laptops have touch screens but should use cursor-following tooltip)
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      // Only use screen width to determine mobile - not touch capability
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
   if (!position || (!pixelInfo && !isLoading)) {
     return null;
   }
 
-  // Position tooltip offset from cursor
-  const tooltipStyle: React.CSSProperties = {
+  // Mobile: Fixed at bottom of screen (card format)
+  // Desktop/Laptop: Follow cursor with offset (normal tooltip behavior)
+  const tooltipStyle: React.CSSProperties = isMobile ? {
+    position: 'fixed',
+    left: '50%',
+    bottom: '80px',
+    transform: 'translateX(-50%)',
+    zIndex: 1000,
+    width: 'calc(100% - 2rem)',
+    maxWidth: '320px',
+  } : {
     position: 'fixed',
     left: position.x + 15,
     top: position.y - 10,
@@ -115,12 +143,14 @@ const RasterTooltip: React.FC<RasterTooltipProps> = ({
     maxWidth: '280px',
   };
 
-  // Adjust if tooltip would go off screen
-  if (position.x > window.innerWidth - 300) {
-    tooltipStyle.left = position.x - 290;
-  }
-  if (position.y > window.innerHeight - 150) {
-    tooltipStyle.top = position.y - 130;
+  // Adjust desktop position if tooltip would go off screen
+  if (!isMobile) {
+    if (position.x > window.innerWidth - 300) {
+      tooltipStyle.left = position.x - 290;
+    }
+    if (position.y > window.innerHeight - 150) {
+      tooltipStyle.top = position.y - 130;
+    }
   }
 
   if (isLoading) {
@@ -146,9 +176,21 @@ const RasterTooltip: React.FC<RasterTooltipProps> = ({
     <div style={tooltipStyle}>
       <div className="bg-white/95 backdrop-blur-sm rounded-lg shadow-lg border border-gray-200 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100">
-          {getLayerIcon(layer)}
-          <span className="font-medium text-sm text-gray-800">{layerName}</span>
+        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            {getLayerIcon(layer)}
+            <span className="font-medium text-sm text-gray-800">{layerName}</span>
+          </div>
+          {/* Close button - visible on mobile */}
+          {isMobile && onClose && (
+            <button 
+              onClick={onClose}
+              className="p-1 hover:bg-gray-200 rounded-full transition-colors"
+              aria-label="Close"
+            >
+              <X size={16} className="text-gray-500" />
+            </button>
+          )}
         </div>
         
         {/* Content */}

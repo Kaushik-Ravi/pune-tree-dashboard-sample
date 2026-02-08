@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({
   origin: process.env.VERCEL === '1' 
     ? true // Allow all origins in production (Vercel deployment)
-    : 'http://localhost:5173',
+    : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176'],
   credentials: true
 }));
 app.use(express.json());

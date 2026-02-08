@@ -27,6 +27,7 @@ import { useRasterPixelValue } from '../../hooks/useRasterPixelValue';
 import DrawControl, { DrawEvent, DrawActionEvent } from './DrawControl';
 import MapboxDraw from 'maplibre-gl-draw';
 import ViewModeToggle from './ViewModeToggle';
+import Geocoder from './Geocoder';
 import ThreeDTreesLayer from './ThreeDTreesLayer';
 import { RealisticShadowsLayer } from './RealisticShadowsLayer';
 import { LightConfig } from '../sidebar/tabs/LightAndShadowControl';
@@ -649,13 +650,24 @@ const MapView: React.FC<MapViewProps> = ({
       map.setFilter('trees-point-highlight', ['==', 'Tree_ID', treeFeature ? treeFeature.properties.Tree_ID : '']);
     }
     
-    // Handle raster tooltip
+    // Handle raster tooltip - suppress when hovering over land-cover-overlay to avoid conflicts
     if (rasterConfig?.visible) {
       const { lngLat, point } = event;
-      setRasterTooltipPosition({ x: point.x, y: point.y });
-      readRasterPixelValue(lngLat.lng, lngLat.lat);
+      
+      // Check if hovering over land-cover-overlay layer (which has its own popup)
+      const landCoverFeatures = map.queryRenderedFeatures(point, { layers: ['land-cover-overlay'] });
+      const isHoveringLandCover = landCoverFeatures.length > 0 && landCoverConfig?.visible;
+      
+      if (isHoveringLandCover) {
+        // Hide raster tooltip when land cover popup is showing
+        setRasterTooltipPosition(null);
+        clearRasterPixelInfo();
+      } else {
+        setRasterTooltipPosition({ x: point.x, y: point.y });
+        readRasterPixelValue(lngLat.lng, lngLat.lat);
+      }
     }
-  }, [is3D, rasterConfig?.visible, readRasterPixelValue]);
+  }, [is3D, rasterConfig?.visible, landCoverConfig?.visible, readRasterPixelValue, clearRasterPixelInfo]);
   
   // Clear raster tooltip when mouse leaves map
   const handleMouseLeave = useCallback(() => {
@@ -676,8 +688,41 @@ const MapView: React.FC<MapViewProps> = ({
   const handleTouchEnd = useCallback((event: MapLayerTouchEvent) => {
     if (!isDraggingRef.current) {
       handleMapClick(event);
+      
+      // Handle raster tooltip on touch - show info at touch point
+      if (rasterConfig?.visible) {
+        const map = mapRef.current?.getMap();
+        if (!map) return;
+        
+        const { lngLat, point } = event;
+        
+        // Check if touching land-cover-overlay layer (which has its own popup)
+        const landCoverFeatures = map.queryRenderedFeatures(point, { layers: ['land-cover-overlay'] });
+        const isTouchingLandCover = landCoverFeatures.length > 0 && landCoverConfig?.visible;
+        
+        if (!isTouchingLandCover) {
+          // Show raster tooltip at touch position (centered at bottom for mobile)
+          setRasterTooltipPosition({ x: point.x, y: point.y });
+          readRasterPixelValue(lngLat.lng, lngLat.lat);
+        }
+      }
     }
-  }, [handleMapClick]);
+  }, [handleMapClick, rasterConfig?.visible, landCoverConfig?.visible, readRasterPixelValue]);
+
+  // Handle geocoder location selection - fly to the selected place
+  const handleGeocoderSelect = useCallback((lng: number, lat: number, placeName: string, zoom?: number) => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    
+    console.log(`📍 Flying to: ${placeName} (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+    
+    map.flyTo({
+      center: [lng, lat],
+      zoom: zoom ?? 15,
+      duration: 1500,
+      essential: true
+    });
+  }, []);
 
   const interactiveLayers = useMemo(() => {
     const layers = [treeLayerStyle.id];
@@ -689,6 +734,17 @@ const MapView: React.FC<MapViewProps> = ({
 
   return (
     <div className="map-container">
+      {/* Geocoder / Location Search - Floating at top */}
+      {/* Mobile: positioned to the right of nav controls, Desktop: left side */}
+      <div className="absolute top-3 z-30 
+        left-14 right-3 md:left-[60px] md:right-auto
+        md:w-72 lg:w-80">
+        <Geocoder 
+          onSelect={handleGeocoderSelect}
+          placeholder="Search places in Pune..."
+        />
+      </div>
+      
       <Map
         ref={mapRef}
         initialViewState={{ longitude: 73.8567, latitude: 18.5204, zoom: 11.5 }}
@@ -779,12 +835,16 @@ const MapView: React.FC<MapViewProps> = ({
         <NavigationControl position="top-left" showCompass={true} />
       </Map>
       
-      {/* Raster Tooltip - Shows pixel values on hover */}
+      {/* Raster Tooltip - Shows pixel values on hover/touch */}
       {rasterConfig?.visible && (
         <RasterTooltip
           pixelInfo={rasterPixelInfo}
           isLoading={isRasterLoading}
           position={rasterTooltipPosition}
+          onClose={() => {
+            setRasterTooltipPosition(null);
+            clearRasterPixelInfo();
+          }}
         />
       )}
       

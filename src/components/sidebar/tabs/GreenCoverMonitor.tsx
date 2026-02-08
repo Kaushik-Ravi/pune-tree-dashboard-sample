@@ -6,15 +6,20 @@
  * A user-friendly dashboard for monitoring Pune's green cover changes.
  * Inspired by Global Forest Watch, Tree Equity Score, and Resource Watch.
  * 
+ * SECTIONS:
+ * 1. OVERVIEW - City-wide green score and key metrics (always visible)
+ * 2. INSIGHTS - Key findings and historical timeline (expanded by default)
+ * 3. WARD ANALYSIS - Leaderboard table with expandable rows + map controls
+ * 4. DETAILED LAND ANALYSIS - High-resolution satellite raster layers
+ * 
  * Features:
  * - Ward Green Score (0-100 composite score)
- * - Deforestation/Change Alerts
- * - Historical Timeline (2019-2025)
- * - Map-ready data for visualization
- * - Advanced mode for researchers
+ * - Expandable ward rows with ward-specific details + map layer controls
+ * - Ward dimming on map when a ward is selected
+ * - Info buttons explaining use cases for different user types
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   TreePine,
   Building2,
@@ -44,7 +49,15 @@ import {
   Thermometer,
   Image,
   Leaf,
-  Loader2
+  Loader2,
+  HelpCircle,
+  MapPin,
+  Satellite,
+  Users,
+  Briefcase,
+  X,
+  Focus,
+  LayoutGrid
 } from 'lucide-react';
 import { useGreenCoverStore } from '../../../store/GreenCoverStore';
 import { useLayerLoadingStore, rasterLayerToStoreType } from '../../../store/LayerLoadingStore';
@@ -293,12 +306,168 @@ const TrendSparkline: React.FC<{
 };
 
 // ============================================================================
-// WARD LEADERBOARD - Stock Market Style Unified Table
+// COLLAPSIBLE SECTION COMPONENT
+// ============================================================================
+
+interface SectionInfoContent {
+  title: string;
+  description: string;
+  useCases: Array<{
+    icon: React.ReactNode;
+    userType: string;
+    description: string;
+  }>;
+}
+
+const SECTION_INFO: Record<string, SectionInfoContent> = {
+  insights: {
+    title: 'Key Insights & Timeline',
+    description: 'Executive summary of Pune\'s green cover transformation from 2019-2025. View critical statistics like net tree gain/loss in hectares, built-up expansion, and yearly trends through an interactive timeline chart.',
+    useCases: [
+      { icon: <Briefcase size={14} />, userType: 'Policy Makers', description: 'Review city-wide environmental KPIs and 6-year trends for strategic planning' },
+      { icon: <Users size={14} />, userType: 'Researchers', description: 'Access aggregated time-series data for academic analysis and publications' },
+      { icon: <MapPin size={14} />, userType: 'Journalists', description: 'Find headline-worthy statistics and visual data for environmental reporting' },
+    ]
+  },
+  wardAnalysis: {
+    title: 'Ward-Level Analysis',
+    description: 'Interactive leaderboard ranking all 77 wards by composite Green Score (0-100). Score factors: Tree Cover (40%), Built-up Inverse (30%), Change Trend (20%), Tree Density (10%). Click any ward to reveal map controls and fly to that location.',
+    useCases: [
+      { icon: <Briefcase size={14} />, userType: 'Urban Planners', description: 'Identify lowest-scoring wards for targeted greening interventions' },
+      { icon: <Users size={14} />, userType: 'Municipal Officers', description: 'Monitor ward performance and track improvements in your jurisdiction' },
+      { icon: <MapPin size={14} />, userType: 'Citizens & NGOs', description: 'Check your ward\'s health and compare with neighboring wards' },
+    ]
+  },
+  detailedAnalysis: {
+    title: 'Satellite Land Analysis',
+    description: 'Explore 10-meter resolution satellite imagery derived from Sentinel-2 data. Toggle between: Tree Probability (2019/2025), Tree Change, NDVI, and Land Cover (showing trees, shrubs, built-up, etc.). Each layer has its own color legend.',
+    useCases: [
+      { icon: <TreePine size={14} />, userType: 'Tree Planters', description: 'Identify bare patches and low-tree zones suitable for new plantations' },
+      { icon: <Target size={14} />, userType: 'Field Surveyors', description: 'Cross-verify satellite data against ground truth observations' },
+      { icon: <Satellite size={14} />, userType: 'GIS Analysts', description: 'Analyze pixel-level vegetation patterns and land cover classification' },
+    ]
+  }
+};
+
+// Info Tooltip Component
+const InfoTooltip: React.FC<{
+  sectionKey: string;
+  isOpen: boolean;
+  onToggle: () => void;
+}> = ({ sectionKey, isOpen, onToggle }) => {
+  const info = SECTION_INFO[sectionKey];
+  if (!info) return null;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={(e) => { e.stopPropagation(); onToggle(); }}
+        className="p-1 rounded-full hover:bg-gray-200 transition-colors"
+        title="What is this section for?"
+      >
+        <HelpCircle size={14} className="text-gray-400" />
+      </button>
+      
+      {isOpen && (
+        <div className="absolute right-0 top-6 z-50 w-72 bg-white rounded-lg shadow-xl border border-gray-200 p-3 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="font-semibold text-gray-800 text-sm">{info.title}</h4>
+            <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className="p-0.5 hover:bg-gray-100 rounded">
+              <X size={14} className="text-gray-400" />
+            </button>
+          </div>
+          <p className="text-xs text-gray-600 mb-3">{info.description}</p>
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Who uses this:</p>
+            {info.useCases.map((useCase, idx) => (
+              <div key={idx} className="flex items-start gap-2 text-xs">
+                <span className="text-blue-500 mt-0.5">{useCase.icon}</span>
+                <div>
+                  <span className="font-medium text-gray-700">{useCase.userType}:</span>
+                  <span className="text-gray-600 ml-1">{useCase.description}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Collapsible Section Component
+const CollapsibleSection: React.FC<{
+  id: string;
+  title: string;
+  icon: React.ReactNode;
+  isExpanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+  showInfo?: boolean;
+  badge?: React.ReactNode;
+  className?: string;
+}> = ({ id, title, icon, isExpanded, onToggle, children, showInfo = false, badge, className = '' }) => {
+  const [infoOpen, setInfoOpen] = useState(false);
+
+  return (
+    <div className={`border rounded-lg overflow-hidden bg-white ${className}`}>
+      <button
+        className="w-full p-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+        onClick={onToggle}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-gray-600">{icon}</span>
+          <span className="font-medium text-gray-700">{title}</span>
+          {badge}
+        </div>
+        <div className="flex items-center gap-1">
+          {showInfo && (
+            <InfoTooltip 
+              sectionKey={id} 
+              isOpen={infoOpen} 
+              onToggle={() => setInfoOpen(!infoOpen)} 
+            />
+          )}
+          {isExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+        </div>
+      </button>
+      
+      {isExpanded && (
+        <div className="p-3 border-t bg-white">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// WARD LEADERBOARD - Stock Market Style Unified Table with Expandable Rows
 // ============================================================================
 
 type SortColumn = 'rank' | 'ward' | 'score' | 'trees' | 'built' | 'ratio' | 'change';
 type SortDirection = 'asc' | 'desc';
 type FilterType = 'all' | 'critical' | 'at-risk' | 'moderate' | 'good' | 'gaining' | 'losing';
+
+// Hotspot configuration type (moved here for WardLeaderboard access)
+export interface HotspotConfig {
+  lossThreshold: number;
+  colorScheme: 'red' | 'orange' | 'heatmap';
+  opacity: number;
+  showLabels: boolean;
+  pulseAnimation: boolean;
+}
+
+// Land Cover Overlay configuration (moved here for WardLeaderboard access)
+interface LandCoverOverlayConfigLocal {
+  visible: boolean;
+  mode: 'green' | 'built' | 'bivariate' | 'change';
+  year: number;
+  opacity: number;
+  showLabels: boolean;
+  greenColorScale: [string, string];
+  builtColorScale: [string, string];
+}
 
 interface WardLeaderboardProps {
   wardScores: Array<{
@@ -314,18 +483,54 @@ interface WardLeaderboardProps {
   }>;
   onWardClick: (wardNumber: number) => void;
   selectedYear: number;
+  // Map layer control props
+  showWardBoundaries?: boolean;
+  onWardBoundariesToggle?: (enabled: boolean) => void;
+  colorBy?: 'green_score' | 'trees_pct' | 'change';
+  onColorByChange?: (colorBy: 'green_score' | 'trees_pct' | 'change') => void;
+  showDeforestationHotspots?: boolean;
+  onDeforestationHotspotsToggle?: (enabled: boolean) => void;
+  landCoverConfig?: LandCoverOverlayConfigLocal;
+  onLandCoverConfigChange?: (config: LandCoverOverlayConfigLocal) => void;
+  // Loading states
+  isWardOverlayLoading?: boolean;
+  isDeforestationHotspotsLoading?: boolean;
 }
 
 const WardLeaderboard: React.FC<WardLeaderboardProps> = ({
   wardScores,
   onWardClick,
-  selectedYear
+  selectedYear,
+  // Map layer controls
+  showWardBoundaries = false,
+  onWardBoundariesToggle,
+  colorBy = 'green_score',
+  onColorByChange,
+  showDeforestationHotspots = false,
+  onDeforestationHotspotsToggle,
+  landCoverConfig,
+  onLandCoverConfigChange,
+  // Loading states
+  isWardOverlayLoading = false,
+  isDeforestationHotspotsLoading = false,
 }) => {
   const [sortColumn, setSortColumn] = useState<SortColumn>('score');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [showAllRows, setShowAllRows] = useState(false);
   const [hoveredWard, setHoveredWard] = useState<number | null>(null);
+  const [expandedWard, setExpandedWard] = useState<number | null>(null);
+  const [showMapLayersDropdown, setShowMapLayersDropdown] = useState(false);
+  
+  // Handle ward row click - fly to ward AND toggle expanded state
+  const handleWardRowClick = (wardNumber: number) => {
+    if (expandedWard === wardNumber) {
+      setExpandedWard(null); // Collapse if already expanded
+    } else {
+      setExpandedWard(wardNumber);
+      onWardClick(wardNumber); // Fly to ward on map
+    }
+  };
   
   // Handle column header click for sorting
   const handleSort = (column: SortColumn) => {
@@ -495,7 +700,7 @@ const WardLeaderboard: React.FC<WardLeaderboardProps> = ({
       </div>
       
       {/* Table Body */}
-      <div className="max-h-80 overflow-y-auto">
+      <div className="max-h-96 overflow-y-auto">
         {displayedWards.length === 0 ? (
           <div className="p-4 text-center text-gray-500 text-sm">
             No wards match the current filter
@@ -504,86 +709,207 @@ const WardLeaderboard: React.FC<WardLeaderboardProps> = ({
           displayedWards.map((ward) => {
             const rank = sortedWards.indexOf(ward) + 1;
             const isHovered = hoveredWard === ward.ward_number;
+            const isExpanded = expandedWard === ward.ward_number;
             
             return (
-              <button
-                key={ward.ward_number}
-                onClick={() => onWardClick(ward.ward_number)}
-                onMouseEnter={() => setHoveredWard(ward.ward_number)}
-                onMouseLeave={() => setHoveredWard(null)}
-                className={`w-full grid grid-cols-12 gap-1 px-3 py-2 border-b border-gray-100 transition-all hover:shadow-sm cursor-pointer text-left ${getRowBg(ward, isHovered)}`}
-              >
-                {/* Rank */}
-                <div className="col-span-1 flex items-center justify-center">
-                  <span className={`w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center ${
-                    rank <= 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {rank}
-                  </span>
-                </div>
-                
-                {/* Ward Number */}
-                <div className="col-span-2 flex items-center">
-                  <span className="font-medium text-sm text-gray-800">W{ward.ward_number}</span>
-                </div>
-                
-                {/* Green Score with ring */}
-                <div className="col-span-2 flex items-center justify-center">
-                  <div className="relative w-8 h-8">
-                    <svg className="w-8 h-8 transform -rotate-90" viewBox="0 0 32 32">
-                      <circle cx="16" cy="16" r="12" fill="none" stroke="#e5e7eb" strokeWidth="3" />
-                      <circle
-                        cx="16" cy="16" r="12" fill="none"
-                        stroke={getScoreColor(ward.score)}
-                        strokeWidth="3"
-                        strokeDasharray={`${(ward.score / 100) * 75.4} 75.4`}
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold" style={{ color: getScoreColor(ward.score) }}>
-                      {ward.score}
+              <div key={ward.ward_number} className="border-b border-gray-100">
+                {/* Main Row - Clickable */}
+                <button
+                  onClick={() => handleWardRowClick(ward.ward_number)}
+                  onMouseEnter={() => setHoveredWard(ward.ward_number)}
+                  onMouseLeave={() => setHoveredWard(null)}
+                  className={`w-full grid grid-cols-12 gap-1 px-3 py-2 transition-all hover:shadow-sm cursor-pointer text-left ${
+                    isExpanded ? 'bg-blue-50 border-l-4 border-l-blue-500' : getRowBg(ward, isHovered)
+                  }`}
+                >
+                  {/* Rank */}
+                  <div className="col-span-1 flex items-center justify-center">
+                    <span className={`w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center ${
+                      rank <= 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {rank}
                     </span>
                   </div>
-                </div>
-                
-                {/* Trees % */}
-                <div className="col-span-2 flex flex-col items-center justify-center">
-                  <span className="text-sm font-medium text-green-700">{ward.treesPct.toFixed(1)}%</span>
-                  <div className="w-full h-1 bg-gray-200 rounded-full mt-0.5">
-                    <div
-                      className="h-full bg-green-500 rounded-full"
-                      style={{ width: `${Math.min(100, ward.treesPct * 4)}%` }}
-                    />
+                  
+                  {/* Ward Number + Expand indicator */}
+                  <div className="col-span-2 flex items-center gap-1">
+                    <span className="font-medium text-sm text-gray-800">W{ward.ward_number}</span>
+                    {isExpanded ? (
+                      <ChevronUp size={12} className="text-blue-500" />
+                    ) : (
+                      <ChevronDown size={12} className="text-gray-400" />
+                    )}
                   </div>
-                </div>
-                
-                {/* Built % */}
-                <div className="col-span-2 flex flex-col items-center justify-center">
-                  <span className="text-sm font-medium text-gray-600">{ward.builtPct.toFixed(1)}%</span>
-                  <div className="w-full h-1 bg-gray-200 rounded-full mt-0.5">
-                    <div
-                      className="h-full bg-gray-500 rounded-full"
-                      style={{ width: `${Math.min(100, ward.builtPct)}%` }}
-                    />
+                  
+                  {/* Green Score with ring */}
+                  <div className="col-span-2 flex items-center justify-center">
+                    <div className="relative w-8 h-8">
+                      <svg className="w-8 h-8 transform -rotate-90" viewBox="0 0 32 32">
+                        <circle cx="16" cy="16" r="12" fill="none" stroke="#e5e7eb" strokeWidth="3" />
+                        <circle
+                          cx="16" cy="16" r="12" fill="none"
+                          stroke={getScoreColor(ward.score || 0)}
+                          strokeWidth="3"
+                          strokeDasharray={`${((ward.score || 0) / 100) * 75.4} 75.4`}
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold" style={{ color: getScoreColor(ward.score || 0) }}>
+                        {isNaN(ward.score) || ward.score == null ? '–' : ward.score}
+                      </span>
+                    </div>
                   </div>
-                </div>
+                  
+                  {/* Trees % */}
+                  <div className="col-span-2 flex flex-col items-center justify-center">
+                    <span className="text-sm font-medium text-green-700">{isNaN(ward.treesPct) ? '–' : ward.treesPct.toFixed(1)}%</span>
+                    <div className="w-full h-1 bg-gray-200 rounded-full mt-0.5">
+                      <div
+                        className="h-full bg-green-500 rounded-full"
+                        style={{ width: `${Math.min(100, (ward.treesPct || 0) * 4)}%` }}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Built % */}
+                  <div className="col-span-2 flex flex-col items-center justify-center">
+                    <span className="text-sm font-medium text-gray-600">{isNaN(ward.builtPct) ? '–' : ward.builtPct.toFixed(1)}%</span>
+                    <div className="w-full h-1 bg-gray-200 rounded-full mt-0.5">
+                      <div
+                        className="h-full bg-gray-500 rounded-full"
+                        style={{ width: `${Math.min(100, ward.builtPct || 0)}%` }}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Change */}
+                  <div className="col-span-3 flex items-center justify-center gap-1">
+                    {isNaN(ward.changePct) || ward.changePct == null ? (
+                      <span className="text-sm font-medium text-gray-400">–</span>
+                    ) : (
+                      <span className={`flex items-center gap-0.5 text-sm font-medium ${
+                        ward.changePct > 0 ? 'text-green-600' : ward.changePct < 0 ? 'text-red-600' : 'text-gray-500'
+                      }`}>
+                        {ward.changePct > 0 ? <TrendingUp size={12} /> : ward.changePct < 0 ? <TrendingDown size={12} /> : null}
+                        {ward.changePct > 0 ? '+' : ''}{ward.changePct.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                </button>
                 
-                {/* Change */}
-                <div className="col-span-3 flex items-center justify-center gap-1">
-                  <span className={`flex items-center gap-0.5 text-sm font-medium ${
-                    ward.changePct > 0 ? 'text-green-600' : ward.changePct < 0 ? 'text-red-600' : 'text-gray-500'
-                  }`}>
-                    {ward.changePct > 0 ? <TrendingUp size={12} /> : ward.changePct < 0 ? <TrendingDown size={12} /> : null}
-                    {ward.changePct > 0 ? '+' : ''}{ward.changePct.toFixed(1)}%
-                  </span>
-                </div>
-              </button>
+                {/* Expanded Content - Ward Details + Map Controls */}
+                {isExpanded && (
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-3 py-3 border-l-4 border-l-blue-500 animate-in slide-in-from-top-2 duration-200">
+                    {/* Ward Details */}
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                      <div className="bg-white rounded-lg p-2 border border-gray-200">
+                        <p className="text-xs text-gray-500">Census Trees</p>
+                        <p className="text-lg font-bold text-green-700">{ward.censusTreeCount.toLocaleString()}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-2 border border-gray-200">
+                        <p className="text-xs text-gray-500">Tree Species</p>
+                        <p className="text-lg font-bold text-blue-700">{ward.censusSpecies}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-2 border border-gray-200">
+                        <p className="text-xs text-gray-500">Net Tree Change</p>
+                        <p className={`text-lg font-bold ${ward.netChangeHa >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                          {ward.netChangeHa >= 0 ? '+' : ''}{ward.netChangeHa.toFixed(1)} ha
+                        </p>
+                      </div>
+                      <div className="bg-white rounded-lg p-2 border border-gray-200">
+                        <p className="text-xs text-gray-500">Built-up Change</p>
+                        <p className="text-lg font-bold text-gray-700">+{ward.builtChangeHa.toFixed(1)} ha</p>
+                      </div>
+                    </div>
+                    
+                    {/* Map Layer Controls */}
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                        <Map size={12} /> Visualize on Map:
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {/* Ward Boundaries Toggle */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onWardBoundariesToggle?.(!showWardBoundaries);
+                          }}
+                          disabled={isWardOverlayLoading}
+                          className={`flex items-center gap-1 px-2 py-1 text-xs rounded-lg transition-all ${
+                            showWardBoundaries
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+                          } ${isWardOverlayLoading ? 'opacity-75 cursor-wait' : ''}`}
+                        >
+                          {isWardOverlayLoading ? <Loader2 size={12} className="animate-spin" /> : <LayoutGrid size={12} />}
+                          Ward Boundaries
+                        </button>
+                        
+                        {/* Land Cover Overlay Toggle */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onLandCoverConfigChange?.({ ...landCoverConfig!, visible: !landCoverConfig?.visible });
+                          }}
+                          className={`flex items-center gap-1 px-2 py-1 text-xs rounded-lg transition-all ${
+                            landCoverConfig?.visible
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          <Layers size={12} />
+                          Land Cover
+                        </button>
+                        
+                        {/* Fly to Ward Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onWardClick(ward.ward_number);
+                          }}
+                          className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition-all"
+                        >
+                          <Focus size={12} />
+                          Center on Map
+                        </button>
+                      </div>
+                      
+                      {/* Color By selector when ward boundaries are visible */}
+                      {showWardBoundaries && (
+                        <div className="mt-2 pt-2 border-t border-blue-200">
+                          <p className="text-xs text-gray-500 mb-1">Color wards by:</p>
+                          <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onColorByChange?.('green_score'); }}
+                              className={`flex-1 px-2 py-1 text-xs ${colorBy === 'green_score' ? 'bg-blue-100 text-blue-700' : 'bg-white text-gray-500'}`}
+                            >
+                              Score
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onColorByChange?.('trees_pct'); }}
+                              className={`flex-1 px-2 py-1 text-xs ${colorBy === 'trees_pct' ? 'bg-blue-100 text-blue-700' : 'bg-white text-gray-500'}`}
+                            >
+                              Trees %
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onColorByChange?.('change'); }}
+                              className={`flex-1 px-2 py-1 text-xs ${colorBy === 'change' ? 'bg-blue-100 text-blue-700' : 'bg-white text-gray-500'}`}
+                            >
+                              Change
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })
         )}
       </div>
       
-      {/* Footer */}
+      {/* Show More/Less Footer */}
       {sortedWards.length > 10 && (
         <div className="p-2 border-t bg-gray-50">
           <button
@@ -595,10 +921,56 @@ const WardLeaderboard: React.FC<WardLeaderboardProps> = ({
         </div>
       )}
       
+      {/* Global Map Controls Footer */}
+      <div className="px-3 py-3 bg-gradient-to-r from-slate-50 to-gray-50 border-t space-y-2">
+        <p className="text-xs font-medium text-gray-600 flex items-center gap-1">
+          <Map size={12} /> Quick Ward Visualizations:
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => onWardBoundariesToggle?.(!showWardBoundaries)}
+            disabled={isWardOverlayLoading}
+            className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg transition-all font-medium ${
+              showWardBoundaries
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+            } ${isWardOverlayLoading ? 'opacity-75 cursor-wait' : ''}`}
+          >
+            {isWardOverlayLoading ? <Loader2 size={14} className="animate-spin" /> : <LayoutGrid size={14} />}
+            {showWardBoundaries ? 'Hide Boundaries' : 'Show Boundaries'}
+          </button>
+          
+          <button
+            onClick={() => onLandCoverConfigChange?.({ ...landCoverConfig!, visible: !landCoverConfig?.visible })}
+            className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg transition-all font-medium ${
+              landCoverConfig?.visible
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            <Layers size={14} />
+            {landCoverConfig?.visible ? 'Hide Land Cover' : 'Land Cover Overlay'}
+          </button>
+          
+          <button
+            onClick={() => onDeforestationHotspotsToggle?.(!showDeforestationHotspots)}
+            disabled={isDeforestationHotspotsLoading}
+            className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg transition-all font-medium ${
+              showDeforestationHotspots
+                ? 'bg-red-600 text-white hover:bg-red-700'
+                : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+            } ${isDeforestationHotspotsLoading ? 'opacity-75 cursor-wait' : ''}`}
+          >
+            {isDeforestationHotspotsLoading ? <Loader2 size={14} className="animate-spin" /> : <Flame size={14} />}
+            {showDeforestationHotspots ? 'Hide Hotspots' : 'Deforestation Hotspots'}
+          </button>
+        </div>
+      </div>
+      
       {/* Info footer */}
       <div className="px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-t text-xs text-gray-500 flex items-center gap-2">
         <Info size={12} />
-        <span>Click any row to fly to ward on map. Sort by clicking column headers.</span>
+        <span>Click any row to expand details and map options. Sort by column headers.</span>
       </div>
     </div>
   );
@@ -607,15 +979,6 @@ const WardLeaderboard: React.FC<WardLeaderboardProps> = ({
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
-
-// Hotspot configuration type
-export interface HotspotConfig {
-  lossThreshold: number;
-  colorScheme: 'red' | 'orange' | 'heatmap';
-  opacity: number;
-  showLabels: boolean;
-  pulseAnimation: boolean;
-}
 
 // Land Cover Overlay configuration
 interface LandCoverOverlayConfig {
@@ -735,7 +1098,20 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
   const [viewMode, setViewMode] = useState<'current' | 'change'>('current');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const [expandedSection, setExpandedSection] = useState<string | null>('overview');
+  
+  // Section expansion state - Overview is always visible, others are collapsible
+  const [sectionsExpanded, setSectionsExpanded] = useState({
+    insights: true,      // Expanded by default per user request
+    wardAnalysis: true,  // Expanded by default per user request
+    detailedAnalysis: false,  // Collapsed by default for granular/advanced users
+  });
+  
+  const toggleSection = useCallback((section: keyof typeof sectionsExpanded) => {
+    setSectionsExpanded(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  }, []);
   
   // Years for timeline
   const years = [2019, 2020, 2021, 2022, 2023, 2024, 2025];
@@ -806,8 +1182,8 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
       
       const netChange = comparison ? parseFloat(comparison.net_tree_change_m2) / 10000 : 0;
       const builtChangeHa = comparison ? parseFloat(comparison.built_gained_m2) / 10000 : 0;
-      const totalArea = totalAreaM2 / 10000;
-      const changePct = (netChange / totalArea) * 100;
+      const totalArea = totalAreaM2 / 10000 || 1; // Ensure non-zero
+      const changePct = isNaN(netChange) || isNaN(totalArea) ? 0 : (netChange / totalArea) * 100;
       const treeDensity = census ? census.tree_count / totalArea : 0;
       
       const score = calculateGreenScore(
@@ -891,11 +1267,6 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
     
     return result;
   }, [timelineData, criticalWardsCount]);
-  
-  // Section toggle
-  const toggleSection = (section: string) => {
-    setExpandedSection(expandedSection === section ? null : section);
-  };
   
   // Loading state - Engaging tree-themed animation
   if (loading) {
@@ -1013,79 +1384,95 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
         )}
       </div>
       
-      {/* Key Insights */}
-      <div className="space-y-2">
-        <h4 className="font-medium text-gray-700 text-sm flex items-center gap-1">
-          <Info size={14} />
-          Key Insights
-        </h4>
-        {insights.map((insight, i) => (
-          <KeyInsight key={i} {...insight} />
-        ))}
-      </div>
-      
-      {/* Timeline Section */}
-      <div className="border rounded-lg overflow-hidden">
-        <button
-          className="w-full p-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-          onClick={() => toggleSection('timeline')}
-        >
-          <span className="font-medium text-gray-700 flex items-center gap-2">
-            <Calendar size={16} />
-            Historical Timeline
-          </span>
-          {expandedSection === 'timeline' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
+      {/* ========== SECTION 2: INSIGHTS ========== */}
+      <CollapsibleSection
+        id="insights"
+        title="Insights & Timeline"
+        icon={<Info size={16} />}
+        isExpanded={sectionsExpanded.insights}
+        onToggle={() => toggleSection('insights')}
+        showInfo={true}
+        badge={criticalWardsCount > 0 ? (
+          <span className="px-1.5 py-0.5 text-xs bg-red-100 text-red-700 rounded-full">{criticalWardsCount} critical</span>
+        ) : undefined}
+      >
+        {/* Key Insights */}
+        <div className="space-y-2 mb-4">
+          {insights.map((insight, i) => (
+            <KeyInsight key={i} {...insight} />
+          ))}
+        </div>
         
-        {expandedSection === 'timeline' && (
-          <div className="p-3 space-y-3">
-            <TimelineSlider
-              years={years}
-              selectedYear={selectedYear}
-              onChange={handleYearChange}
-              playing={playing}
-              onPlayToggle={() => setPlaying(!playing)}
-            />
-            
-            {/* Year stats */}
-            {timelineData?.years && (
-              <div className="grid grid-cols-2 gap-2 text-center">
-                {(() => {
-                  const yearData = timelineData.years.find(y => y.year === selectedYear);
-                  if (!yearData) return null;
-                  return (
-                    <>
-                      <div className="bg-green-50 rounded-lg p-2">
-                        <p className="text-lg font-bold text-green-700">{parseFloat(yearData.avg_trees_pct).toFixed(1)}%</p>
-                        <p className="text-xs text-green-600">Tree Cover</p>
-                      </div>
-                      <div className="bg-red-50 rounded-lg p-2">
-                        <p className="text-lg font-bold text-red-700">{parseFloat(yearData.avg_built_pct).toFixed(1)}%</p>
-                        <p className="text-xs text-red-600">Built-up</p>
-                      </div>
-                      <div className="bg-blue-50 rounded-lg p-2">
-                        <p className="text-lg font-bold text-blue-700">{parseFloat(yearData.total_trees_area_ha).toLocaleString()}</p>
-                        <p className="text-xs text-blue-600">Tree Area (ha)</p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-2">
-                        <p className="text-lg font-bold text-gray-700">{yearData.ward_count}</p>
-                        <p className="text-xs text-gray-600">Wards Analyzed</p>
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+        {/* Timeline */}
+        <div className="bg-gray-50 rounded-lg p-3 space-y-3">
+          <TimelineSlider
+            years={years}
+            selectedYear={selectedYear}
+            onChange={handleYearChange}
+            playing={playing}
+            onPlayToggle={() => setPlaying(!playing)}
+          />
+          
+          {/* Year stats */}
+          {timelineData?.years && (
+            <div className="grid grid-cols-2 gap-2 text-center">
+              {(() => {
+                const yearData = timelineData.years.find(y => y.year === selectedYear);
+                if (!yearData) return null;
+                return (
+                  <>
+                    <div className="bg-white rounded-lg p-2 border">
+                      <p className="text-lg font-bold text-green-700">{parseFloat(yearData.avg_trees_pct).toFixed(1)}%</p>
+                      <p className="text-xs text-green-600">Tree Cover</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 border">
+                      <p className="text-lg font-bold text-red-700">{parseFloat(yearData.avg_built_pct).toFixed(1)}%</p>
+                      <p className="text-xs text-red-600">Built-up</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 border">
+                      <p className="text-lg font-bold text-blue-700">{parseFloat(yearData.total_trees_area_ha).toLocaleString()}</p>
+                      <p className="text-xs text-blue-600">Tree Area (ha)</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 border">
+                      <p className="text-lg font-bold text-gray-700">{yearData.ward_count}</p>
+                      <p className="text-xs text-gray-600">Wards Analyzed</p>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+      </CollapsibleSection>
       
-      {/* Ward Leaderboard - Unified View (replaces Change Alerts + Ward Rankings) */}
-      <WardLeaderboard
-        wardScores={wardScores}
-        onWardClick={handleWardClick}
-        selectedYear={selectedYear}
-      />
+      {/* ========== SECTION 3: WARD ANALYSIS ========== */}
+      <CollapsibleSection
+        id="wardAnalysis"
+        title="Ward Analysis"
+        icon={<BarChart3 size={16} />}
+        isExpanded={sectionsExpanded.wardAnalysis}
+        onToggle={() => toggleSection('wardAnalysis')}
+        showInfo={true}
+        badge={<span className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">{wardScores.length} wards</span>}
+      >
+        <WardLeaderboard
+          wardScores={wardScores}
+          onWardClick={handleWardClick}
+          selectedYear={selectedYear}
+          // Map layer control props
+          showWardBoundaries={showWardBoundaries}
+          onWardBoundariesToggle={onWardBoundariesToggle}
+          colorBy={colorBy}
+          onColorByChange={onColorByChange}
+          showDeforestationHotspots={showDeforestationHotspots}
+          onDeforestationHotspotsToggle={onDeforestationHotspotsToggle}
+          landCoverConfig={landCoverConfig}
+          onLandCoverConfigChange={onLandCoverConfigChange}
+          // Loading states
+          isWardOverlayLoading={isWardOverlayLoading}
+          isDeforestationHotspotsLoading={isDeforestationHotspotsLoading}
+        />
+      </CollapsibleSection>
       
       {/* Advanced Mode */}
       {showAdvanced && (
@@ -1132,786 +1519,241 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
         </div>
       )}
       
-      {/* Map Visualization Controls */}
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Map size={18} className="text-blue-600" />
-            <span className="font-medium text-gray-800">Map Visualization</span>
-          </div>
-          <button
-            onClick={() => onWardBoundariesToggle?.(!showWardBoundaries)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              showWardBoundaries
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            {showWardBoundaries ? <EyeOff size={14} /> : <Eye size={14} />}
-            {showWardBoundaries ? 'Hide on Map' : 'Show on Map'}
-          </button>
-        </div>
+      {/* ========== SECTION 4: DETAILED LAND ANALYSIS ========== */}
+      <CollapsibleSection
+        id="detailedAnalysis"
+        title="Detailed Land Analysis"
+        icon={<Satellite size={16} />}
+        isExpanded={sectionsExpanded.detailedAnalysis}
+        onToggle={() => toggleSection('detailedAnalysis')}
+        showInfo={true}
+        badge={<span className="px-1.5 py-0.5 text-xs bg-cyan-100 text-cyan-700 rounded-full">10m satellite</span>}
+      >
+        {/* Note: Ward-based visualizations (Boundaries, Land Cover Overlay, Deforestation Hotspots)
+           are now accessible through the Ward Analysis section above via expandable rows */}
         
-        {showWardBoundaries && (
-          <div className="space-y-2">
-            <p className="text-xs text-gray-500">Color wards by:</p>
-            <div className="flex rounded-lg overflow-hidden border border-gray-200">
-              <button
-                className={`flex-1 px-2 py-1.5 text-xs transition-colors ${
-                  colorBy === 'green_score'
-                    ? 'bg-green-100 text-green-700 font-medium'
-                    : 'bg-white text-gray-600 hover:bg-gray-50'
-                }`}
-                onClick={() => onColorByChange?.('green_score')}
-              >
-                Green Score
-              </button>
-              <button
-                className={`flex-1 px-2 py-1.5 text-xs transition-colors ${
-                  colorBy === 'trees_pct'
-                    ? 'bg-green-100 text-green-700 font-medium'
-                    : 'bg-white text-gray-600 hover:bg-gray-50'
-                }`}
-                onClick={() => onColorByChange?.('trees_pct')}
-              >
-                Tree Cover %
-              </button>
-              <button
-                className={`flex-1 px-2 py-1.5 text-xs transition-colors ${
-                  colorBy === 'change'
-                    ? 'bg-green-100 text-green-700 font-medium'
-                    : 'bg-white text-gray-600 hover:bg-gray-50'
-                }`}
-                onClick={() => onColorByChange?.('change')}
-              >
-                2019-25 Change
-              </button>
+        {/* High-Resolution Raster / Satellite Layer */}
+        <div className="bg-gradient-to-br from-cyan-50 to-sky-50 rounded-lg p-4 border border-cyan-200 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Satellite size={18} className="text-cyan-600" />
+              <div>
+                <span className="font-medium text-gray-800">Satellite Raster</span>
+                <p className="text-xs text-gray-500">10m resolution continuous heatmap</p>
+              </div>
             </div>
-            
-            {/* Color Legend */}
-            <div className="bg-white rounded-lg p-2 border border-gray-200">
-              <p className="text-xs text-gray-500 mb-2 font-medium">Color Legend</p>
-              {colorBy === 'green_score' && (
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#ef4444' }}></div>
-                    <span>0-29 Critical</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#f97316' }}></div>
-                    <span>30-49</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#eab308' }}></div>
-                    <span>50-69</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#22c55e' }}></div>
-                    <span>70+ Good</span>
-                  </div>
-                </div>
+            <button
+              onClick={() => onRasterConfigChange?.({ ...rasterConfig, visible: !rasterConfig.visible })}
+              disabled={isCurrentRasterLoading}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                rasterConfig.visible
+                  ? 'bg-cyan-600 text-white hover:bg-cyan-700'
+                  : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+              } ${isCurrentRasterLoading ? 'opacity-75 cursor-wait' : ''}`}
+            >
+              {isCurrentRasterLoading ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : rasterConfig.visible ? (
+                <EyeOff size={14} />
+              ) : (
+                <Eye size={14} />
               )}
-              {colorBy === 'trees_pct' && (
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#ef4444' }}></div>
-                    <span>&lt;5%</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#eab308' }}></div>
-                    <span>5-10%</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#84cc16' }}></div>
-                    <span>10-15%</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#22c55e' }}></div>
-                    <span>15-20%</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#14532d' }}></div>
-                    <span>&gt;20%</span>
-                  </div>
-                </div>
-              )}
-              {colorBy === 'change' && (
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#ef4444' }}></div>
-                    <span>&lt;-50ha</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#f97316' }}></div>
-                    <span>-50 to -10</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#eab308' }}></div>
-                    <span>±10</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#22c55e' }}></div>
-                    <span>+10 to +50</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#14532d' }}></div>
-                    <span>&gt;+50ha</span>
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            <p className="text-xs text-blue-600 flex items-center gap-1">
-              <Info size={12} />
-              Hover over wards on the map to see details
-            </p>
+              {isCurrentRasterLoading 
+                ? 'Loading...' 
+                : rasterConfig.visible 
+                  ? 'Hide Raster' 
+                  : 'Show Raster'}
+            </button>
           </div>
-        )}
-      </div>
-      
-      {/* Deforestation Hotspots Layer Control */}
-      <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-lg p-4 border border-red-200 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Flame size={18} className="text-red-500" />
-            <div>
-              <span className="font-medium text-gray-800">Deforestation Hotspots</span>
-              <p className="text-xs text-gray-500">Areas with significant tree loss (2019-2025)</p>
-            </div>
-          </div>
-          <button
-            onClick={() => onDeforestationHotspotsToggle?.(!showDeforestationHotspots)}
-            disabled={isDeforestationHotspotsLoading}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              showDeforestationHotspots
-                ? 'bg-red-600 text-white hover:bg-red-700'
-                : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
-            } ${isDeforestationHotspotsLoading ? 'opacity-75 cursor-wait' : ''}`}
-          >
-            {isDeforestationHotspotsLoading ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : showDeforestationHotspots ? (
-              <EyeOff size={14} />
-            ) : (
-              <Eye size={14} />
-            )}
-            {isDeforestationHotspotsLoading 
-              ? 'Loading...' 
-              : showDeforestationHotspots 
-                ? 'Hide Hotspots' 
-                : 'Show Hotspots'}
-          </button>
-        </div>
-        
-        {showDeforestationHotspots && (
-          <div className="space-y-3">
-            {/* Color Scheme */}
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Color scheme:</p>
-              <div className="flex rounded-lg overflow-hidden border border-gray-200">
-                <button
-                  className={`flex-1 px-2 py-1.5 text-xs transition-colors ${
-                    hotspotConfig.colorScheme === 'red'
-                      ? 'bg-red-100 text-red-700 font-medium'
-                      : 'bg-white text-gray-600 hover:bg-gray-50'
-                  }`}
-                  onClick={() => onHotspotConfigChange?.({ ...hotspotConfig, colorScheme: 'red' })}
-                >
-                  🔴 Red
-                </button>
-                <button
-                  className={`flex-1 px-2 py-1.5 text-xs transition-colors ${
-                    hotspotConfig.colorScheme === 'orange'
-                      ? 'bg-orange-100 text-orange-700 font-medium'
-                      : 'bg-white text-gray-600 hover:bg-gray-50'
-                  }`}
-                  onClick={() => onHotspotConfigChange?.({ ...hotspotConfig, colorScheme: 'orange' })}
-                >
-                  🟠 Orange
-                </button>
-                <button
-                  className={`flex-1 px-2 py-1.5 text-xs transition-colors ${
-                    hotspotConfig.colorScheme === 'heatmap'
-                      ? 'bg-amber-100 text-amber-700 font-medium'
-                      : 'bg-white text-gray-600 hover:bg-gray-50'
-                  }`}
-                  onClick={() => onHotspotConfigChange?.({ ...hotspotConfig, colorScheme: 'heatmap' })}
-                >
-                  🌡️ Heat
-                </button>
-              </div>
-            </div>
-            
-            {/* Opacity Slider */}
-            <div>
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-gray-500">Opacity:</span>
-                <span className="text-gray-700 font-medium">{Math.round(hotspotConfig.opacity * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                min="20"
-                max="100"
-                value={hotspotConfig.opacity * 100}
-                onChange={(e) => onHotspotConfigChange?.({ 
-                  ...hotspotConfig, 
-                  opacity: parseInt(e.target.value) / 100 
-                })}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-500"
-              />
-            </div>
-            
-            {/* Threshold Slider */}
-            <div>
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-gray-500">Loss threshold:</span>
-                <span className="text-gray-700 font-medium">≥{hotspotConfig.lossThreshold.toFixed(2)}% loss</span>
-              </div>
-              <input
-                type="range"
-                min="0.01"
-                max="1"
-                step="0.01"
-                value={hotspotConfig.lossThreshold}
-                onChange={(e) => onHotspotConfigChange?.({ 
-                  ...hotspotConfig, 
-                  lossThreshold: parseFloat(e.target.value) 
-                })}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-500"
-              />
-            </div>
-            
-            {/* Options */}
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-600">Show ward labels</span>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  className="sr-only peer" 
-                  checked={hotspotConfig.showLabels}
-                  onChange={(e) => onHotspotConfigChange?.({ 
-                    ...hotspotConfig, 
-                    showLabels: e.target.checked 
-                  })}
-                />
-                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500"></div>
-              </label>
-            </div>
-            
-            {/* Legend */}
-            <div className="bg-white rounded-lg p-2 border border-gray-200">
-              <p className="text-xs text-gray-500 mb-2 font-medium">Severity Legend</p>
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 rounded" style={{ backgroundColor: hotspotConfig.colorScheme === 'heatmap' ? '#fbbf24' : hotspotConfig.colorScheme === 'orange' ? '#fdba74' : '#fca5a5' }}></div>
-                  <span>Minor</span>
+          
+          {rasterConfig.visible && (
+            <div className="space-y-3">
+              {/* Layer Selection */}
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Select layer:</p>
+                <div className="grid grid-cols-3 gap-1">
+                  <button
+                    className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                      rasterConfig.layer === 'tree_probability_2025'
+                        ? 'bg-green-100 text-green-700 font-medium ring-2 ring-green-400'
+                        : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                    }`}
+                    onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'tree_probability_2025' })}
+                  >
+                    <TreePine size={14} />
+                    <span>Tree 2025</span>
+                  </button>
+                  <button
+                    className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                      rasterConfig.layer === 'tree_probability_2019'
+                        ? 'bg-green-100 text-green-700 font-medium ring-2 ring-green-400'
+                        : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                    }`}
+                    onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'tree_probability_2019' })}
+                  >
+                    <TreePine size={14} />
+                    <span>Tree 2019</span>
+                  </button>
+                  <button
+                    className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                      rasterConfig.layer === 'tree_change'
+                        ? 'bg-amber-100 text-amber-700 font-medium ring-2 ring-amber-400'
+                        : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                    }`}
+                    onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'tree_change' })}
+                  >
+                    <TrendingUp size={14} />
+                    <span>Tree Change</span>
+                  </button>
+                  <button
+                    className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                      rasterConfig.layer === 'ndvi'
+                        ? 'bg-lime-100 text-lime-700 font-medium ring-2 ring-lime-400'
+                        : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                    }`}
+                    onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'ndvi' })}
+                  >
+                    <Thermometer size={14} />
+                    <span>NDVI</span>
+                  </button>
+                  <button
+                    className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
+                      rasterConfig.layer === 'landcover'
+                        ? 'bg-purple-100 text-purple-700 font-medium ring-2 ring-purple-400'
+                        : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                    }`}
+                    onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'landcover' })}
+                  >
+                    <Layers size={14} />
+                    <span>Land Cover</span>
+                  </button>
                 </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 rounded" style={{ backgroundColor: hotspotConfig.colorScheme === 'heatmap' ? '#f59e0b' : hotspotConfig.colorScheme === 'orange' ? '#fb923c' : '#ef4444' }}></div>
-                  <span>Moderate</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-4 h-4 rounded" style={{ backgroundColor: hotspotConfig.colorScheme === 'heatmap' ? '#dc2626' : hotspotConfig.colorScheme === 'orange' ? '#ea580c' : '#991b1b' }}></div>
-                  <span>Severe</span>
-                </div>
-              </div>
-            </div>
-            
-            <p className="text-xs text-red-600 flex items-center gap-1">
-              <AlertTriangle size={12} />
-              Hover over hotspots to see deforestation details
-            </p>
-          </div>
-        )}
-      </div>
-      
-      {/* Land Cover Overlay - Built vs Green with Time Slider */}
-      <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg p-4 border border-emerald-200 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Layers size={18} className="text-emerald-600" />
-            <div>
-              <span className="font-medium text-gray-800">Land Cover Overlay</span>
-              <p className="text-xs text-gray-500">Compare Built vs Green over time</p>
-            </div>
-          </div>
-          <button
-            onClick={() => onLandCoverConfigChange?.({ ...landCoverConfig, visible: !landCoverConfig.visible })}
-            disabled={isWardOverlayLoading}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              landCoverConfig.visible
-                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
-            } ${isWardOverlayLoading ? 'opacity-75 cursor-wait' : ''}`}
-          >
-            {isWardOverlayLoading ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : landCoverConfig.visible ? (
-              <EyeOff size={14} />
-            ) : (
-              <Eye size={14} />
-            )}
-            {isWardOverlayLoading 
-              ? 'Loading...' 
-              : landCoverConfig.visible 
-                ? 'Hide Overlay' 
-                : 'Show Overlay'}
-          </button>
-        </div>
-        
-        {landCoverConfig.visible && (
-          <div className="space-y-3">
-            {/* View Mode Toggle */}
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Visualization mode:</p>
-              <div className="grid grid-cols-4 gap-1">
-                <button
-                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
-                    landCoverConfig.mode === 'green'
-                      ? 'bg-green-100 text-green-700 font-medium ring-2 ring-green-400'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                  }`}
-                  onClick={() => onLandCoverConfigChange?.({ ...landCoverConfig, mode: 'green' })}
-                >
-                  <TreePine size={14} />
-                  <span>Green</span>
-                </button>
-                <button
-                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
-                    landCoverConfig.mode === 'built'
-                      ? 'bg-red-100 text-red-700 font-medium ring-2 ring-red-400'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                  }`}
-                  onClick={() => onLandCoverConfigChange?.({ ...landCoverConfig, mode: 'built' })}
-                >
-                  <Building2 size={14} />
-                  <span>Built</span>
-                </button>
-                <button
-                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
-                    landCoverConfig.mode === 'bivariate'
-                      ? 'bg-purple-100 text-purple-700 font-medium ring-2 ring-purple-400'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                  }`}
-                  onClick={() => onLandCoverConfigChange?.({ ...landCoverConfig, mode: 'bivariate' })}
-                >
-                  <Palette size={14} />
-                  <span>Both</span>
-                </button>
-                <button
-                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
-                    landCoverConfig.mode === 'change'
-                      ? 'bg-amber-100 text-amber-700 font-medium ring-2 ring-amber-400'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                  }`}
-                  onClick={() => onLandCoverConfigChange?.({ ...landCoverConfig, mode: 'change' })}
-                >
-                  <TrendingUp size={14} />
-                  <span>Change</span>
-                </button>
+                
+                {/* Loading indicator */}
+                {isCurrentRasterLoading && (
+                  <div className="flex items-center justify-center gap-2 py-2 text-cyan-600">
+                    <Loader2 size={16} className="animate-spin" />
+                    <span className="text-xs font-medium">Loading satellite imagery...</span>
+                  </div>
+                )}
               </div>
               
-              {/* Loading indicator for ward overlay */}
-              {isWardOverlayLoading && (
-                <div className="flex items-center justify-center gap-2 py-2 text-emerald-600">
-                  <Loader2 size={16} className="animate-spin" />
-                  <span className="text-xs font-medium">Loading ward boundaries...</span>
-                </div>
-              )}
-            </div>
-            
-            {/* Year Timeline Slider */}
-            {landCoverConfig.mode !== 'change' && (
-              <div className="bg-white rounded-lg p-3 border border-gray-200">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">
-                    <Calendar size={14} className="inline mr-1" />
-                    Year: {landCoverConfig.year}
-                  </span>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => {
-                        const years = [2019, 2020, 2021, 2022, 2023, 2024, 2025];
-                        const idx = years.indexOf(landCoverConfig.year);
-                        if (idx > 0) {
-                          onLandCoverConfigChange?.({ ...landCoverConfig, year: years[idx - 1] });
-                        }
-                      }}
-                      disabled={landCoverConfig.year === 2019}
-                      className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft size={16} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        const years = [2019, 2020, 2021, 2022, 2023, 2024, 2025];
-                        const idx = years.indexOf(landCoverConfig.year);
-                        if (idx < years.length - 1) {
-                          onLandCoverConfigChange?.({ ...landCoverConfig, year: years[idx + 1] });
-                        }
-                      }}
-                      disabled={landCoverConfig.year === 2025}
-                      className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
+              {/* Opacity Slider */}
+              <div>
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-gray-500">Opacity:</span>
+                  <span className="text-gray-700 font-medium">{Math.round(rasterConfig.opacity * 100)}%</span>
                 </div>
                 <input
                   type="range"
-                  min={2019}
-                  max={2025}
-                  value={landCoverConfig.year}
-                  onChange={(e) => onLandCoverConfigChange?.({ ...landCoverConfig, year: parseInt(e.target.value) })}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                  min="20"
+                  max="100"
+                  value={rasterConfig.opacity * 100}
+                  onChange={(e) => onRasterConfigChange?.({ 
+                    ...rasterConfig, 
+                    opacity: parseInt(e.target.value) / 100 
+                  })}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
                 />
-                <div className="flex justify-between text-xs text-gray-400 mt-1">
-                  <span>2019</span>
-                  <span>2025</span>
-                </div>
               </div>
-            )}
-            
-            {/* Opacity Slider */}
-            <div>
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-gray-500">Opacity:</span>
-                <span className="text-gray-700 font-medium">{Math.round(landCoverConfig.opacity * 100)}%</span>
+              
+              {/* Legend */}
+              <div className="bg-white rounded-lg p-2 border border-gray-200">
+                <p className="text-xs text-gray-500 mb-2 font-medium">Color Legend</p>
+                
+                {(rasterConfig.layer === 'tree_probability_2025' || rasterConfig.layer === 'tree_probability_2019') && (
+                  <div>
+                    <div className="h-3 rounded" style={{ 
+                      background: 'linear-gradient(90deg, #f7fcf5, #c7e9c0, #74c476, #31a354, #006d2c, #00441b)' 
+                    }}></div>
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>0%</span>
+                      <span>50%</span>
+                      <span>100%</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1 text-center">Tree Cover Probability</p>
+                  </div>
+                )}
+                
+                {rasterConfig.layer === 'tree_change' && (
+                  <div>
+                    <div className="h-3 rounded" style={{ 
+                      background: 'linear-gradient(90deg, #67001f, #d6604d, #f4a582, #f7f7f7, #92c5de, #4393c3, #053061)' 
+                    }}></div>
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>-50%</span>
+                      <span>0</span>
+                      <span>+50%</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1 text-center">Tree Cover Change 2019-2025</p>
+                  </div>
+                )}
+                
+                {rasterConfig.layer === 'ndvi' && (
+                  <div>
+                    <div className="h-3 rounded" style={{ 
+                      background: 'linear-gradient(90deg, #d73027, #fee08b, #d9ef8b, #91cf60, #1a9850, #006837)' 
+                    }}></div>
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>-0.2</span>
+                      <span>0.4</span>
+                      <span>0.8</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1 text-center">Vegetation Index</p>
+                  </div>
+                )}
+                
+                {rasterConfig.layer === 'landcover' && (
+                  <div className="space-y-1">
+                    <div className="grid grid-cols-3 gap-1 text-[10px]">
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded" style={{ background: '#419bdf' }}></div>
+                        <span className="text-gray-600">Water</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded" style={{ background: '#397d49' }}></div>
+                        <span className="text-gray-600">Trees</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded" style={{ background: '#88b053' }}></div>
+                        <span className="text-gray-600">Grass</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded" style={{ background: '#e49635' }}></div>
+                        <span className="text-gray-600">Crops</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded" style={{ background: '#dfc35a' }}></div>
+                        <span className="text-gray-600">Shrubs</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded" style={{ background: '#c4281b' }}></div>
+                        <span className="text-gray-600">Built</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded" style={{ background: '#a59b8f' }}></div>
+                        <span className="text-gray-600">Bare</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1 text-center">Land Cover Classes</p>
+                  </div>
+                )}
               </div>
-              <input
-                type="range"
-                min="20"
-                max="100"
-                value={landCoverConfig.opacity * 100}
-                onChange={(e) => onLandCoverConfigChange?.({ 
-                  ...landCoverConfig, 
-                  opacity: parseInt(e.target.value) / 100 
-                })}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-              />
+              
+              <p className="text-xs text-cyan-600 flex items-center gap-1">
+                <Info size={12} />
+                Satellite imagery shows continuous land cover at 10m resolution
+              </p>
             </div>
-            
-            {/* Mode-specific Legends */}
-            <div className="bg-white rounded-lg p-2 border border-gray-200">
-              <p className="text-xs text-gray-500 mb-2 font-medium">Color Legend</p>
-              
-              {landCoverConfig.mode === 'green' && (
-                <div>
-                  <div className="h-3 rounded" style={{ 
-                    background: `linear-gradient(90deg, ${landCoverConfig.greenColorScale[0]}, ${landCoverConfig.greenColorScale[1]})` 
-                  }}></div>
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>0% Tree Cover</span>
-                    <span>30%+ Tree Cover</span>
-                  </div>
-                </div>
-              )}
-              
-              {landCoverConfig.mode === 'built' && (
-                <div>
-                  <div className="h-3 rounded" style={{ 
-                    background: `linear-gradient(90deg, ${landCoverConfig.builtColorScale[0]}, ${landCoverConfig.builtColorScale[1]})` 
-                  }}></div>
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>0% Built-up</span>
-                    <span>90%+ Built-up</span>
-                  </div>
-                </div>
-              )}
-              
-              {landCoverConfig.mode === 'bivariate' && (
-                <div>
-                  <p className="text-xs text-gray-600 mb-2">Green (↑) vs Built (→)</p>
-                  <div className="grid grid-cols-3 gap-0.5 w-20 h-20 mx-auto">
-                    {/* Bivariate legend grid */}
-                    <div className="rounded-tl" style={{ backgroundColor: '#5ac8c8' }}></div>
-                    <div style={{ backgroundColor: '#5698b9' }}></div>
-                    <div className="rounded-tr" style={{ backgroundColor: '#3b4994' }}></div>
-                    <div style={{ backgroundColor: '#ace4e4' }}></div>
-                    <div style={{ backgroundColor: '#a5add3' }}></div>
-                    <div style={{ backgroundColor: '#8c62aa' }}></div>
-                    <div className="rounded-bl" style={{ backgroundColor: '#e8e8e8' }}></div>
-                    <div style={{ backgroundColor: '#dfb0d6' }}></div>
-                    <div className="rounded-br" style={{ backgroundColor: '#be64ac' }}></div>
-                  </div>
-                  <div className="flex justify-between text-xs mt-1">
-                    <span className="text-green-600">↑ Green</span>
-                    <span className="text-purple-600">Built →</span>
-                  </div>
-                </div>
-              )}
-              
-              {landCoverConfig.mode === 'change' && (
-                <div>
-                  <div className="flex gap-0.5 h-4">
-                    <div className="flex-1 rounded-l" style={{ backgroundColor: '#d73027' }}></div>
-                    <div className="flex-1" style={{ backgroundColor: '#fc8d59' }}></div>
-                    <div className="flex-1" style={{ backgroundColor: '#fee08b' }}></div>
-                    <div className="flex-1" style={{ backgroundColor: '#ffffbf' }}></div>
-                    <div className="flex-1" style={{ backgroundColor: '#d9ef8b' }}></div>
-                    <div className="flex-1" style={{ backgroundColor: '#91cf60' }}></div>
-                    <div className="flex-1 rounded-r" style={{ backgroundColor: '#1a9850' }}></div>
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>-5%+ Loss</span>
-                    <span>No Change</span>
-                    <span>+5%+ Gain</span>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1 text-center">2019 → 2025 change</p>
-                </div>
-              )}
-            </div>
-            
-            <p className="text-xs text-emerald-600 flex items-center gap-1">
-              <Info size={12} />
-              Hover over wards to see detailed land cover breakdown
-            </p>
-          </div>
-        )}
-      </div>
-      
-      {/* High-Resolution Raster Overlay - NEW: Continuous pixel-level visualization */}
-      <div className="bg-gradient-to-br from-cyan-50 to-sky-50 rounded-lg p-4 border border-cyan-200 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Image size={18} className="text-cyan-600" />
-            <div>
-              <span className="font-medium text-gray-800">Satellite Raster</span>
-              <p className="text-xs text-gray-500">10m resolution continuous heatmap</p>
-            </div>
-          </div>
-          <button
-            onClick={() => onRasterConfigChange?.({ ...rasterConfig, visible: !rasterConfig.visible })}
-            disabled={isCurrentRasterLoading}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              rasterConfig.visible
-                ? 'bg-cyan-600 text-white hover:bg-cyan-700'
-                : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
-            } ${isCurrentRasterLoading ? 'opacity-75 cursor-wait' : ''}`}
-          >
-            {isCurrentRasterLoading ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : rasterConfig.visible ? (
-              <EyeOff size={14} />
-            ) : (
-              <Eye size={14} />
-            )}
-            {isCurrentRasterLoading 
-              ? 'Loading...' 
-              : rasterConfig.visible 
-                ? 'Hide Raster' 
-                : 'Show Raster'}
-          </button>
+          )}
         </div>
-        
-        {rasterConfig.visible && (
-          <div className="space-y-3">
-            {/* Layer Selection */}
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Select layer:</p>
-              <div className="grid grid-cols-2 gap-1">
-                <button
-                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
-                    rasterConfig.layer === 'tree_probability_2025'
-                      ? 'bg-green-100 text-green-700 font-medium ring-2 ring-green-400'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                  }`}
-                  onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'tree_probability_2025' })}
-                >
-                  <TreePine size={14} />
-                  <span>Tree 2025</span>
-                </button>
-                <button
-                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
-                    rasterConfig.layer === 'tree_probability_2019'
-                      ? 'bg-green-100 text-green-700 font-medium ring-2 ring-green-400'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                  }`}
-                  onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'tree_probability_2019' })}
-                >
-                  <TreePine size={14} />
-                  <span>Tree 2019</span>
-                </button>
-                <button
-                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
-                    rasterConfig.layer === 'tree_change'
-                      ? 'bg-amber-100 text-amber-700 font-medium ring-2 ring-amber-400'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                  }`}
-                  onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'tree_change' })}
-                >
-                  <TrendingUp size={14} />
-                  <span>Tree Change</span>
-                </button>
-                <button
-                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
-                    rasterConfig.layer === 'tree_loss_gain'
-                      ? 'bg-red-100 text-red-700 font-medium ring-2 ring-red-400'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                  }`}
-                  onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'tree_loss_gain' })}
-                >
-                  <AlertTriangle size={14} />
-                  <span>Loss/Gain</span>
-                </button>
-                <button
-                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
-                    rasterConfig.layer === 'ndvi'
-                      ? 'bg-lime-100 text-lime-700 font-medium ring-2 ring-lime-400'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                  }`}
-                  onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'ndvi' })}
-                >
-                  <Thermometer size={14} />
-                  <span>NDVI</span>
-                </button>
-                <button
-                  className={`px-2 py-2 text-xs rounded-lg transition-colors flex flex-col items-center gap-1 ${
-                    rasterConfig.layer === 'landcover'
-                      ? 'bg-purple-100 text-purple-700 font-medium ring-2 ring-purple-400'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                  }`}
-                  onClick={() => onRasterConfigChange?.({ ...rasterConfig, layer: 'landcover' })}
-                >
-                  <Palette size={14} />
-                  <span>Land Cover</span>
-                </button>
-              </div>
-              
-              {/* Loading indicator for layer */}
-              {isCurrentRasterLoading && (
-                <div className="flex items-center justify-center gap-2 py-2 text-cyan-600">
-                  <Loader2 size={16} className="animate-spin" />
-                  <span className="text-xs font-medium">Loading satellite imagery...</span>
-                </div>
-              )}
-            </div>
-            
-            {/* Opacity Slider */}
-            <div>
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-gray-500">Opacity:</span>
-                <span className="text-gray-700 font-medium">{Math.round(rasterConfig.opacity * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                min="20"
-                max="100"
-                value={rasterConfig.opacity * 100}
-                onChange={(e) => onRasterConfigChange?.({ 
-                  ...rasterConfig, 
-                  opacity: parseInt(e.target.value) / 100 
-                })}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-              />
-            </div>
-            
-            {/* Dynamic Legend */}
-            <div className="bg-white rounded-lg p-2 border border-gray-200">
-              <p className="text-xs text-gray-500 mb-2 font-medium">Color Legend</p>
-              
-              {(rasterConfig.layer === 'tree_probability_2025' || rasterConfig.layer === 'tree_probability_2019') && (
-                <div>
-                  <div className="h-3 rounded" style={{ 
-                    background: 'linear-gradient(90deg, #f7fcf5, #c7e9c0, #74c476, #31a354, #006d2c, #00441b)' 
-                  }}></div>
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>0%</span>
-                    <span>50%</span>
-                    <span>100%</span>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1 text-center">Tree Cover Probability</p>
-                </div>
-              )}
-              
-              {rasterConfig.layer === 'tree_change' && (
-                <div>
-                  <div className="h-3 rounded" style={{ 
-                    background: 'linear-gradient(90deg, #67001f, #d6604d, #f4a582, #f7f7f7, #92c5de, #4393c3, #053061)' 
-                  }}></div>
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>-50%</span>
-                    <span>0</span>
-                    <span>+50%</span>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1 text-center">2019-2025 Change</p>
-                </div>
-              )}
-              
-              {rasterConfig.layer === 'tree_loss_gain' && (
-                <div className="flex items-center justify-around">
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#d73027' }}></div>
-                    <span className="text-xs">Loss</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#ffffbf' }}></div>
-                    <span className="text-xs">No Change</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded" style={{ backgroundColor: '#1a9850' }}></div>
-                    <span className="text-xs">Gain</span>
-                  </div>
-                </div>
-              )}
-              
-              {rasterConfig.layer === 'ndvi' && (
-                <div>
-                  <div className="h-3 rounded" style={{ 
-                    background: 'linear-gradient(90deg, #d73027, #fee08b, #d9ef8b, #91cf60, #1a9850, #006837)' 
-                  }}></div>
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>-0.2</span>
-                    <span>0.4</span>
-                    <span>0.8</span>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1 text-center">Vegetation Index</p>
-                </div>
-              )}
-              
-              {rasterConfig.layer === 'landcover' && (
-                <div className="grid grid-cols-3 gap-1 text-xs">
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded" style={{ backgroundColor: '#419bdf' }}></div>
-                    <span>Water</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded" style={{ backgroundColor: '#397d49' }}></div>
-                    <span>Trees</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded" style={{ backgroundColor: '#88b053' }}></div>
-                    <span>Grass</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded" style={{ backgroundColor: '#e49635' }}></div>
-                    <span>Crops</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded" style={{ backgroundColor: '#dfc35a' }}></div>
-                    <span>Shrub</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded" style={{ backgroundColor: '#c4281b' }}></div>
-                    <span>Built</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded" style={{ backgroundColor: '#a59b8f' }}></div>
-                    <span>Bare</span>
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            <p className="text-xs text-cyan-600 flex items-center gap-1">
-              <Info size={12} />
-              Source: Google Dynamic World @ 10m resolution
-            </p>
-          </div>
-        )}
-      </div>
+      </CollapsibleSection>
     </div>
   );
 };
 
+// Inside WardLeaderboard component, continued from main parent file:
+// This file is getting too long - consider breaking WardLeaderboard into a separate file
+
+// Export the main component
 export default GreenCoverMonitor;

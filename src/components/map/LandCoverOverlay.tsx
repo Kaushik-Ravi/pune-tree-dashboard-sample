@@ -299,7 +299,7 @@ const LandCoverOverlay: React.FC<LandCoverOverlayProps> = ({ config }) => {
     }
   };
   
-  // Set up hover handlers
+  // Set up hover and touch handlers
   useEffect(() => {
     if (!map || !config.visible) return;
     
@@ -318,14 +318,31 @@ const LandCoverOverlay: React.FC<LandCoverOverlayProps> = ({ config }) => {
       map.getCanvas().style.cursor = '';
     };
     
+    // Touch/click handler for mobile - toggle popup on tap
+    const onClick = (e: any) => {
+      if (e.features && e.features.length > 0) {
+        const feature = e.features[0] as WardBoundaryFeature;
+        // If tapping the same ward, close the popup
+        if (hoveredWard?.properties.ward_number === feature.properties.ward_number) {
+          setHoveredWard(null);
+          setPopupCoords(null);
+        } else {
+          setHoveredWard(feature);
+          setPopupCoords({ lng: e.lngLat.lng, lat: e.lngLat.lat });
+        }
+      }
+    };
+    
     map.on('mousemove', 'land-cover-overlay', onMouseMove);
     map.on('mouseleave', 'land-cover-overlay', onMouseLeave);
+    map.on('click', 'land-cover-overlay', onClick);
     
     return () => {
       map.off('mousemove', 'land-cover-overlay', onMouseMove);
       map.off('mouseleave', 'land-cover-overlay', onMouseLeave);
+      map.off('click', 'land-cover-overlay', onClick);
     };
-  }, [map, config.visible]);
+  }, [map, config.visible, hoveredWard]);
   
   if (!config.visible || !enhancedGeojson) {
     console.log('[LandCoverOverlay] Not rendering:', { visible: config.visible, hasEnhancedGeojson: !!enhancedGeojson });
@@ -346,10 +363,12 @@ const LandCoverOverlay: React.FC<LandCoverOverlayProps> = ({ config }) => {
         <Popup
           longitude={popupCoords.lng}
           latitude={popupCoords.lat}
-          closeButton={false}
-          closeOnClick={false}
+          closeButton={true}
+          closeOnClick={true}
+          onClose={() => { setHoveredWard(null); setPopupCoords(null); }}
           anchor="bottom"
           offset={[0, -10] as [number, number]}
+          className="ward-popup"
         >
           <div className="font-sans p-1 min-w-[160px]">
             <div className="font-semibold text-sm border-b border-gray-200 pb-1 mb-2">
