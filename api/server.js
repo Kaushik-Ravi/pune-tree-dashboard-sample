@@ -193,45 +193,100 @@ app.get('/api/trees/:id', async (req, res) => {
 });
 
 app.get('/api/city-stats', async (req, res) => {
-    // CDN caching: City stats are aggregates that rarely change
-    res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400');
-    
-    try {
-        const query = `
-            SELECT
-                COUNT(*) AS total_trees,
-                SUM("CO2_sequestered_kg") AS total_co2_annual_kg
-            FROM public.trees;
-        `;
-        const result = await queryWithRetry(query);
-        res.json(result.rows[0]);
-    } catch (err) {
-        console.error('Error executing query for /api/city-stats', err.stack);
-        res.status(500).json({ error: 'Internal server error' });
+    const cityId = (req.query.cityId || 'pune').toString();
+
+    if (cityId === 'mysuru') {
+      // Live count from Supabase tree_results (same filters as /api/trees-live).
+      // Short cache: this updates as citizens map during the mapathon.
+      res.setHeader('Cache-Control', 'public, max-age=10, stale-while-revalidate=30');
+      try {
+        const bbox = CITY_BBOX.mysuru;
+
+        const countHeaders = new Headers({
+          apikey: process.env.SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${process.env.SUPABASE_ANON_KEY}`,
+          Prefer: 'count=exact',
+          Range: '0-0',
+        });
+        const countQs = [
+          '?select=*',
+          '&is_deleted=eq.false',
+          '&status=neq.PENDING_ANALYSIS',
+          `&latitude=gte.${bbox.minLat}&latitude=lte.${bbox.maxLat}`,
+          `&longitude=gte.${bbox.minLng}&longitude=lte.${bbox.maxLng}`,
+        ].join('');
+        const countRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/tree_results${countQs}`, { headers: countHeaders });
+        const contentRange = countRes.headers.get('content-range') || '*/0';
+        const totalTrees = parseInt(contentRange.split('/')[1] || '0', 10);
+
+        // CO2 sum — pull rows (capped) and sum in JS. tree_results rows are small.
+        const co2Rows = await supabaseFetch([
+          'tree_results',
+          '?select=co2_sequestered_kg',
+          '&is_deleted=eq.false',
+          '&status=neq.PENDING_ANALYSIS',
+          `&latitude=gte.${bbox.minLat}&latitude=lte.${bbox.maxLat}`,
+          `&longitude=gte.${bbox.minLng}&longitude=lte.${bbox.maxLng}`,
+          '&limit=10000',
+        ].join(''));
+        const totalCo2 = (Array.isArray(co2Rows) ? co2Rows : []).reduce(
+          (sum, r) => sum + (parseFloat(r.co2_sequestered_kg) || 0), 0
+        );
+
+        return res.json({ total_trees: totalTrees, total_co2_annual_kg: totalCo2 });
+      } catch (err) {
+        console.error('[city-stats][mysuru]', err.message);
+        return res.status(500).json({ error: 'Failed to fetch Mysuru stats', details: err.message });
+      }
     }
+
+    if (cityId === 'pune') {
+      res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400');
+      try {
+        const result = await queryWithRetry(`
+          SELECT COUNT(*) AS total_trees, SUM("CO2_sequestered_kg") AS total_co2_annual_kg
+          FROM public.trees;
+        `);
+        return res.json(result.rows[0]);
+      } catch (err) {
+        console.error('Error executing query for /api/city-stats', err.stack);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
+    }
+
+    return res.status(400).json({ error: `Unknown cityId: ${cityId}` });
 });
 
 app.get('/api/ward-data', async (req, res) => {
-    // CDN caching: Ward-level data rarely changes
-    res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400');
-    
-    try {
-        const query = `
-            SELECT
-                ward,
-                COUNT(*) AS tree_count,
-                SUM("CO2_sequestered_kg") AS co2_kg
-            FROM public.trees
-            WHERE ward IS NOT NULL
-            GROUP BY ward
-            ORDER BY ward::double precision::int;
-        `;
-        const result = await queryWithRetry(query);
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Error executing query for /api/ward-data', err.stack);
-        res.status(500).json({ error: 'Internal server error' });
+    const cityId = (req.query.cityId || 'pune').toString();
+
+    if (cityId === 'mysuru') {
+      // No per-ward tree aggregation yet for Mysuru — trees live in Supabase
+      // and the spatial join to mysuru_ward_boundaries (DO Postgres) crosses
+      // databases. Return an empty list so the dashboard renders a no-data state
+      // instead of stale Pune numbers.
+      res.setHeader('Cache-Control', 'public, max-age=10');
+      return res.json([]);
     }
+
+    if (cityId === 'pune') {
+      res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400');
+      try {
+        const result = await queryWithRetry(`
+          SELECT ward, COUNT(*) AS tree_count, SUM("CO2_sequestered_kg") AS co2_kg
+          FROM public.trees
+          WHERE ward IS NOT NULL
+          GROUP BY ward
+          ORDER BY ward::double precision::int;
+        `);
+        return res.json(result.rows);
+      } catch (err) {
+        console.error('Error executing query for /api/ward-data', err.stack);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
+    }
+
+    return res.status(400).json({ error: `Unknown cityId: ${cityId}` });
 });
 
 app.post('/api/stats-in-polygon', async (req, res) => {
@@ -259,6 +314,12 @@ app.post('/api/stats-in-polygon', async (req, res) => {
 
 // --- NEW API ENDPOINT FOR PLANTING ADVISOR ---
 app.get('/api/tree-archetypes', async (req, res) => {
+  const cityId = (req.query.cityId || 'pune').toString();
+  if (cityId === 'mysuru') {
+    // No species archetypes for Mysuru yet — return empty so the Planting Advisor
+    // shows its "no data" state rather than Pune's species list.
+    return res.json([]);
+  }
   try {
     // We only select Summer data for direct comparison, as it represents the peak cooling need.
     const query = `
