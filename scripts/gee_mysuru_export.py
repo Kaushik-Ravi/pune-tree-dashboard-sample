@@ -82,8 +82,18 @@ CURRENT_END = f"{CURRENT_YEAR}-12-31"
 BASELINE_START = f"{BASELINE_YEAR}-01-01"
 BASELINE_END = f"{BASELINE_YEAR}-12-31"
 
-# Drive folder name (parity with Pune which used `PuneTreeDashboard`).
+# Drive folder name (legacy — Drive path is unused now, see note below).
 DRIVE_FOLDER = "mysuru_gee_exports"
+
+# Export destination: Google Cloud Storage (NOT Drive).
+# Reason: gautamravi2002@gmail.com's account is blocked by Google's
+# sensitive-scope policy from the multi-scope `earthengine authenticate`
+# flow, so user-OAuth Drive exports are unreachable. Service accounts
+# cannot write to Drive (no per-user storage quota) but they CAN write
+# to GCS. Same bucket the FNE Climate_Air / Ecology / Hazards exports
+# use — service account already has Object Admin on it.
+GCS_BUCKET = "ee-your-kaushik-fne"
+GCS_PREFIX = "FNE_Mysuru_Trees"
 
 # CRS + export ceilings.
 CRS = "EPSG:4326"
@@ -437,20 +447,19 @@ def _start_image_task(
     scale: int,
     cog: bool = True,
 ) -> Tuple[Optional[str], str, str]:
-    """Submit an image export to Google Drive. Returns (task_id, status, error).
+    """Submit an image export to Google Cloud Storage. Returns (task_id, status, error).
 
-    Drive (not GCS) per task brief -- this script targets gautamravi2002's
-    personal Drive folder so the user can download without GCS setup. NB:
-    service-account Drive quota is limited; if the queue stalls, switch to
-    user-OAuth init (see gee_climate_air_export.py's `prefer_user_oauth=True`
-    pattern) or move to GCS.
+    Uses the same GCS bucket as the FNE Climate_Air / Ecology / Hazards exports
+    (ee-your-kaushik-fne), where the service account already has Object Admin
+    permission. After exports complete, run `python scripts/gcs_pull_mysuru.py`
+    to download every blob under the prefix to `data/processed-rasters/mysuru/`.
     """
     try:
-        task = ee.batch.Export.image.toDrive(
+        task = ee.batch.Export.image.toCloudStorage(
             image=image,
             description=description[:100],
-            folder=DRIVE_FOLDER,
-            fileNamePrefix=file_prefix,
+            bucket=GCS_BUCKET,
+            fileNamePrefix=f"{GCS_PREFIX}/{file_prefix}",
             region=region,
             scale=scale,
             crs=CRS,
@@ -659,7 +668,7 @@ def cmd_list() -> int:
     for slug in sorted(reg.keys()):
         print(f"  - {slug}")
     print(f"\nBbox: {MYSURU_BBOX}")
-    print(f"Drive folder: {DRIVE_FOLDER}")
+    print(f"GCS destination: gs://{GCS_BUCKET}/{GCS_PREFIX}/")
     print(f"Manifest:     {MANIFEST_PATH}")
     return 0
 
@@ -708,7 +717,7 @@ def cmd_launch(slugs: List[str], skip_qc: bool = False) -> int:
 
     print(f"== Launching {len(slugs)} Mysuru export(s) ==")
     print(f"AOI bbox: {MYSURU_BBOX}")
-    print(f"Drive folder: {DRIVE_FOLDER}")
+    print(f"GCS destination: gs://{GCS_BUCKET}/{GCS_PREFIX}/")
     print(f"Manifest: {MANIFEST_PATH}\n")
 
     new_rows: List[Dict[str, str]] = []
