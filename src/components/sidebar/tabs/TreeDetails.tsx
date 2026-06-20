@@ -25,6 +25,8 @@ interface TreeDetailsData {
     status?: string;
     created_at?: string;
     mapped_by_user_id?: string | null;
+    condition?: string | null;
+    ownership?: string | null;
 }
 
 const TreeDetails: React.FC<TreeDetailsProps> = ({ treeId }) => {
@@ -196,17 +198,37 @@ const TreeDetails: React.FC<TreeDetailsProps> = ({ treeId }) => {
               <div className="text-base">{treeDetails.ward ? `Ward ${treeDetails.ward}` : 'N/A'}</div>
             </div>
             <div>
-              <div className="text-sm text-gray-500">Economic Importance</div>
-              <div className="text-base">{treeDetails.economic_i || 'N/A'}</div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-500">Flowering</div>
-              <div className="text-base">{treeDetails.flowering || 'N/A'}</div>
-            </div>
-            <div>
               <div className="text-sm text-gray-500">Wood Density</div>
-              <div className="text-base">{treeDetails.wood_density?.toFixed(2) || 'N/A'} g/cm³</div>
+              <div className="text-base">
+                {treeDetails.wood_density != null
+                  ? `${treeDetails.wood_density.toFixed(2)} g/cm³`
+                  : 'N/A'}
+              </div>
             </div>
+            {treeDetails.condition && (
+              <div>
+                <div className="text-sm text-gray-500">Condition</div>
+                <div className="text-base">{treeDetails.condition}</div>
+              </div>
+            )}
+            {treeDetails.ownership && (
+              <div>
+                <div className="text-sm text-gray-500">Ownership</div>
+                <div className="text-base">{treeDetails.ownership}</div>
+              </div>
+            )}
+            {treeDetails.economic_i && (
+              <div>
+                <div className="text-sm text-gray-500">Economic Importance</div>
+                <div className="text-base">{treeDetails.economic_i}</div>
+              </div>
+            )}
+            {treeDetails.flowering && (
+              <div>
+                <div className="text-sm text-gray-500">Flowering</div>
+                <div className="text-base">{treeDetails.flowering}</div>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -91,12 +91,19 @@ async function queryWithRetry(queryText, params = [], retries = 3, delay = 1000)
 
 // --- Supabase Helper (read-only Mysuru data) ---
 // Mysuru live tree data lives in a Supabase project owned by the mobile-app
-// team. We read with the public anon key (RLS-bound). Never write.
+// team. We prefer the service_role key (bypasses RLS, lets us read the rich
+// tree_results table including image_url and the species jsonb) and fall
+// back to the anon key for tables with permissive RLS like mapped_trees.
+// Service key is NEVER returned to the client; it stays in server env vars.
+function _supabaseAuthKey() {
+  return process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
+}
+
 async function supabaseFetch(pathAndQuery) {
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY;
+  const key = _supabaseAuthKey();
   if (!url || !key) {
-    throw new Error('SUPABASE_URL or SUPABASE_ANON_KEY missing from env');
+    throw new Error('SUPABASE_URL or SUPABASE_(SERVICE|ANON)_KEY missing from env');
   }
   const fullUrl = `${url.replace(/\/+$/, '')}/rest/v1/${pathAndQuery}`;
   const response = await fetch(fullUrl, {
@@ -111,6 +118,23 @@ async function supabaseFetch(pathAndQuery) {
     throw new Error(`Supabase ${response.status}: ${errorText}`);
   }
   return response.json();
+}
+
+// Extract a display-friendly species name from the tree_results.species jsonb.
+// Shape observed: { scientificName, commonNames: [string], score }
+function _speciesDisplayName(speciesJson) {
+  if (!speciesJson) return { common: 'Unknown', scientific: null, score: null };
+  if (typeof speciesJson === 'string') {
+    return { common: speciesJson, scientific: null, score: null };
+  }
+  const common = Array.isArray(speciesJson.commonNames) && speciesJson.commonNames[0]
+    ? speciesJson.commonNames[0]
+    : (speciesJson.scientificName || 'Unknown');
+  return {
+    common,
+    scientific: speciesJson.scientificName || null,
+    score: typeof speciesJson.score === 'number' ? speciesJson.score : null,
+  };
 }
 
 // --- Per-city geographic bounds (server-side mirror of frontend CityConfig) ---
@@ -173,31 +197,37 @@ app.get('/api/trees/:id', async (req, res) => {
   const cityId = (req.query.cityId || 'pune').toString();
 
   if (cityId === 'mysuru') {
+    // Validate UUID-ish shape early so we don't pass garbage to Supabase
+    if (!/^[0-9a-fA-F-]{8,}$/.test(id)) {
+      return res.status(404).json({ error: 'Tree not found' });
+    }
     try {
       const rows = await supabaseFetch(
-        `mapped_trees?select=id,lat,lng,species_name,status,height_m,dbh_cm,created_at,user_id&id=eq.${encodeURIComponent(id)}&limit=1`
+        `tree_results?select=id,latitude,longitude,species,metrics,wood_density,co2_sequestered_kg,image_url,condition,ownership,status,created_at,user_id&id=eq.${encodeURIComponent(id)}&limit=1`
       );
       if (!Array.isArray(rows) || rows.length === 0) {
         return res.status(404).json({ error: 'Tree not found' });
       }
       const r = rows[0];
-      // Normalize to the shape the frontend expects, leaving Mysuru-unavailable
-      // fields (botanical_name, canopy_dia_m, co2_sequestered_kg, economic_i,
-      // flowering, ward, wood_density, image_url) as null. Frontend handles N/A.
+      const sp = _speciesDisplayName(r.species);
+      const m = r.metrics || {};
+      const wd = r.wood_density || {};
       return res.json({
         id: r.id,
-        common_name: r.species_name || 'Unknown',
-        botanical_name: r.species_name || null,
-        height_m: r.height_m != null ? parseFloat(r.height_m) : null,
-        girth_cm: r.dbh_cm != null ? parseFloat(r.dbh_cm) : null, // dbh ≈ diameter, treat as girth for now
-        canopy_dia_m: null,
-        co2_sequestered_kg: null,
-        ward: null,
+        common_name: sp.common,
+        botanical_name: sp.scientific,
+        height_m: m.height_m != null ? parseFloat(m.height_m) : null,
+        girth_cm: m.dbh_cm != null ? parseFloat(m.dbh_cm) : null, // dbh treated as girth-equivalent; Pune uses cm girth, Mysuru uses cm dbh
+        canopy_dia_m: m.canopy_m != null ? parseFloat(m.canopy_m) : null,
+        co2_sequestered_kg: r.co2_sequestered_kg != null ? parseFloat(r.co2_sequestered_kg) : null,
+        ward: null, // not stored in tree_results — would need spatial lookup against mysuru_ward_boundaries
         economic_i: null,
         flowering: null,
-        wood_density: null,
-        image_url: null, // tree_results has image_url but it is RLS-blocked from anon
+        wood_density: wd.value != null ? parseFloat(wd.value) : null,
+        image_url: r.image_url || null,
         status: r.status,
+        condition: r.condition || null,
+        ownership: r.ownership || null,
         created_at: r.created_at,
         mapped_by_user_id: r.user_id,
       });
@@ -233,33 +263,46 @@ app.get('/api/city-stats', async (req, res) => {
     const cityId = (req.query.cityId || 'pune').toString();
 
     if (cityId === 'mysuru') {
-      // Live count from Supabase mapped_trees (anon-readable; tree_results is
-      // RLS-blocked from the public anon role). mapped_trees is the
-      // post-verification table — same data the dashboard's /api/trees-live
-      // uses to render markers, so the count matches what's on the map.
+      // Live count + CO2 sum from Supabase tree_results via service_role.
+      // Same filter as /api/trees-live so the City Overview number matches
+      // what's plotted on the map.
       res.setHeader('Cache-Control', 'public, max-age=10, stale-while-revalidate=30');
       try {
         const bbox = CITY_BBOX.mysuru;
+        const key = _supabaseAuthKey();
 
         const countHeaders = new Headers({
-          apikey: process.env.SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${process.env.SUPABASE_ANON_KEY}`,
+          apikey: key,
+          Authorization: `Bearer ${key}`,
           Prefer: 'count=exact',
           Range: '0-0',
         });
         const countQs = [
           '?select=*',
-          '&status=eq.verified',
-          `&lat=gte.${bbox.minLat}&lat=lte.${bbox.maxLat}`,
-          `&lng=gte.${bbox.minLng}&lng=lte.${bbox.maxLng}`,
+          '&is_deleted=eq.false',
+          '&status=neq.PENDING_ANALYSIS',
+          `&latitude=gte.${bbox.minLat}&latitude=lte.${bbox.maxLat}`,
+          `&longitude=gte.${bbox.minLng}&longitude=lte.${bbox.maxLng}`,
         ].join('');
-        const countRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/mapped_trees${countQs}`, { headers: countHeaders });
+        const countRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/tree_results${countQs}`, { headers: countHeaders });
         const contentRange = countRes.headers.get('content-range') || '*/0';
         const totalTrees = parseInt(contentRange.split('/')[1] || '0', 10);
 
-        // mapped_trees has no co2_sequestered_kg column; lifetime CO2 is left
-        // at 0 until we add a server-side allometric estimate from dbh+height.
-        return res.json({ total_trees: totalTrees, total_co2_annual_kg: 0 });
+        // Sum CO2 in JS — tree_results rows are small and capped at 10k for safety.
+        const co2Rows = await supabaseFetch([
+          'tree_results',
+          '?select=co2_sequestered_kg',
+          '&is_deleted=eq.false',
+          '&status=neq.PENDING_ANALYSIS',
+          `&latitude=gte.${bbox.minLat}&latitude=lte.${bbox.maxLat}`,
+          `&longitude=gte.${bbox.minLng}&longitude=lte.${bbox.maxLng}`,
+          '&limit=10000',
+        ].join(''));
+        const totalCo2 = (Array.isArray(co2Rows) ? co2Rows : []).reduce(
+          (s, r) => s + (parseFloat(r.co2_sequestered_kg) || 0), 0
+        );
+
+        return res.json({ total_trees: totalTrees, total_co2_annual_kg: totalCo2 });
       } catch (err) {
         console.error('[city-stats][mysuru]', err.message);
         return res.status(500).json({ error: 'Failed to fetch Mysuru stats', details: err.message });
@@ -1595,42 +1638,51 @@ app.get('/api/trees-live', async (req, res) => {
 
   try {
     if (cityId === 'mysuru') {
-      // Reads the public mapped_trees table on Supabase (the post-verification
-      // "official" tree records). tree_results has stricter RLS and is not
-      // anon-readable. mapped_trees mirrors verified submissions and is open.
+      // Reads tree_results from Supabase via service_role (bypasses RLS).
+      // Filters as per product brief: not deleted, status moved past
+      // PENDING_ANALYSIS. Pulls the rich data (species jsonb, metrics jsonb,
+      // wood_density jsonb, image_url, condition, ownership) so Tree Details
+      // can render the full panel.
       const bbox = CITY_BBOX.mysuru;
       const query = [
-        'mapped_trees',
-        '?select=id,lat,lng,species_name,status,height_m,dbh_cm,created_at',
-        '&status=eq.verified',
-        `&lat=gte.${bbox.minLat}&lat=lte.${bbox.maxLat}`,
-        `&lng=gte.${bbox.minLng}&lng=lte.${bbox.maxLng}`,
+        'tree_results',
+        '?select=id,latitude,longitude,species,metrics,wood_density,co2_sequestered_kg,image_url,condition,ownership,status,created_at',
+        '&is_deleted=eq.false',
+        '&status=neq.PENDING_ANALYSIS',
+        `&latitude=gte.${bbox.minLat}&latitude=lte.${bbox.maxLat}`,
+        `&longitude=gte.${bbox.minLng}&longitude=lte.${bbox.maxLng}`,
         '&order=created_at.desc',
         '&limit=5000',
       ].join('');
 
       const rows = await supabaseFetch(query);
 
-      const trees = (Array.isArray(rows) ? rows : []).map(r => ({
-        id: r.id,
-        lat: parseFloat(r.lat),
-        lng: parseFloat(r.lng),
-        species_name: r.species_name || 'Unknown',
-        status: r.status,
-        created_at: r.created_at,
-        height_m: r.height_m != null ? parseFloat(r.height_m) : null,
-        dbh_cm: r.dbh_cm != null ? parseFloat(r.dbh_cm) : null,
-        // mapped_trees has no co2_sequestered_kg; left null until we add
-        // a server-side estimate from dbh+height
-        co2_sequestered_kg: null,
-        image_url: null,
-      }));
+      const trees = (Array.isArray(rows) ? rows : []).map(r => {
+        const sp = _speciesDisplayName(r.species);
+        const m = r.metrics || {};
+        return {
+          id: r.id,
+          lat: parseFloat(r.latitude),
+          lng: parseFloat(r.longitude),
+          species_name: sp.common,
+          scientific_name: sp.scientific,
+          status: r.status,
+          created_at: r.created_at,
+          height_m: m.height_m != null ? parseFloat(m.height_m) : null,
+          dbh_cm: m.dbh_cm != null ? parseFloat(m.dbh_cm) : null,
+          canopy_m: m.canopy_m != null ? parseFloat(m.canopy_m) : null,
+          co2_sequestered_kg: r.co2_sequestered_kg != null ? parseFloat(r.co2_sequestered_kg) : null,
+          image_url: r.image_url || null,
+          condition: r.condition || null,
+          ownership: r.ownership || null,
+        };
+      });
 
       res.set('Cache-Control', 'public, max-age=10, stale-while-revalidate=30');
       return res.json({
         trees,
         count: trees.length,
-        _meta: { query_time_ms: Date.now() - startTime, source: 'supabase:mapped_trees' },
+        _meta: { query_time_ms: Date.now() - startTime, source: 'supabase:tree_results' },
       });
     }
 
