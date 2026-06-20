@@ -1081,18 +1081,6 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
     fetchAllData();
   }, [fetchAllData]);
 
-  // When the active city changes (or first time data loads with a different
-  // year range), snap the selected year to the latest available year. Prevents
-  // Mysuru from defaulting to 2025 when its latest is 2026, etc.
-  useEffect(() => {
-    if (!externalYear && years.length > 0) {
-      const latest = years[years.length - 1];
-      if (!years.includes(internalYear)) {
-        setInternalYear(latest);
-      }
-    }
-  }, [activeCityId, years, externalYear, internalYear]);
-  
   // Handle ward click - fly to ward on map and enable boundaries if needed
   const handleWardClick = (wardNumber: number) => {
     // Enable ward boundaries if not already visible
@@ -1147,7 +1135,17 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
   const latestYear = years[years.length - 1];
   const earliestYear = years[0];
   const periodLabel = `${earliestYear}-${latestYear}`;
-  
+
+  // When the active city changes (or first time data loads with a different
+  // year range), snap the selected year to the latest available year. Prevents
+  // Mysuru from defaulting to 2025 when its latest is 2026, etc.
+  // NOTE: must be placed AFTER `years` and `internalYear` are declared (TDZ).
+  useEffect(() => {
+    if (!externalYear && years.length > 0 && !years.includes(internalYear)) {
+      setInternalYear(years[years.length - 1]);
+    }
+  }, [activeCityId, years, externalYear, internalYear]);
+
   // Animation playback
   useEffect(() => {
     if (!playing) return;
