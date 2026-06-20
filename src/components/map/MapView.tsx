@@ -16,9 +16,12 @@ import { Protocol } from 'pmtiles';
 import { ChevronLeft, ChevronRight, LayoutDashboard } from 'lucide-react';
 import { useTreeStore } from '../../store/TreeStore';
 import { useFilterStore } from '../../store/FilterStore';
+import { useCityStore } from '../../store/CityStore';
 import { TreeFilters, hasActiveFilters } from '../../types/filters';
 import SimulatedTreesLayer from './SimulatedTreesLayer';
 import WardBoundaryLayer from './WardBoundaryLayer';
+import LiveTreesLayer from './LiveTreesLayer';
+import MysuruWardBoundaryLayer from './MysuruWardBoundaryLayer';
 import DeforestationHotspotsLayer, { HotspotConfig } from './DeforestationHotspotsLayer';
 import LandCoverOverlay from './LandCoverOverlay';
 import RasterOverlay, { RasterOverlayConfig } from './RasterOverlay';
@@ -227,6 +230,9 @@ const MapView: React.FC<MapViewProps> = ({
 }) => {
   const mapRef = useRef<MapRef | null>(null);
   const { setSelectedArea } = useTreeStore();
+  const { activeCityId, getActiveCity } = useCityStore();
+  const activeCity = getActiveCity();
+  const previousCityIdRef = useRef(activeCityId);
   const filters = useFilterStore((state) => state.filters);
   const drawControlRef = useRef<{ draw: MapboxDraw } | null>(null);
   const shadowLayerRef = useRef<RealisticShadowsLayer | null>(null);
@@ -264,6 +270,22 @@ const MapView: React.FC<MapViewProps> = ({
       // Don't remove protocol on unmount - it should persist
     };
   }, []);
+
+  // Fly to the active city when the city selector changes.
+  // Initial mount is handled by initialViewState below; this only fires on actual switches.
+  useEffect(() => {
+    if (previousCityIdRef.current === activeCityId) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    map.flyTo({
+      center: activeCity.center,
+      zoom: activeCity.defaultZoom,
+      pitch: 0,
+      duration: 1800,
+      essential: true,
+    });
+    previousCityIdRef.current = activeCityId;
+  }, [activeCityId, activeCity]);
 
   // Build filter expression from current filters
   const filterExpression = useMemo(() => {
@@ -739,15 +761,15 @@ const MapView: React.FC<MapViewProps> = ({
       <div className="absolute top-3 z-30 
         left-14 right-3 md:left-[60px] md:right-auto
         md:w-72 lg:w-80">
-        <Geocoder 
+        <Geocoder
           onSelect={handleGeocoderSelect}
-          placeholder="Search places in Pune..."
+          placeholder={`Search places in ${activeCity.name}...`}
         />
       </div>
-      
+
       <Map
         ref={mapRef}
-        initialViewState={{ longitude: 73.8567, latitude: 18.5204, zoom: 11.5 }}
+        initialViewState={{ longitude: activeCity.center[0], latitude: activeCity.center[1], zoom: activeCity.defaultZoom }}
         style={{ width: '100%', height: '100%' }}
         mapStyle={mapStyleUrl}
         interactiveLayerIds={interactiveLayers}
@@ -759,8 +781,8 @@ const MapView: React.FC<MapViewProps> = ({
         onDragEnd={handleDragEnd}
         onTouchEnd={handleTouchEnd}
       >
-        {/* PMTiles-based tree layer with filter support */}
-        {!is3D && (
+        {/* PMTiles-based tree layer (Pune census, 1.79M trees) — gated to Pune to avoid wasted bandwidth on other cities */}
+        {!is3D && activeCityId === 'pune' && (
           <Source id="trees" type="vector" url={pmtilesSourceUrl}>
             {/* Faded layer for non-matching trees (rendered first, behind main layer) */}
             <Layer {...treeLayerFadedStyle} />
@@ -770,7 +792,11 @@ const MapView: React.FC<MapViewProps> = ({
             <Layer {...treeLayerHighlightStyle} />
           </Source>
         )}
-        {showLSTOverlay && (
+        {/* Live tree markers from Supabase (Mysuru), polled every 15s. No-op for Pune. */}
+        <LiveTreesLayer />
+        {/* Mysuru ward boundary outlines. No-op for non-Mysuru. */}
+        <MysuruWardBoundaryLayer />
+        {showLSTOverlay && activeCityId === 'pune' && (
           <Source id="lst-image-source" type="image" url={lstImageUrl} coordinates={lstImageBounds}>
             <Layer id="lst-image-layer" type="raster" source="lst-image-source" paint={{ 'raster-opacity': 0.65 }} />
           </Source>
