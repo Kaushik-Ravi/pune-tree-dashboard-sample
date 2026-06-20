@@ -170,6 +170,43 @@ app.get('/api/health', async (req, res) => {
 
 app.get('/api/trees/:id', async (req, res) => {
   const { id } = req.params;
+  const cityId = (req.query.cityId || 'pune').toString();
+
+  if (cityId === 'mysuru') {
+    try {
+      const rows = await supabaseFetch(
+        `mapped_trees?select=id,lat,lng,species_name,status,height_m,dbh_cm,created_at,user_id&id=eq.${encodeURIComponent(id)}&limit=1`
+      );
+      if (!Array.isArray(rows) || rows.length === 0) {
+        return res.status(404).json({ error: 'Tree not found' });
+      }
+      const r = rows[0];
+      // Normalize to the shape the frontend expects, leaving Mysuru-unavailable
+      // fields (botanical_name, canopy_dia_m, co2_sequestered_kg, economic_i,
+      // flowering, ward, wood_density, image_url) as null. Frontend handles N/A.
+      return res.json({
+        id: r.id,
+        common_name: r.species_name || 'Unknown',
+        botanical_name: r.species_name || null,
+        height_m: r.height_m != null ? parseFloat(r.height_m) : null,
+        girth_cm: r.dbh_cm != null ? parseFloat(r.dbh_cm) : null, // dbh ≈ diameter, treat as girth for now
+        canopy_dia_m: null,
+        co2_sequestered_kg: null,
+        ward: null,
+        economic_i: null,
+        flowering: null,
+        wood_density: null,
+        image_url: null, // tree_results has image_url but it is RLS-blocked from anon
+        status: r.status,
+        created_at: r.created_at,
+        mapped_by_user_id: r.user_id,
+      });
+    } catch (err) {
+      console.error('[trees/:id][mysuru]', err.message);
+      return res.status(500).json({ error: 'Failed to fetch Mysuru tree', details: err.message });
+    }
+  }
+
   try {
     const query = `
       SELECT

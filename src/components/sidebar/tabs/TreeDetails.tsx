@@ -10,16 +10,21 @@ interface TreeDetailsProps {
 // Define a type for the details to be displayed
 interface TreeDetailsData {
     id: string;
-    girth_cm: number;
-    height_m: number;
-    canopy_dia_m: number;
+    girth_cm: number | null;
+    height_m: number | null;
+    canopy_dia_m: number | null;
     common_name: string;
-    botanical_name: string; // Changed from botanical_name_short
-    co2_sequestered_kg: number;
-    ward: string;
-    economic_i: string;
-    flowering: string;
-    wood_density: number;
+    botanical_name: string | null;
+    co2_sequestered_kg: number | null;
+    ward: string | null;
+    economic_i: string | null;
+    flowering: string | null;
+    wood_density: number | null;
+    // Optional, available for Mysuru-side live mapathon submissions
+    image_url?: string | null;
+    status?: string;
+    created_at?: string;
+    mapped_by_user_id?: string | null;
 }
 
 const TreeDetails: React.FC<TreeDetailsProps> = ({ treeId }) => {
@@ -91,16 +96,44 @@ const TreeDetails: React.FC<TreeDetailsProps> = ({ treeId }) => {
     <div className="space-y-6 animate-fade-in">
       {/* Header with tree name and ID */}
       <div className="bg-primary-50 rounded-lg p-4">
-        <div className="flex justify-between items-start">
-          <div>
-            <h2 className="text-xl font-bold text-primary-800">{treeDetails.common_name}</h2>
-            <p className="text-gray-600 italic">{treeDetails.botanical_name}</p>
+        <div className="flex justify-between items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xl font-bold text-primary-800 break-words">{treeDetails.common_name}</h2>
+            {treeDetails.botanical_name && (
+              <p className="text-gray-600 italic break-words">{treeDetails.botanical_name}</p>
+            )}
+            {treeDetails.status && (
+              <span className={`mt-2 inline-block text-xs font-medium px-2 py-0.5 rounded-full ${
+                treeDetails.status === 'verified' || treeDetails.status === 'COMPLETE'
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-amber-100 text-amber-700'
+              }`}>
+                {treeDetails.status}
+              </span>
+            )}
           </div>
-          <span className="bg-primary-100 text-primary-800 text-xs font-medium px-2.5 py-1 rounded-full">
-            ID: {treeDetails.id}
+          <span className="bg-primary-100 text-primary-800 text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap">
+            ID: {String(treeDetails.id).slice(0, 8)}
           </span>
         </div>
+        {treeDetails.created_at && (
+          <p className="text-xs text-gray-500 mt-2">
+            Mapped {new Date(treeDetails.created_at).toLocaleDateString()} at {new Date(treeDetails.created_at).toLocaleTimeString()}
+          </p>
+        )}
       </div>
+
+      {/* Tree photo (when available — e.g., Mysuru mapathon submissions) */}
+      {treeDetails.image_url && (
+        <div className="card overflow-hidden">
+          <img
+            src={treeDetails.image_url}
+            alt={treeDetails.common_name}
+            className="w-full h-48 object-cover"
+            loading="lazy"
+          />
+        </div>
+      )}
 
       {/* Tree dimensions section */}
       <div className="card">

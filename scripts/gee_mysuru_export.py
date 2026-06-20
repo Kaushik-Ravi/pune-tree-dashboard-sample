@@ -122,11 +122,27 @@ def _load_sa() -> Tuple[str, str]:
 
 
 def init_ee() -> ee.Geometry:
-    """Initialize EE via service account and return the Mysuru AOI."""
-    email, project = _load_sa()
-    creds = ee.ServiceAccountCredentials(email, key_file=KEY_PATH)
-    ee.Initialize(creds, project=project)
-    return _bbox_geometry()
+    """Initialize EE with auth that can write to Drive.
+
+    Service accounts CANNOT write to Google Drive (no per-user storage quota),
+    so we prefer user OAuth (cached at ~/.config/earthengine/credentials by
+    `earthengine authenticate`). The service-account JSON is still used to
+    discover the EE Cloud project id so we don't have to hardcode it.
+
+    If user OAuth fails (token expired etc.), fall back to service account —
+    that path still works for tasks that don't need Drive (in-EE asset writes,
+    or future GCS export support).
+    """
+    _, project = _load_sa()
+    try:
+        ee.Initialize(project=project)
+        return _bbox_geometry()
+    except Exception as user_oauth_err:
+        print(f"[init_ee] user-oauth init failed: {user_oauth_err}; falling back to service account")
+        email, _ = _load_sa()
+        creds = ee.ServiceAccountCredentials(email, key_file=KEY_PATH)
+        ee.Initialize(creds, project=project)
+        return _bbox_geometry()
 
 
 # ---------------------------------------------------------------------------

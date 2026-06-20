@@ -654,9 +654,15 @@ const MapView: React.FC<MapViewProps> = ({
         onTreeSelect(threeDFeature.properties.id);
       }
     } else {
+      // Pune PMTiles trees use Tree_ID; Mysuru live markers use plain id.
       const treeFeature = features.find(f => f.layer.id === treeLayerStyle.id);
       if (treeFeature) {
         onTreeSelect(treeFeature.properties.Tree_ID);
+        return;
+      }
+      const liveFeature = features.find(f => f.layer.id === 'live-trees-circles');
+      if (liveFeature && liveFeature.properties?.id) {
+        onTreeSelect(liveFeature.properties.id);
       }
     }
   }, [onTreeSelect, is3D]);
@@ -668,7 +674,8 @@ const MapView: React.FC<MapViewProps> = ({
     // Handle tree hover (2D mode only)
     if (!is3D) {
       const treeFeature = event.features?.find(f => f.layer.id === treeLayerStyle.id);
-      map.getCanvas().style.cursor = treeFeature ? 'pointer' : '';
+      const liveFeature = event.features?.find(f => f.layer.id === 'live-trees-circles');
+      map.getCanvas().style.cursor = (treeFeature || liveFeature) ? 'pointer' : '';
       map.setFilter('trees-point-highlight', ['==', 'Tree_ID', treeFeature ? treeFeature.properties.Tree_ID : '']);
     }
     
@@ -747,7 +754,7 @@ const MapView: React.FC<MapViewProps> = ({
   }, []);
 
   const interactiveLayers = useMemo(() => {
-    const layers = [treeLayerStyle.id];
+    const layers = [treeLayerStyle.id, 'live-trees-circles'];
     if (is3D) {
       layers.push('tree-trunks-3d', 'tree-canopies-3d');
     }

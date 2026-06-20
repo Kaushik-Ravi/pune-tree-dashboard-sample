@@ -1,6 +1,7 @@
 // src/components/map/MysuruWardBoundaryLayer.tsx
 // Renders Mysuru ward boundary outlines from /api/ward-boundaries?cityId=mysuru.
-// No-op for any city other than Mysuru. Independent of Pune's WardBoundaryLayer.
+// Default hidden. Pass `visible` from the Green Cover Monitor (or any tab that
+// scopes ward-level analysis) to turn the layer on. No-op for non-Mysuru cities.
 import { useEffect, useState } from 'react';
 import { Source, Layer } from 'react-map-gl/maplibre';
 import type { FeatureCollection } from 'geojson';
@@ -8,12 +9,16 @@ import { useCityStore } from '../../store/CityStore';
 
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
-export default function MysuruWardBoundaryLayer() {
+interface MysuruWardBoundaryLayerProps {
+  visible?: boolean;
+}
+
+export default function MysuruWardBoundaryLayer({ visible = false }: MysuruWardBoundaryLayerProps) {
   const { activeCityId } = useCityStore();
   const [geojson, setGeojson] = useState<FeatureCollection | null>(null);
 
   useEffect(() => {
-    if (activeCityId !== 'mysuru') {
+    if (activeCityId !== 'mysuru' || !visible) {
       setGeojson(null);
       return;
     }
@@ -27,9 +32,9 @@ export default function MysuruWardBoundaryLayer() {
     return () => {
       cancelled = true;
     };
-  }, [activeCityId]);
+  }, [activeCityId, visible]);
 
-  if (activeCityId !== 'mysuru' || !geojson) return null;
+  if (activeCityId !== 'mysuru' || !visible || !geojson) return null;
 
   return (
     <Source id="mysuru-wards" type="geojson" data={geojson}>
