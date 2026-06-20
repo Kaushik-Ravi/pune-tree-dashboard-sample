@@ -30,7 +30,7 @@ const LOADING_MESSAGES = [
 // Fun tree facts to show during longer waits
 const TREE_FACTS = [
   'A single tree can absorb 21 kg of CO₂ per year!',
-  'Pune has over 1.7 million cataloged trees.',
+  'Built on millions of canopy data points to drive city-scale insights.',
   'Trees can communicate through underground fungal networks.',
   'Street trees can reduce air temperature by up to 8°C.',
   'The oldest tree in India is over 3,000 years old!',

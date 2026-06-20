@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { TreePine, Leaf, MapPin, BarChart3, Sparkles } from 'lucide-react';
+import { useCityStore } from '../../store/CityStore';
 
 interface LoadingStep {
   id: string;
@@ -21,17 +22,25 @@ interface ProgressiveLoadingOverlayProps {
   isComplete?: boolean;
 }
 
-// Engaging facts about Pune's urban forest - shown during loading
-const PUNE_TREE_FACTS = [
-  { stat: '1.79 Million', label: 'Trees cataloged in Pune', icon: TreePine },
-  { stat: '288,772 tons', label: 'CO₂ absorbed (lifetime)', icon: Leaf },
-  { stat: '77 Wards', label: 'Covered across the city', icon: MapPin },
-  { stat: '397+ Species', label: 'Documented tree species', icon: Sparkles },
-];
+// Per-city loading facts. Avoids briefly flashing Pune's numbers while
+// the Mysuru dashboard initializes.
+const CITY_TREE_FACTS: Record<string, { stat: string; label: string; icon: typeof TreePine }[]> = {
+  pune: [
+    { stat: '1.79 Million', label: 'Trees cataloged in Pune', icon: TreePine },
+    { stat: '288,772 tons', label: 'CO₂ absorbed (lifetime)', icon: Leaf },
+    { stat: '77 Wards', label: 'Covered across the city', icon: MapPin },
+    { stat: '397+ Species', label: 'Documented tree species', icon: Sparkles },
+  ],
+  mysuru: [
+    { stat: 'Live', label: 'Citizen tree mapping in progress', icon: TreePine },
+    { stat: '65 Wards', label: 'Mysuru City Corporation', icon: MapPin },
+    { stat: 'Heritage', label: 'Mapping heritage city canopy', icon: Sparkles },
+  ],
+};
 
-// Rotating loading messages
+// Rotating loading messages — generic so they work for any city
 const LOADING_MESSAGES = [
-  'Counting trees across Pune...',
+  'Counting trees across the city...',
   'Calculating CO₂ absorption...',
   'Mapping urban forest data...',
   'Loading ward statistics...',
@@ -45,6 +54,10 @@ const ProgressiveLoadingOverlay: React.FC<ProgressiveLoadingOverlayProps> = ({
   wardsLoaded = 0,
   isComplete = false,
 }) => {
+  const { activeCityId, getActiveCity } = useCityStore();
+  const activeCity = getActiveCity();
+  const facts = CITY_TREE_FACTS[activeCityId] || CITY_TREE_FACTS.pune;
+
   const [messageIndex, setMessageIndex] = useState(0);
   const [factIndex, setFactIndex] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -61,7 +74,7 @@ const ProgressiveLoadingOverlay: React.FC<ProgressiveLoadingOverlayProps> = ({
   // Rotate through facts
   useEffect(() => {
     const factInterval = setInterval(() => {
-      setFactIndex((prev) => (prev + 1) % PUNE_TREE_FACTS.length);
+      setFactIndex((prev) => (prev + 1) % facts.length);
     }, 4000);
     return () => clearInterval(factInterval);
   }, []);
@@ -103,7 +116,7 @@ const ProgressiveLoadingOverlay: React.FC<ProgressiveLoadingOverlayProps> = ({
     }
   }, [totalTrees]);
 
-  const currentFact = PUNE_TREE_FACTS[factIndex];
+  const currentFact = facts[factIndex];
   const FactIcon = currentFact.icon;
 
   // Calculate CO2 in tons for display
@@ -143,7 +156,7 @@ const ProgressiveLoadingOverlay: React.FC<ProgressiveLoadingOverlayProps> = ({
         <div className="mb-8">
           <div className="flex items-center justify-center gap-3 mb-2">
             <TreePine className="w-10 h-10 text-primary-600" />
-            <h1 className="text-2xl font-bold text-gray-800">Pune Tree Dashboard</h1>
+            <h1 className="text-2xl font-bold text-gray-800">{activeCity.name} Tree Dashboard</h1>
           </div>
           <p className="text-gray-500 text-sm">Urban Forest Intelligence Platform</p>
         </div>
@@ -219,7 +232,9 @@ const ProgressiveLoadingOverlay: React.FC<ProgressiveLoadingOverlayProps> = ({
         <div className="mt-8 text-xs text-gray-400">
           <p className="flex items-center justify-center gap-1">
             <BarChart3 className="w-3 h-3" />
-            Data sourced from Pune Municipal Corporation Tree Census
+            {activeCityId === 'pune'
+              ? 'Data sourced from Pune Municipal Corporation Tree Census'
+              : `Live data from the ${activeCity.name} citizen mapathon`}
           </p>
         </div>
       </div>

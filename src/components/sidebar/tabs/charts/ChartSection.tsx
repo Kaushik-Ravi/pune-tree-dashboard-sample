@@ -8,9 +8,10 @@ import { toPng } from 'html-to-image';
 import ChartPresets from './ChartPresets';
 import ChartBuilder from './ChartBuilder';
 import DynamicChart from './DynamicChart';
-import { 
-  ChartConfig, 
-  ChartDataPoint, 
+import { useCityStore } from '../../../../store/CityStore';
+import {
+  ChartConfig,
+  ChartDataPoint,
   CHART_PRESETS,
   GroupByField,
   MetricField,
@@ -26,6 +27,9 @@ interface ChartSectionProps {
 }
 
 const ChartSection: React.FC<ChartSectionProps> = ({ className = '' }) => {
+  const { activeCityId, getActiveCity } = useCityStore();
+  const activeCity = getActiveCity();
+
   // State
   const [activePresetId, setActivePresetId] = useState<string>('trees-by-ward');
   const [chartConfig, setChartConfig] = useState<ChartConfig>(CHART_PRESETS[0].config);
@@ -61,8 +65,9 @@ const ChartSection: React.FC<ChartSectionProps> = ({ className = '' }) => {
         sortBy: chartConfig.sortBy,
         sortOrder: chartConfig.sortOrder,
         limit: chartConfig.limit,
+        cityId: activeCityId,
       });
-      
+
       setChartData(response.data.data || []);
     } catch (err) {
       console.error('Error fetching chart data:', err);
@@ -71,7 +76,7 @@ const ChartSection: React.FC<ChartSectionProps> = ({ className = '' }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [chartConfig]);
+  }, [chartConfig, activeCityId]);
 
   useEffect(() => {
     fetchChartData();
@@ -148,7 +153,7 @@ const ChartSection: React.FC<ChartSectionProps> = ({ className = '' }) => {
     // Build CSV with metadata header
     const timestamp = new Date().toLocaleString();
     const metadata = [
-      `# Pune Tree Dashboard - Chart Export`,
+      `# ${activeCity.name} Tree Dashboard - Chart Export`,
       `# Title: ${chartConfig.title}`,
       `# Generated: ${timestamp}`,
       `# Total Records: ${chartData.length}`,
@@ -239,7 +244,7 @@ const ChartSection: React.FC<ChartSectionProps> = ({ className = '' }) => {
               {chartConfig.title}
             </h4>
             <p className="text-xs text-gray-500 text-center mt-1">
-              Pune Urban Tree Census
+              {activeCity.name} Urban Tree Census
             </p>
           </div>
           

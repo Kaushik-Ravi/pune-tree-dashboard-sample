@@ -13,7 +13,7 @@ const tourStyles = {
 export const TourSteps: { [key: string]: Step } = {
   welcome: {
     target: 'body',
-    content: "Welcome to the Pune Urban Tree Dashboard! Let's take a quick tour to explore the key features.",
+    content: "Welcome to the Urban Tree Dashboard! Let's take a quick tour to explore the key features.",
     placement: 'center',
     disableBeacon: true,
     styles: tourStyles,
