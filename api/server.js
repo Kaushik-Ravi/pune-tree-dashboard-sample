@@ -196,8 +196,10 @@ app.get('/api/city-stats', async (req, res) => {
     const cityId = (req.query.cityId || 'pune').toString();
 
     if (cityId === 'mysuru') {
-      // Live count from Supabase tree_results (same filters as /api/trees-live).
-      // Short cache: this updates as citizens map during the mapathon.
+      // Live count from Supabase mapped_trees (anon-readable; tree_results is
+      // RLS-blocked from the public anon role). mapped_trees is the
+      // post-verification table — same data the dashboard's /api/trees-live
+      // uses to render markers, so the count matches what's on the map.
       res.setHeader('Cache-Control', 'public, max-age=10, stale-while-revalidate=30');
       try {
         const bbox = CITY_BBOX.mysuru;
@@ -210,30 +212,17 @@ app.get('/api/city-stats', async (req, res) => {
         });
         const countQs = [
           '?select=*',
-          '&is_deleted=eq.false',
-          '&status=neq.PENDING_ANALYSIS',
-          `&latitude=gte.${bbox.minLat}&latitude=lte.${bbox.maxLat}`,
-          `&longitude=gte.${bbox.minLng}&longitude=lte.${bbox.maxLng}`,
+          '&status=eq.verified',
+          `&lat=gte.${bbox.minLat}&lat=lte.${bbox.maxLat}`,
+          `&lng=gte.${bbox.minLng}&lng=lte.${bbox.maxLng}`,
         ].join('');
-        const countRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/tree_results${countQs}`, { headers: countHeaders });
+        const countRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/mapped_trees${countQs}`, { headers: countHeaders });
         const contentRange = countRes.headers.get('content-range') || '*/0';
         const totalTrees = parseInt(contentRange.split('/')[1] || '0', 10);
 
-        // CO2 sum — pull rows (capped) and sum in JS. tree_results rows are small.
-        const co2Rows = await supabaseFetch([
-          'tree_results',
-          '?select=co2_sequestered_kg',
-          '&is_deleted=eq.false',
-          '&status=neq.PENDING_ANALYSIS',
-          `&latitude=gte.${bbox.minLat}&latitude=lte.${bbox.maxLat}`,
-          `&longitude=gte.${bbox.minLng}&longitude=lte.${bbox.maxLng}`,
-          '&limit=10000',
-        ].join(''));
-        const totalCo2 = (Array.isArray(co2Rows) ? co2Rows : []).reduce(
-          (sum, r) => sum + (parseFloat(r.co2_sequestered_kg) || 0), 0
-        );
-
-        return res.json({ total_trees: totalTrees, total_co2_annual_kg: totalCo2 });
+        // mapped_trees has no co2_sequestered_kg column; lifetime CO2 is left
+        // at 0 until we add a server-side allometric estimate from dbh+height.
+        return res.json({ total_trees: totalTrees, total_co2_annual_kg: 0 });
       } catch (err) {
         console.error('[city-stats][mysuru]', err.message);
         return res.status(500).json({ error: 'Failed to fetch Mysuru stats', details: err.message });
@@ -742,13 +731,22 @@ app.post('/api/filtered-stats', async (req, res) => {
 // --- NEW API ENDPOINT FOR DYNAMIC CHART DATA ---
 // Flexible aggregation endpoint for the chart builder
 app.post('/api/chart-data', async (req, res) => {
-  const { groupBy, metric, sortBy, sortOrder, limit } = req.body;
-  
+  const { groupBy, metric, sortBy, sortOrder, limit, cityId } = req.body;
+  const city = (cityId || 'pune').toString();
+
+  // Mysuru's mapped_trees has no per-ward / per-species aggregations the
+  // dashboard's current chart presets assume. Return an empty data set so
+  // the chart renders its no-data state instead of Pune's numbers.
+  if (city === 'mysuru') {
+    res.setHeader('Cache-Control', 'public, max-age=10');
+    return res.json({ data: [], _meta: { source: 'mysuru - no chart aggregations yet' } });
+  }
+
   // Validate required fields
   if (!groupBy || !metric) {
     return res.status(400).json({ error: 'groupBy and metric are required' });
   }
-  
+
   try {
     // Build the GROUP BY expression based on field
     let groupByExpr;
@@ -1560,47 +1558,42 @@ app.get('/api/trees-live', async (req, res) => {
 
   try {
     if (cityId === 'mysuru') {
+      // Reads the public mapped_trees table on Supabase (the post-verification
+      // "official" tree records). tree_results has stricter RLS and is not
+      // anon-readable. mapped_trees mirrors verified submissions and is open.
       const bbox = CITY_BBOX.mysuru;
       const query = [
-        'tree_results',
-        '?select=id,latitude,longitude,species,status,created_at,co2_sequestered_kg,image_url',
-        '&is_deleted=eq.false',
-        '&status=neq.PENDING_ANALYSIS',
-        `&latitude=gte.${bbox.minLat}&latitude=lte.${bbox.maxLat}`,
-        `&longitude=gte.${bbox.minLng}&longitude=lte.${bbox.maxLng}`,
+        'mapped_trees',
+        '?select=id,lat,lng,species_name,status,height_m,dbh_cm,created_at',
+        '&status=eq.verified',
+        `&lat=gte.${bbox.minLat}&lat=lte.${bbox.maxLat}`,
+        `&lng=gte.${bbox.minLng}&lng=lte.${bbox.maxLng}`,
         '&order=created_at.desc',
         '&limit=5000',
       ].join('');
 
       const rows = await supabaseFetch(query);
 
-      const trees = (Array.isArray(rows) ? rows : []).map(r => {
-        // species is a jsonb in tree_results — shape unknown until first submission
-        // lands, so handle multiple possible structures defensively
-        let speciesName = 'Unknown';
-        if (r.species) {
-          if (typeof r.species === 'string') speciesName = r.species;
-          else if (r.species.scientific_name) speciesName = r.species.scientific_name;
-          else if (r.species.common_name) speciesName = r.species.common_name;
-          else if (r.species.name) speciesName = r.species.name;
-        }
-        return {
-          id: r.id,
-          lat: parseFloat(r.latitude),
-          lng: parseFloat(r.longitude),
-          species_name: speciesName,
-          status: r.status,
-          created_at: r.created_at,
-          co2_sequestered_kg: r.co2_sequestered_kg ? parseFloat(r.co2_sequestered_kg) : null,
-          image_url: r.image_url || null,
-        };
-      });
+      const trees = (Array.isArray(rows) ? rows : []).map(r => ({
+        id: r.id,
+        lat: parseFloat(r.lat),
+        lng: parseFloat(r.lng),
+        species_name: r.species_name || 'Unknown',
+        status: r.status,
+        created_at: r.created_at,
+        height_m: r.height_m != null ? parseFloat(r.height_m) : null,
+        dbh_cm: r.dbh_cm != null ? parseFloat(r.dbh_cm) : null,
+        // mapped_trees has no co2_sequestered_kg; left null until we add
+        // a server-side estimate from dbh+height
+        co2_sequestered_kg: null,
+        image_url: null,
+      }));
 
       res.set('Cache-Control', 'public, max-age=10, stale-while-revalidate=30');
       return res.json({
         trees,
         count: trees.length,
-        _meta: { query_time_ms: Date.now() - startTime, source: 'supabase:tree_results' },
+        _meta: { query_time_ms: Date.now() - startTime, source: 'supabase:mapped_trees' },
       });
     }
 
