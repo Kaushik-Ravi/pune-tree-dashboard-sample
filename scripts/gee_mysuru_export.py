@@ -363,6 +363,108 @@ def build_ndvi(year: int, aoi: ee.Geometry) -> Tuple[ee.Image, Dict]:
     return img, meta
 
 
+def build_ndvi_window(label: str, start: str, end: str, aoi: ee.Geometry) -> Tuple[ee.Image, Dict]:
+    """Sentinel-2 NDVI median over an arbitrary date window. Used to build
+    season-consistent annual time-series (e.g., Dec-Feb winter each year)
+    so phenology (deciduous leaf-shed) doesn't masquerade as deforestation."""
+    s2 = (
+        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterBounds(aoi)
+        .filterDate(start, end)
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 20))
+        .map(_s2_cloud_mask)
+    )
+
+    def _ndvi(im):  # noqa: ANN001
+        return im.normalizedDifference(["B8", "B4"]).rename("NDVI")
+
+    img = s2.map(_ndvi).median().clip(aoi).rename(f"NDVI_{label}")
+    meta = {
+        "asset_id": "COPERNICUS/S2_SR_HARMONIZED",
+        "scene_count_collection": s2,
+        "start": start,
+        "end": end,
+    }
+    return img, meta
+
+
+def build_lst_landsat_window(label: str, start: str, end: str, aoi: ee.Geometry) -> Tuple[ee.Image, Dict]:
+    """Landsat 8/9 LST median over an arbitrary date window."""
+    l8 = (
+        ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+        .filterBounds(aoi)
+        .filterDate(start, end)
+        .map(_landsat_thermal_mask)
+    )
+    l9 = (
+        ee.ImageCollection("LANDSAT/LC09/C02/T1_L2")
+        .filterBounds(aoi)
+        .filterDate(start, end)
+        .map(_landsat_thermal_mask)
+    )
+    merged = l8.merge(l9)
+    img = merged.median().subtract(273.15).rename(f"LST_C_{label}").clip(aoi)
+    meta = {
+        "asset_id": "LANDSAT/LC08/C02/T1_L2 + LANDSAT/LC09/C02/T1_L2",
+        "scene_count_collection": merged,
+        "start": start,
+        "end": end,
+    }
+    return img, meta
+
+
+def build_lst_modis_single(year: int, sensor: str, band: str, aoi: ee.Geometry) -> Tuple[ee.Image, Dict]:
+    """MODIS daily LST annual mean -- single sensor (Aqua MYD11A1 or Terra MOD11A1),
+    single band (LST_Day_1km or LST_Night_1km)."""
+    start = f"{year}-01-01"
+    end = f"{year}-12-31"
+    qc_band = "QC_Day" if band == "LST_Day_1km" else "QC_Night"
+    coll = ee.ImageCollection(sensor).filterBounds(aoi).filterDate(start, end)
+    img = (
+        coll.map(lambda im: _modis_lst_mask(im, band, qc_band).rename(band))
+        .mean()
+        .subtract(273.15)
+        .rename(f"LST_C")
+        .clip(aoi)
+    )
+    meta = {
+        "asset_id": f"{sensor} band={band}",
+        "scene_count_collection": coll,
+        "start": start,
+        "end": end,
+    }
+    return img, meta
+
+
+def build_lst_modis_night(year: int, aoi: ee.Geometry) -> Tuple[ee.Image, Dict]:
+    """MODIS combined Aqua+Terra NIGHT LST mean -- best for urban heat island
+    since UHI is more pronounced at night (no direct solar heating)."""
+    start = f"{year}-01-01"
+    end = f"{year}-12-31"
+    terra = ee.ImageCollection("MODIS/061/MOD11A1").filterBounds(aoi).filterDate(start, end)
+    aqua = ee.ImageCollection("MODIS/061/MYD11A1").filterBounds(aoi).filterDate(start, end)
+
+    def _night(im):  # noqa: ANN001
+        return _modis_lst_mask(im, "LST_Night_1km", "QC_Night").rename("LST_Night_K")
+
+    merged = terra.map(_night).merge(aqua.map(_night))
+    img = merged.mean().subtract(273.15).rename("LST_C").clip(aoi)
+    meta = {
+        "asset_id": "MOD11A1 + MYD11A1 (night)",
+        "scene_count_collection": terra.merge(aqua),
+        "start": start,
+        "end": end,
+    }
+    return img, meta
+
+
+def winter_window(year: int) -> Tuple[str, str]:
+    """Karnataka winter dry season — Dec (year-1) through Feb (year). Cleanest
+    sky conditions, vegetation stable (post-monsoon, pre-summer drought).
+    Best window for season-consistent multi-year comparisons."""
+    return f"{year - 1}-12-01", f"{year}-02-28"
+
+
 def build_landcover(year: int, aoi: ee.Geometry) -> Tuple[ee.Image, Dict]:
     """Dynamic World annual mode classification, 10 m."""
     start = f"{year}-01-01"
@@ -653,6 +755,60 @@ def build_registry(
         (lambda aoi=a: build_tree_loss_gain(aoi), {}),
         scale=10, qc_scale=30, aoi=a, quality_check=qc,
     )
+
+    # === ROUND 2 ADDITIONS (2026-06-20): expanded year coverage + LST options ===
+
+    # LST OPTIONS (user picks best after QC) — 7 variants beyond the existing lst_landsat_2025
+    lst_options = [
+        ("lst_landsat_2024_annual",        2024, None,       lambda a: build_lst_landsat(2024, a)),
+        ("lst_landsat_2026_to_date",       2026, None,       lambda a: build_lst_landsat_window("2026YTD", "2026-01-01", "2026-06-20", a)),
+        ("lst_landsat_2025_winter",        2025, "winter",   lambda a: build_lst_landsat_window("2025winter", *winter_window(2025), a)),
+        ("lst_landsat_2024_winter",        2024, "winter",   lambda a: build_lst_landsat_window("2024winter", *winter_window(2024), a)),
+        ("lst_modis_aqua_2025_day",        2025, "day",      lambda a: build_lst_modis_single(2025, "MODIS/061/MYD11A1", "LST_Day_1km", a)),
+        ("lst_modis_terra_2025_day",       2025, "day",      lambda a: build_lst_modis_single(2025, "MODIS/061/MOD11A1", "LST_Day_1km", a)),
+        ("lst_modis_combined_2025_night",  2025, "night",    lambda a: build_lst_modis_night(2025, a)),
+    ]
+    for slug, _year, _season, builder in lst_options:
+        is_modis = "modis" in slug
+        reg[slug] = lambda qc, a=aoi, _slug=slug, _builder=builder, _is_modis=is_modis: _make_export(
+            _slug,
+            (lambda aoi=a, _b=_builder: _b(aoi), {}),
+            scale=1000 if _is_modis else 30,
+            qc_scale=1000 if _is_modis else 120,
+            aoi=a,
+            quality_check=qc,
+        )
+
+    # NDVI annual time series — winter (Dec-Feb) for season-consistent comparison.
+    # 2019-2026 = 8 years. The full-year ndvi_2025 above stays as-is for comparison.
+    for year in range(2019, 2027):
+        slug = f"ndvi_{year}_winter"
+        start, end = winter_window(year)
+        reg[slug] = lambda qc, a=aoi, _slug=slug, _s=start, _e=end: _make_export(
+            _slug,
+            (lambda aoi=a, label=str(year), s=_s, e=_e: build_ndvi_window(label, s, e, aoi), {}),
+            scale=10, qc_scale=30, aoi=a, quality_check=qc,
+        )
+
+    # Tree probability annual time series — Dynamic World, full year.
+    # 2019 + 2025 already exist above; add 2020-2024 and 2026.
+    for year in [2020, 2021, 2022, 2023, 2024, 2026]:
+        slug = f"tree_probability_{year}"
+        reg[slug] = lambda qc, a=aoi, _y=year: _make_export(
+            f"tree_probability_{_y}",
+            (lambda aoi=a, year=_y: build_tree_probability(year, aoi), {}),
+            scale=10, qc_scale=30, aoi=a, quality_check=qc,
+        )
+
+    # Landcover annual time series — Dynamic World mode, full year.
+    # 2025 already exists above; add 2019-2024 and 2026.
+    for year in [2019, 2020, 2021, 2022, 2023, 2024, 2026]:
+        slug = f"landcover_{year}"
+        reg[slug] = lambda qc, a=aoi, _y=year: _make_export(
+            f"landcover_{_y}",
+            (lambda aoi=a, year=_y: build_landcover(year, aoi), {}),
+            scale=10, qc_scale=30, aoi=a, quality_check=qc,
+        )
 
     return reg
 
