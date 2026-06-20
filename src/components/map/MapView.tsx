@@ -808,6 +808,11 @@ const MapView: React.FC<MapViewProps> = ({
             <Layer id="lst-image-layer" type="raster" source="lst-image-source" paint={{ 'raster-opacity': 0.65 }} />
           </Source>
         )}
+        {/* Mysuru LST: served as a Cloud-Optimized GeoTIFF, rendered via RasterOverlay
+            (value-based color scale, supports the hover-pixel-value tooltip). */}
+        {showLSTOverlay && activeCityId === 'mysuru' && (
+          <RasterOverlay config={{ visible: true, layer: 'lst', opacity: 0.65 }} />
+        )}
         {is3D && <Layer {...buildings3DLayerStyle} />}
         
         {/* ALWAYS render MapLibre native 3D trees when in 3D mode - these are VISIBLE */}

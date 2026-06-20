@@ -10,7 +10,16 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as GeoTIFF from 'geotiff';
-import { RasterLayerType, LAYER_CONFIGS, LANDCOVER_CLASSES } from '../components/map/RasterOverlay';
+import { RasterLayerType, LAYER_VISUALS, LANDCOVER_CLASSES, rasterUrlFor } from '../components/map/RasterOverlay';
+import { useCityStore } from '../store/CityStore';
+
+// Back-compat shim: combine visual config with active-city URL into the
+// same shape consumers used to read from the old LAYER_CONFIGS export.
+function getLayerConfig(layer: RasterLayerType, cityId: string) {
+  const url = rasterUrlFor(layer, cityId);
+  if (!url) return null;
+  return { ...LAYER_VISUALS[layer], url };
+}
 
 // ============================================================================
 // TYPES
@@ -101,7 +110,7 @@ function interpolateColor(
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-function formatValue(value: number, layer: RasterLayerType, config: typeof LAYER_CONFIGS[RasterLayerType]): string {
+function formatValue(value: number, layer: RasterLayerType, config: typeof LAYER_VISUALS[RasterLayerType]): string {
   if (layer === 'landcover') {
     // Return class index as is
     return LANDCOVER_CLASSES[Math.round(value)] || `Class ${value}`;
@@ -169,20 +178,21 @@ function getValueDescription(value: number, layer: RasterLayerType): string {
 
 export function useRasterPixelValue(options: UseRasterPixelValueOptions) {
   const { layer, visible, debounceMs = 100 } = options;
-  
+  const activeCityId = useCityStore(state => state.activeCityId);
+
   const [pixelInfo, setPixelInfo] = useState<RasterPixelInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Load/cache the GeoTIFF for the current layer
   useEffect(() => {
     if (!layer || !visible) return;
-    
+
     const loadTiff = async () => {
-      const config = LAYER_CONFIGS[layer];
+      const config = getLayerConfig(layer, activeCityId);
       if (!config) return;
       
       // Check cache
@@ -214,7 +224,7 @@ export function useRasterPixelValue(options: UseRasterPixelValueOptions) {
     };
     
     loadTiff();
-  }, [layer, visible]);
+  }, [layer, visible, activeCityId]);
 
   // Read pixel value at coordinates
   const readPixelValue = useCallback(async (lng: number, lat: number) => {
@@ -222,8 +232,8 @@ export function useRasterPixelValue(options: UseRasterPixelValueOptions) {
       setPixelInfo(null);
       return;
     }
-    
-    const config = LAYER_CONFIGS[layer];
+
+    const config = getLayerConfig(layer, activeCityId);
     if (!config) return;
     
     const cached = tiffCache.get(config.url);

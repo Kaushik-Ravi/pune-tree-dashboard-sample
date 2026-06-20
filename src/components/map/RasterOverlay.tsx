@@ -18,18 +18,20 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Source, Layer } from 'react-map-gl/maplibre';
 import * as GeoTIFF from 'geotiff';
 import { useLayerLoadingStore, rasterLayerToStoreType } from '../../store/LayerLoadingStore';
+import { useCityStore } from '../../store/CityStore';
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-export type RasterLayerType = 
+export type RasterLayerType =
   | 'tree_probability_2025'
   | 'tree_probability_2019'
   | 'tree_change'
   | 'tree_loss_gain'
   | 'ndvi'
-  | 'landcover';
+  | 'landcover'
+  | 'lst';
 
 export interface RasterOverlayConfig {
   visible: boolean;
@@ -69,13 +71,44 @@ interface LayerConfig {
   description: string;
 }
 
-const BASE_URL = import.meta.env.DEV 
-  ? '/rasters' 
+const BASE_URL = import.meta.env.DEV
+  ? '/rasters'
   : 'https://pub-6a88122430ec4e08bc70cf4abd6d1f58.r2.dev/rasters';
 
-const LAYER_CONFIGS: Record<RasterLayerType, LayerConfig> = {
+// Per-city raster filenames. Mysuru uses the COG files uploaded under the
+// mysuru_ prefix in the same R2 bucket. NDVI for Mysuru uses the winter
+// (Dec-Feb) composite for season-consistent multi-year comparison.
+// `null` means the layer is not available for that city.
+const CITY_LAYER_FILES: Record<string, Partial<Record<RasterLayerType, string | null>>> = {
+  pune: {
+    tree_probability_2025: 'pune_tree_probability_2025.tif',
+    tree_probability_2019: 'pune_tree_probability_2019.tif',
+    tree_change: 'pune_tree_change_2019_2025_pct.tif',
+    tree_loss_gain: 'pune_tree_loss_gain_2019_2025.tif',
+    ndvi: 'pune_ndvi_2025.tif',
+    landcover: 'pune_landcover_2025.tif',
+    lst: null, // Pune has lst_pune.png served separately as an image overlay
+  },
+  mysuru: {
+    tree_probability_2025: 'mysuru_tree_probability_2025.tif',
+    tree_probability_2019: 'mysuru_tree_probability_2019.tif',
+    tree_change: 'mysuru_tree_change_2019_2025_pct.tif',
+    tree_loss_gain: 'mysuru_tree_loss_gain_2019_2025.tif',
+    ndvi: 'mysuru_ndvi_2025_winter.tif',
+    landcover: 'mysuru_landcover_2025.tif',
+    lst: 'mysuru_lst.tif',
+  },
+};
+
+function rasterUrlFor(layer: RasterLayerType, cityId: string): string | null {
+  const file = CITY_LAYER_FILES[cityId]?.[layer];
+  return file ? `${BASE_URL}/${file}` : null;
+}
+
+// Shared visual configuration (color scale, units, value range, description)
+// per layer. The URL is resolved dynamically per active city above.
+const LAYER_VISUALS: Record<RasterLayerType, Omit<LayerConfig, 'url'>> = {
   tree_probability_2025: {
-    url: `${BASE_URL}/pune_tree_probability_2025.tif`,
     name: 'Tree Cover 2025',
     unit: '%',
     description: 'Probability of tree/forest cover from Dynamic World',
@@ -90,7 +123,6 @@ const LAYER_CONFIGS: Record<RasterLayerType, LayerConfig> = {
     ],
   },
   tree_probability_2019: {
-    url: `${BASE_URL}/pune_tree_probability_2019.tif`,
     name: 'Tree Cover 2019',
     unit: '%',
     description: 'Historical tree cover probability',
@@ -105,7 +137,6 @@ const LAYER_CONFIGS: Record<RasterLayerType, LayerConfig> = {
     ],
   },
   tree_change: {
-    url: `${BASE_URL}/pune_tree_change_2019_2025_pct.tif`,
     name: 'Tree Cover Change',
     unit: '% change',
     description: 'Change in tree probability from 2019 to 2025',
@@ -121,7 +152,6 @@ const LAYER_CONFIGS: Record<RasterLayerType, LayerConfig> = {
     ],
   },
   tree_loss_gain: {
-    url: `${BASE_URL}/pune_tree_loss_gain_2019_2025.tif`,
     name: 'Tree Loss/Gain',
     unit: '',
     description: 'Binary: -1 = loss, 0 = no change, 1 = gain',
@@ -134,7 +164,6 @@ const LAYER_CONFIGS: Record<RasterLayerType, LayerConfig> = {
     ],
   },
   ndvi: {
-    url: `${BASE_URL}/pune_ndvi_2025.tif`,
     name: 'NDVI 2025',
     unit: '',
     description: 'Normalized Difference Vegetation Index',
@@ -149,7 +178,6 @@ const LAYER_CONFIGS: Record<RasterLayerType, LayerConfig> = {
     ],
   },
   landcover: {
-    url: `${BASE_URL}/pune_landcover_2025.tif`,
     name: 'Land Cover 2025',
     unit: '',
     description: 'Dynamic World classification',
@@ -164,6 +192,20 @@ const LAYER_CONFIGS: Record<RasterLayerType, LayerConfig> = {
       { value: 6, color: '#c4281b' },  // Built
       { value: 7, color: '#a59b8f' },  // Bare
       { value: 8, color: '#b39fe1' },  // Snow/Ice
+    ],
+  },
+  lst: {
+    name: 'Land Surface Temperature',
+    unit: '°C',
+    description: 'Landsat 8/9 LST annual mean — proxies for urban heat island',
+    valueRange: [22, 50],
+    colorScale: [
+      { value: 22, color: '#2c7bb6' },  // Cool blue
+      { value: 28, color: '#abd9e9' },  // Light blue
+      { value: 32, color: '#ffffbf' },  // Yellow
+      { value: 36, color: '#fdae61' },  // Orange
+      { value: 40, color: '#d7191c' },  // Red
+      { value: 50, color: '#67001f' },  // Dark red (extreme UHI)
     ],
   },
 };
@@ -225,6 +267,7 @@ const RasterOverlay: React.FC<RasterOverlayProps> = ({
   onPolygonAnalysis,
   analysisPolygon
 }) => {
+  const activeCityId = useCityStore(state => state.activeCityId);
   const [imageData, setImageData] = useState<{
     canvas: HTMLCanvasElement;
     bounds: [[number, number], [number, number]];
@@ -233,17 +276,23 @@ const RasterOverlay: React.FC<RasterOverlayProps> = ({
   const [_error, setError] = useState<string | null>(null);
   const tiffRef = useRef<GeoTIFF.GeoTIFF | null>(null);
   const imageRef = useRef<GeoTIFF.GeoTIFFImage | null>(null);
-  
+
   // Global loading store for UI feedback
   const setGlobalLoading = useLayerLoadingStore(state => state.setLoading);
 
-  const layerConfig = LAYER_CONFIGS[config.layer];
+  const layerVisual = LAYER_VISUALS[config.layer];
+  const rasterUrl = rasterUrlFor(config.layer, activeCityId);
+  // Compose a backwards-compatible layerConfig for the rest of the component
+  const layerConfig: LayerConfig | null = rasterUrl
+    ? { ...layerVisual, url: rasterUrl }
+    : null;
 
   // Load and render the raster
   useEffect(() => {
     if (!config.visible || !layerConfig) {
-      // Clear loading state when layer is hidden
+      // Clear loading state when layer is hidden / unavailable for the city
       setGlobalLoading(rasterLayerToStoreType(config.layer), false);
+      setImageData(null);
       return;
     }
 
@@ -254,8 +303,8 @@ const RasterOverlay: React.FC<RasterOverlayProps> = ({
       setError(null);
 
       try {
-        console.log(`[RasterOverlay] Loading ${config.layer}...`);
-        
+        console.log(`[RasterOverlay] Loading ${config.layer} for ${activeCityId} from ${layerConfig.url}`);
+
         // Open the COG with HTTP range requests
         const tiff = await GeoTIFF.fromUrl(layerConfig.url, {
           allowFullFile: false, // Force range requests for COG
@@ -459,5 +508,5 @@ function calculateStd(values: number[]): number {
 // ============================================================================
 
 export default RasterOverlay;
-export { LAYER_CONFIGS, LANDCOVER_CLASSES };
+export { LAYER_VISUALS, LANDCOVER_CLASSES, rasterUrlFor };
 export type { LayerConfig };
