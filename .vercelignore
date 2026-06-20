@@ -1,0 +1,36 @@
+# Vercel deployment excludes — keeps large dev-only assets out of the upload.
+# Mirrors .gitignore for big binaries plus a few extras only needed locally.
+
+# Tile sources (served from Cloudflare R2 in production)
+pune-trees-complete.geojson
+pune-trees-complete.mbtiles
+pune-trees-complete.pmtiles
+*.pmtiles
+*.mbtiles
+
+# Raster files (served from Cloudflare R2 in production)
+public/rasters/*.tif
+docs/rasters/*.tif
+*.tif
+*.tiff
+
+# Data dir — raw KML/GeoJSON sources, processed rasters, big imports
+# These are only needed for the one-off import scripts, not at runtime.
+data/
+
+# Build outputs (Vercel rebuilds during deploy)
+dist/
+docs/
+node_modules/
+
+# Test scaffolding
+test-*.html
+test-*.js
+
+# Documentation that won't ship with the bundle
+*.md
+!README.md
+
+# Backup and history files
+Copy/
+.bolt/
