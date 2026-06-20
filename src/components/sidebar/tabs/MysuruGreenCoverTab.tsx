@@ -1,11 +1,28 @@
 // src/components/sidebar/tabs/MysuruGreenCoverTab.tsx
-// Lightweight Green Cover tab for Mysuru. Pune uses the rich GreenCoverMonitor
-// (timelines, ward leaderboards, deforestation hotspots) — that requires the
-// per-ward land_cover_stats aggregations Mysuru doesn't have yet. This tab
-// gives Mysuru a usable subset: raster overlay toggles + year picker + ward
-// boundary visibility.
-import React from 'react';
-import { Layers, TreePine, Leaf, Map as MapIcon, TrendingDown, ThermometerSun, Info } from 'lucide-react';
+// Mysuru Green Cover tab. Pune uses the rich GreenCoverMonitor (timelines,
+// ward leaderboards, deforestation hotspots). Mysuru gets a lighter
+// experience: raster overlay toggles + year picker + a city-wide tree-cover
+// timeline chart (fed from the new mysuru_land_cover_stats per-ward
+// aggregations) + ward boundary visibility.
+import React, { useEffect, useState } from 'react';
+import {
+  Layers, TreePine, Leaf, Map as MapIcon, TrendingDown, ThermometerSun, Info,
+  TrendingUp,
+} from 'lucide-react';
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
+} from 'recharts';
+
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+
+interface TimelineYear {
+  year: number;
+  ward_count: number;
+  avg_trees_pct: number;
+  avg_built_pct: number;
+  total_trees_area_m2?: number;
+  total_built_area_m2?: number;
+}
 
 type RasterLayer =
   | 'tree_probability_2025'
@@ -88,6 +105,28 @@ const MysuruGreenCoverTab: React.FC<MysuruGreenCoverTabProps> = ({
   const activeYear = rasterConfig?.year;
   const opacity = rasterConfig?.opacity ?? 0.7;
 
+  // Fetch timeline data from /api/green-cover/bundle?cityId=mysuru
+  const [timeline, setTimeline] = useState<TimelineYear[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTimelineLoading(true);
+    fetch(`${API_BASE}/api/green-cover/bundle?cityId=mysuru`)
+      .then(r => r.json())
+      .then((d: { timeline?: { years?: TimelineYear[] } }) => {
+        if (cancelled) return;
+        setTimeline(d.timeline?.years ?? []);
+      })
+      .catch(err => console.warn('[MysuruGreenCoverTab] timeline fetch failed:', err))
+      .finally(() => { if (!cancelled) setTimelineLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const trend = timeline.length > 1
+    ? (timeline[timeline.length - 1].avg_trees_pct - timeline[0].avg_trees_pct)
+    : 0;
+
   const setLayer = (opt: LayerOption) => {
     const turningOff = rasterConfig?.visible && activeLayer === opt.key;
     onRasterConfigChange?.({
@@ -112,10 +151,52 @@ const MysuruGreenCoverTab: React.FC<MysuruGreenCoverTabProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Timeline chart — city-wide average tree % from Dynamic World per-ward zonal stats */}
+      <div className="card">
+        <div className="card-header flex items-center gap-2">
+          {trend >= 0
+            ? <TrendingUp size={18} className="text-green-600" />
+            : <TrendingDown size={18} className="text-red-600" />}
+          <h3 className="text-lg font-medium">Mysuru Green Cover 2019 → 2026</h3>
+          {timeline.length > 1 && (
+            <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${
+              trend >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+            }`}>
+              {trend >= 0 ? '+' : ''}{trend.toFixed(2)}% over period
+            </span>
+          )}
+        </div>
+        <div className="card-body">
+          <p className="text-xs text-gray-500 mb-3">
+            City-wide average tree-cover percentage, derived from Dynamic World annual mode landcover
+            across all 65 wards. Source: GEE zonal statistics, 10m resolution.
+          </p>
+          {timelineLoading ? (
+            <div className="h-40 flex items-center justify-center text-sm text-gray-400">Loading timeline…</div>
+          ) : timeline.length === 0 ? (
+            <div className="h-40 flex items-center justify-center text-sm text-gray-400">No data</div>
+          ) : (
+            <div style={{ width: '100%', height: 200 }}>
+              <ResponsiveContainer>
+                <LineChart data={timeline} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid stroke="#f0f0f0" strokeDasharray="3 3" />
+                  <XAxis dataKey="year" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} label={{ value: '%', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} />
+                  <Tooltip formatter={(v: number) => `${v.toFixed(2)}%`} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Line type="monotone" dataKey="avg_trees_pct" name="Trees" stroke="#16a34a" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="avg_built_pct" name="Built" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="card">
         <div className="card-header flex items-center gap-2">
           <Layers size={18} className="text-primary-600" />
-          <h3 className="text-lg font-medium">Mysuru Green Cover</h3>
+          <h3 className="text-lg font-medium">Map Overlays</h3>
         </div>
         <div className="card-body space-y-3">
           <p className="text-sm text-gray-600">

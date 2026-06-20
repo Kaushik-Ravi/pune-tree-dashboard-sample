@@ -143,6 +143,15 @@ const CITY_BBOX = {
   mysuru: { minLng: 76.57, minLat: 12.24, maxLng: 76.72, maxLat: 12.37 },
 };
 
+// --- Per-city DO Postgres land-cover table names ---
+// Same schema across cities (mirror), only the table name differs.
+function landCoverTables(cityId) {
+  if (cityId === 'mysuru') {
+    return { stats: 'mysuru_land_cover_stats', change: 'mysuru_land_cover_change' };
+  }
+  return { stats: 'land_cover_stats', change: 'land_cover_change' };
+}
+
 // ---------------------------------------------------------------------------
 // Cross-DB spatial join: Mysuru lives on Supabase, ward polygons on DO Postgres.
 // Lazy-load wards once, cache, then use bbox-pre-filtered ray-casting in pure
@@ -1281,33 +1290,26 @@ app.get('/api/ward-stats', async (req, res) => {
 app.get('/api/land-cover/wards', async (req, res) => {
   // CDN caching: Land cover data is quasi-static
   res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
-  
+  const cityId = (req.query.cityId || 'pune').toString();
+  const { stats: STATS_TABLE } = landCoverTables(cityId);
+
   try {
-    // Check if land_cover_stats table exists
+    // Check if the city's land_cover_stats table exists
     const tableCheck = await queryWithRetry(`
       SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'land_cover_stats'
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_name = '${STATS_TABLE}'
       );
     `);
-    
+
     if (tableCheck.rows[0].exists) {
-      // Fetch from database
       const result = await queryWithRetry(`
-        SELECT 
-          ward_number,
-          year,
-          total_area_m2,
-          trees_area_m2,
-          built_area_m2,
-          grass_area_m2,
-          bare_area_m2,
-          trees_pct,
-          built_pct,
-          grass_pct,
-          bare_pct
-        FROM land_cover_stats
+        SELECT
+          ward_number, year, total_area_m2,
+          trees_area_m2, built_area_m2, grass_area_m2, bare_area_m2,
+          trees_pct, built_pct, grass_pct, bare_pct
+        FROM ${STATS_TABLE}
         ORDER BY ward_number, year;
       `);
       
@@ -1343,32 +1345,27 @@ app.get('/api/land-cover/wards', async (req, res) => {
 app.get('/api/land-cover/comparison', async (req, res) => {
   // CDN caching: Historical comparison data is static
   res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
-  
+  const cityId = (req.query.cityId || 'pune').toString();
+  const { change: CHANGE_TABLE } = landCoverTables(cityId);
+
   try {
     const fromYear = parseInt(req.query.from_year) || 2019;
     const toYear = parseInt(req.query.to_year) || 2025;
-    
+
     const tableCheck = await queryWithRetry(`
       SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'land_cover_change'
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_name = '${CHANGE_TABLE}'
       );
     `);
-    
+
     if (tableCheck.rows[0].exists) {
       const result = await queryWithRetry(`
-        SELECT 
-          ward_number,
-          from_year,
-          to_year,
-          period,
-          trees_lost_m2,
-          trees_gained_m2,
-          net_tree_change_m2,
-          built_gained_m2,
-          trees_to_built_m2
-        FROM land_cover_change
+        SELECT ward_number, from_year, to_year, period,
+               trees_lost_m2, trees_gained_m2, net_tree_change_m2,
+               built_gained_m2, trees_to_built_m2
+        FROM ${CHANGE_TABLE}
         WHERE from_year = $1 AND to_year = $2
         ORDER BY ward_number;
       `, [fromYear, toYear]);
@@ -1425,51 +1422,40 @@ app.get('/api/land-cover/comparison', async (req, res) => {
 app.get('/api/land-cover/timeline', async (req, res) => {
   // CDN caching: Timeline data is historical/static
   res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
-  
+  const cityId = (req.query.cityId || 'pune').toString();
+  const { stats: STATS_TABLE, change: CHANGE_TABLE } = landCoverTables(cityId);
+
   try {
-    // Get city-wide averages per year
     const yearlyStats = await queryWithRetry(`
-      SELECT 
-        year,
-        COUNT(*) as ward_count,
-        ROUND(AVG(trees_pct)::numeric, 2) as avg_trees_pct,
-        ROUND(AVG(built_pct)::numeric, 2) as avg_built_pct,
-        ROUND(AVG(grass_pct)::numeric, 2) as avg_grass_pct,
-        ROUND(AVG(bare_pct)::numeric, 2) as avg_bare_pct,
-        ROUND(SUM(trees_area_m2)::numeric, 0) as total_trees_area_m2,
-        ROUND(SUM(built_area_m2)::numeric, 0) as total_built_area_m2
-      FROM land_cover_stats
-      GROUP BY year
-      ORDER BY year;
+      SELECT year, COUNT(*) as ward_count,
+             ROUND(AVG(trees_pct)::numeric, 2) as avg_trees_pct,
+             ROUND(AVG(built_pct)::numeric, 2) as avg_built_pct,
+             ROUND(AVG(grass_pct)::numeric, 2) as avg_grass_pct,
+             ROUND(AVG(bare_pct)::numeric, 2) as avg_bare_pct,
+             ROUND(SUM(trees_area_m2)::numeric, 0) as total_trees_area_m2,
+             ROUND(SUM(built_area_m2)::numeric, 0) as total_built_area_m2
+      FROM ${STATS_TABLE} GROUP BY year ORDER BY year;
     `);
-    
-    // Get year-over-year changes
+
     const yoyChanges = await queryWithRetry(`
-      SELECT 
-        from_year,
-        to_year,
-        period,
-        ROUND(SUM(trees_lost_m2)::numeric, 0) as total_trees_lost_m2,
-        ROUND(SUM(trees_gained_m2)::numeric, 0) as total_trees_gained_m2,
-        ROUND(SUM(net_tree_change_m2)::numeric, 0) as net_tree_change_m2,
-        ROUND(SUM(built_gained_m2)::numeric, 0) as total_built_gained_m2,
-        ROUND(SUM(trees_to_built_m2)::numeric, 0) as trees_to_built_m2
-      FROM land_cover_change
-      WHERE from_year != 2019 OR to_year != 2025  -- Exclude overall
-      GROUP BY from_year, to_year, period
-      ORDER BY from_year;
+      SELECT from_year, to_year, period,
+             ROUND(SUM(trees_lost_m2)::numeric, 0) as total_trees_lost_m2,
+             ROUND(SUM(trees_gained_m2)::numeric, 0) as total_trees_gained_m2,
+             ROUND(SUM(net_tree_change_m2)::numeric, 0) as net_tree_change_m2,
+             ROUND(SUM(built_gained_m2)::numeric, 0) as total_built_gained_m2,
+             ROUND(SUM(trees_to_built_m2)::numeric, 0) as trees_to_built_m2
+      FROM ${CHANGE_TABLE}
+      WHERE from_year != 2019 OR to_year != 2025
+      GROUP BY from_year, to_year, period ORDER BY from_year;
     `);
-    
-    // Get overall 2019-2025 change
+
     const overallChange = await queryWithRetry(`
-      SELECT 
-        ROUND(SUM(trees_lost_m2)::numeric, 0) as total_trees_lost_m2,
-        ROUND(SUM(trees_gained_m2)::numeric, 0) as total_trees_gained_m2,
-        ROUND(SUM(net_tree_change_m2)::numeric, 0) as net_tree_change_m2,
-        ROUND(SUM(built_gained_m2)::numeric, 0) as total_built_gained_m2,
-        ROUND(SUM(trees_to_built_m2)::numeric, 0) as trees_to_built_m2
-      FROM land_cover_change
-      WHERE from_year = 2019 AND to_year = 2025;
+      SELECT ROUND(SUM(trees_lost_m2)::numeric, 0) as total_trees_lost_m2,
+             ROUND(SUM(trees_gained_m2)::numeric, 0) as total_trees_gained_m2,
+             ROUND(SUM(net_tree_change_m2)::numeric, 0) as net_tree_change_m2,
+             ROUND(SUM(built_gained_m2)::numeric, 0) as total_built_gained_m2,
+             ROUND(SUM(trees_to_built_m2)::numeric, 0) as trees_to_built_m2
+      FROM ${CHANGE_TABLE} WHERE from_year = 2019 AND to_year = 2025;
     `);
     
     res.json({
@@ -1599,44 +1585,45 @@ app.get('/api/warm-up', async (req, res) => {
  */
 app.get('/api/green-cover/bundle', async (req, res) => {
   const startTime = Date.now();
-  
+  const cityId = (req.query.cityId || 'pune').toString();
+  const { stats: STATS_TABLE, change: CHANGE_TABLE } = landCoverTables(cityId);
+
   // Heavy CDN caching - this is the most impactful optimization
   res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
-  
+
   try {
-    console.log('[green-cover/bundle] Fetching bundled data...');
-    
+    console.log(`[green-cover/bundle] Fetching bundled data for ${cityId}...`);
+
     // Run all queries in parallel for maximum speed
     const [timelineResult, wardsResult, comparisonResult, statsResult] = await Promise.all([
       // Timeline data
       (async () => {
         const yearlyStats = await queryWithRetry(`
-          SELECT 
-            year, COUNT(*) as ward_count,
+          SELECT year, COUNT(*) as ward_count,
             ROUND(AVG(trees_pct)::numeric, 2) as avg_trees_pct,
             ROUND(AVG(built_pct)::numeric, 2) as avg_built_pct,
             ROUND(SUM(trees_area_m2)::numeric, 0) as total_trees_area_m2,
             ROUND(SUM(built_area_m2)::numeric, 0) as total_built_area_m2
-          FROM land_cover_stats GROUP BY year ORDER BY year;
+          FROM ${STATS_TABLE} GROUP BY year ORDER BY year;
         `);
-        
+
         const yoyChanges = await queryWithRetry(`
           SELECT from_year, to_year, period,
             ROUND(SUM(trees_lost_m2)::numeric, 0) as total_trees_lost_m2,
             ROUND(SUM(trees_gained_m2)::numeric, 0) as total_trees_gained_m2,
             ROUND(SUM(net_tree_change_m2)::numeric, 0) as net_tree_change_m2
-          FROM land_cover_change
+          FROM ${CHANGE_TABLE}
           WHERE from_year != 2019 OR to_year != 2025
           GROUP BY from_year, to_year, period ORDER BY from_year;
         `);
-        
+
         const overall = await queryWithRetry(`
-          SELECT 
+          SELECT
             ROUND(SUM(trees_lost_m2)::numeric, 0) as total_trees_lost_m2,
             ROUND(SUM(trees_gained_m2)::numeric, 0) as total_trees_gained_m2,
             ROUND(SUM(net_tree_change_m2)::numeric, 0) as net_tree_change_m2,
             ROUND(SUM(built_gained_m2)::numeric, 0) as total_built_gained_m2
-          FROM land_cover_change WHERE from_year = 2019 AND to_year = 2025;
+          FROM ${CHANGE_TABLE} WHERE from_year = 2019 AND to_year = 2025;
         `);
         
         return {
@@ -1664,31 +1651,36 @@ app.get('/api/green-cover/bundle', async (req, res) => {
       queryWithRetry(`
         SELECT ward_number, year, total_area_m2, trees_area_m2, built_area_m2,
                grass_area_m2, bare_area_m2, trees_pct, built_pct, grass_pct, bare_pct
-        FROM land_cover_stats ORDER BY ward_number, year;
+        FROM ${STATS_TABLE} ORDER BY ward_number, year;
       `),
-      
+
       // Comparison data
       queryWithRetry(`
         SELECT ward_number, from_year, to_year, trees_lost_m2, trees_gained_m2,
                net_tree_change_m2, built_gained_m2
-        FROM land_cover_change WHERE from_year = 2019 AND to_year = 2025
+        FROM ${CHANGE_TABLE} WHERE from_year = 2019 AND to_year = 2025
         ORDER BY ward_number;
       `),
-      
-      // Ward stats from tree census
-      queryWithRetry(`
-        SELECT 
-          ROUND(ward::numeric)::integer as ward_number,
-          COUNT(*) as tree_count,
-          COUNT(DISTINCT common_name) as species_count,
-          ROUND(AVG(canopy_dia_m)::numeric, 2) as avg_canopy_m,
-          ROUND(AVG(girth_cm)::numeric, 2) as avg_girth_cm,
-          ROUND(AVG(height_m)::numeric, 2) as avg_height_m,
-          ROUND(SUM(canopy_dia_m * canopy_dia_m * 0.785)::numeric, 2) as total_canopy_area_m2
-        FROM trees WHERE ward IS NOT NULL
-        GROUP BY ROUND(ward::numeric)::integer
-        ORDER BY ROUND(ward::numeric)::integer;
-      `)
+
+      // Ward stats from tree census — Pune only (Mysuru tree census is in
+      // Supabase tree_results, doesn't have canopy/girth metrics across the
+      // board). For Mysuru we return an empty array so the frontend renders
+      // gracefully without the canopy/girth sub-table.
+      cityId === 'pune'
+        ? queryWithRetry(`
+            SELECT
+              ROUND(ward::numeric)::integer as ward_number,
+              COUNT(*) as tree_count,
+              COUNT(DISTINCT common_name) as species_count,
+              ROUND(AVG(canopy_dia_m)::numeric, 2) as avg_canopy_m,
+              ROUND(AVG(girth_cm)::numeric, 2) as avg_girth_cm,
+              ROUND(AVG(height_m)::numeric, 2) as avg_height_m,
+              ROUND(SUM(canopy_dia_m * canopy_dia_m * 0.785)::numeric, 2) as total_canopy_area_m2
+            FROM trees WHERE ward IS NOT NULL
+            GROUP BY ROUND(ward::numeric)::integer
+            ORDER BY ROUND(ward::numeric)::integer;
+          `)
+        : Promise.resolve({ rows: [] }),
     ]);
     
     const queryTime = Date.now() - startTime;
