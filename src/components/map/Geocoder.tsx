@@ -22,6 +22,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, X, MapPin, Loader2, Navigation } from 'lucide-react';
 import { useDebounce } from '../../hooks/useDebounce';
+import { useCityStore } from '../../store/CityStore';
 
 // ============================================================================
 // TYPES
@@ -54,9 +55,10 @@ interface GeocoderProps {
 
 const MAPTILER_API_KEY = import.meta.env.VITE_MAPTILER_KEY;
 
-// Bounding box for Maharashtra region [minLng, minLat, maxLng, maxLat]
-// Covers Pune and surrounding areas
-const MAHARASHTRA_BBOX = '72.5,15.5,81.0,22.5';
+// Pad a tight city bbox out to roughly a metro region so the geocoder can
+// find suburbs and adjacent localities the user is likely to search for.
+// 1 degree ≈ 110 km at the equator; ±0.5° gives ~55 km of padding on each side.
+const SEARCH_BBOX_PAD_DEG = 0.5;
 
 // Debounce delay in milliseconds
 const DEBOUNCE_DELAY = 300;
@@ -122,6 +124,10 @@ const Geocoder: React.FC<GeocoderProps> = ({
   placeholder = 'Search for a place...',
   className = ''
 }) => {
+  // Active city drives the search bbox + proximity bias
+  const { getActiveCity } = useCityStore();
+  const activeCity = getActiveCity();
+
   // State
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GeocoderResult[]>([]);
@@ -158,12 +164,20 @@ const Geocoder: React.FC<GeocoderProps> = ({
     setError(null);
 
     try {
-      // Use Maharashtra bounding box for broader coverage
-      // proximity biases results toward Pune center
+      // Pad the active city's bbox to roughly a metro region so suburbs are findable
+      const [minLng, minLat, maxLng, maxLat] = activeCity.boundingBox;
+      const paddedBbox = [
+        minLng - SEARCH_BBOX_PAD_DEG,
+        minLat - SEARCH_BBOX_PAD_DEG,
+        maxLng + SEARCH_BBOX_PAD_DEG,
+        maxLat + SEARCH_BBOX_PAD_DEG,
+      ].join(',');
+      const [centerLng, centerLat] = activeCity.center;
+
       const params = new URLSearchParams({
         key: MAPTILER_API_KEY,
-        bbox: MAHARASHTRA_BBOX,
-        proximity: '73.8567,18.5204', // Pune city center
+        bbox: paddedBbox,
+        proximity: `${centerLng},${centerLat}`,
         language: 'en',
         limit: '7',
         autocomplete: 'true',
@@ -189,7 +203,7 @@ const Geocoder: React.FC<GeocoderProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeCity]);
 
   // ============================================================================
   // EFFECTS

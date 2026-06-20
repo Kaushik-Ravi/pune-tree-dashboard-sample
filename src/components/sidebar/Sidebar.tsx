@@ -1,5 +1,5 @@
 // src/components/sidebar/Sidebar.tsx
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useEffect } from 'react';
 import {
   BarChartBig,
   Trees as TreeIcon,
@@ -20,6 +20,7 @@ import MapLayers, { ShadowQuality } from './tabs/MapLayers';
 import GreenCoverMonitor from './tabs/GreenCoverMonitor';
 import { TreeFilterBar } from '../filters';
 import { ArchetypeData } from '../../store/TreeStore';
+import { useCityStore } from '../../store/CityStore';
 import { LightConfig } from './tabs/LightAndShadowControl';
 
 interface SidebarProps {
@@ -144,13 +145,27 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
   rasterConfig,
   onRasterConfigChange,
 }, ref) => {
-  const tabs = [
+  const activeCityId = useCityStore(state => state.activeCityId);
+
+  // Tabs that depend on Pune-specific datasets we haven't sourced for other cities yet
+  // (land_cover_stats for Green Cover, tree_archetypes for Planting Advisor). These
+  // hide for non-Pune cities; the rest stay so the City Overview still shows live
+  // counts and the Map Layers basemap toggle still works.
+  const allTabs = [
     { id: 'city-overview', label: 'City Overview', icon: <BarChartBig size={18} /> },
     { id: 'tree-details', label: 'Tree Details', icon: <TreeIcon size={18} /> },
-    { id: 'green-cover', label: 'Green Cover', icon: <MapAnalysisIcon size={18} />, tourId: 'tab-green-cover' },
-    { id: 'planting-advisor', label: 'Planting Advisor', icon: <SeedlingIcon size={18} />, tourId: 'tab-planting-advisor' },
+    { id: 'green-cover', label: 'Green Cover', icon: <MapAnalysisIcon size={18} />, tourId: 'tab-green-cover', puneOnly: true },
+    { id: 'planting-advisor', label: 'Planting Advisor', icon: <SeedlingIcon size={18} />, tourId: 'tab-planting-advisor', puneOnly: true },
     { id: 'map-layers', label: 'Map Layers', icon: <LayersIcon size={18} />, tourId: 'tab-map-layers' }
   ];
+  const tabs = allTabs.filter(t => !t.puneOnly || activeCityId === 'pune');
+
+  // If the previously-active tab got filtered out by a city switch, snap back to the first tab
+  useEffect(() => {
+    if (activeTabIndex >= tabs.length) {
+      setActiveTabIndex(0);
+    }
+  }, [tabs.length, activeTabIndex, setActiveTabIndex]);
 
   const tabContainerRef = React.useRef<HTMLDivElement>(null);
 
@@ -162,53 +177,61 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
   };
 
   const renderTabContent = () => {
-    switch (activeTabIndex) {
-      case 0: return <CityOverview />;
-      case 1: return <TreeDetails treeId={selectedTreeId} />;
-      case 2: return (
-        <GreenCoverMonitor
-          showWardBoundaries={showWardBoundaries}
-          onWardBoundariesToggle={onWardBoundariesToggle}
-          selectedYear={greenCoverYear}
-          onYearChange={onGreenCoverYearChange}
-          colorBy={wardColorBy}
-          onColorByChange={onWardColorByChange}
-          showDeforestationHotspots={showDeforestationHotspots}
-          onDeforestationHotspotsToggle={onDeforestationHotspotsToggle}
-          hotspotConfig={hotspotConfig}
-          onHotspotConfigChange={onHotspotConfigChange}
-          landCoverConfig={landCoverConfig}
-          onLandCoverConfigChange={onLandCoverConfigChange}
-          rasterConfig={rasterConfig}
-          onRasterConfigChange={onRasterConfigChange}
-        />
-      );
-      case 3:
+    // Switch on tab id (not index) so adding/removing tabs by city doesn't desync
+    const activeTab = tabs[activeTabIndex];
+    if (!activeTab) return <CityOverview />;
+    switch (activeTab.id) {
+      case 'city-overview':
+        return <CityOverview />;
+      case 'tree-details':
+        return <TreeDetails treeId={selectedTreeId} />;
+      case 'green-cover':
+        return (
+          <GreenCoverMonitor
+            showWardBoundaries={showWardBoundaries}
+            onWardBoundariesToggle={onWardBoundariesToggle}
+            selectedYear={greenCoverYear}
+            onYearChange={onGreenCoverYearChange}
+            colorBy={wardColorBy}
+            onColorByChange={onWardColorByChange}
+            showDeforestationHotspots={showDeforestationHotspots}
+            onDeforestationHotspotsToggle={onDeforestationHotspotsToggle}
+            hotspotConfig={hotspotConfig}
+            onHotspotConfigChange={onHotspotConfigChange}
+            landCoverConfig={landCoverConfig}
+            onLandCoverConfigChange={onLandCoverConfigChange}
+            rasterConfig={rasterConfig}
+            onRasterConfigChange={onRasterConfigChange}
+          />
+        );
+      case 'planting-advisor':
         return <PlantingAdvisor
           setShowTemperatureChart={setShowTemperatureChart}
           onSpeciesChangeForChart={onActiveSpeciesChangeForChart}
         />;
-      case 4: return (
-        <MapLayers
-          baseMap={baseMap}
-          changeBaseMap={changeBaseMap}
-          showLSTOverlay={showLSTOverlay}
-          toggleLSTOverlay={toggleLSTOverlay}
-          lstMinValue={lstMinValue}
-          lstMaxValue={lstMaxValue}
-          onLightChange={onLightChange}
-          is3D={is3D}
-          shadowsEnabled={shadowsEnabled}
-          onShadowsToggle={onShadowsToggle}
-          shadowQuality={shadowQuality}
-          onShadowQualityChange={onShadowQualityChange}
-          showTreeShadows={showTreeShadows}
-          onTreeShadowsToggle={onTreeShadowsToggle}
-          showBuildingShadows={showBuildingShadows}
-          onBuildingShadowsToggle={onBuildingShadowsToggle}
-        />
-      );
-      default: return <CityOverview />;
+      case 'map-layers':
+        return (
+          <MapLayers
+            baseMap={baseMap}
+            changeBaseMap={changeBaseMap}
+            showLSTOverlay={showLSTOverlay}
+            toggleLSTOverlay={toggleLSTOverlay}
+            lstMinValue={lstMinValue}
+            lstMaxValue={lstMaxValue}
+            onLightChange={onLightChange}
+            is3D={is3D}
+            shadowsEnabled={shadowsEnabled}
+            onShadowsToggle={onShadowsToggle}
+            shadowQuality={shadowQuality}
+            onShadowQualityChange={onShadowQualityChange}
+            showTreeShadows={showTreeShadows}
+            onTreeShadowsToggle={onTreeShadowsToggle}
+            showBuildingShadows={showBuildingShadows}
+            onBuildingShadowsToggle={onBuildingShadowsToggle}
+          />
+        );
+      default:
+        return <CityOverview />;
     }
   };
 

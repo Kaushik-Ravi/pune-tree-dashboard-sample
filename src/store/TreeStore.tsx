@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { Feature, Polygon, MultiPolygon } from 'geojson';
 import axios from 'axios';
+import { useCityStore } from './CityStore';
 
 const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
@@ -89,42 +90,44 @@ const TreeStoreContext = createContext<TreeStoreContextType | undefined>(undefin
 
 // --- Provider Component ---
 export const TreeStoreProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const activeCityId = useCityStore(state => state.activeCityId);
+
   const [wardCO2Data, setWardCO2Data] = useState<{ ward: string; co2_kg: number }[]>([]);
   const [wardTreeCountData, setWardTreeCountData] = useState<{ ward: string; tree_count: number }[]>([]);
   const [cityStats, setCityStats] = useState<CityStats | null>(null);
-  
+
   // --- UPDATED STATE FOR REAL SPECIES DATA ---
   const [treeSpeciesData, setTreeSpeciesData] = useState<TreeSpeciesData[]>([]);
-  
+
   const [selectedArea, setSelectedArea] = useState<{ type: 'geojson', geojsonData: DrawnGeoJson } | null>(null);
   const [simulatedPlantingPoints, setSimulatedPlantingPoints] = useState<Position[]>([]);
 
   // --- UPDATED: Fetch real species data from the new backend endpoint ---
   const fetchTreeSpeciesData = useCallback(async () => {
     try {
-      const response = await axios.get<TreeSpeciesData[]>(`${API_BASE_URL}/api/tree-archetypes`);
+      const response = await axios.get<TreeSpeciesData[]>(`${API_BASE_URL}/api/tree-archetypes?cityId=${activeCityId}`);
       setTreeSpeciesData(response.data);
     } catch (error) {
       console.error('Error fetching tree species data:', error);
       setTreeSpeciesData([]); // Set to empty array on error
     }
-  }, []);
+  }, [activeCityId]);
 
   // --- NO CHANGES to existing, working functions below ---
 
   const getTreeDetails = useCallback(async (id: string): Promise<TreeDetailsData | null> => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/trees/${id}`);
+      const response = await axios.get(`${API_BASE_URL}/api/trees/${id}?cityId=${activeCityId}`);
       return response.data;
     } catch (error) {
       console.error(`Error fetching details for tree ${id}:`, error);
       return null;
     }
-  }, []);
+  }, [activeCityId]);
 
   const fetchCityStats = useCallback(async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/city-stats`);
+      const response = await axios.get(`${API_BASE_URL}/api/city-stats?cityId=${activeCityId}`);
       const stats = {
           total_trees: parseInt(response.data.total_trees, 10),
           total_co2_annual_kg: parseFloat(response.data.total_co2_annual_kg)
@@ -133,13 +136,13 @@ export const TreeStoreProvider: React.FC<{ children: ReactNode }> = ({ children 
     } catch (error) {
       console.error('Error fetching city stats:', error);
     }
-  }, []);
-  
+  }, [activeCityId]);
+
   const fetchWardData = useCallback(async () => {
     try {
-        const response = await axios.get<WardData[]>(`${API_BASE_URL}/api/ward-data`);
+        const response = await axios.get<WardData[]>(`${API_BASE_URL}/api/ward-data?cityId=${activeCityId}`);
         const wardsData = response.data;
-        
+
         // Guard against non-array response
         if (!Array.isArray(wardsData)) {
           console.warn('Ward data is not an array:', wardsData);
@@ -147,7 +150,7 @@ export const TreeStoreProvider: React.FC<{ children: ReactNode }> = ({ children 
           setWardTreeCountData([]);
           return;
         }
-        
+
         const co2Data = wardsData.map(w => ({ ward: w.ward, co2_kg: parseFloat(String(w.co2_kg)) }));
         const treeCountData = wardsData.map(w => ({ ward: w.ward, tree_count: parseInt(String(w.tree_count), 10) }));
         setWardCO2Data(co2Data);
@@ -158,13 +161,13 @@ export const TreeStoreProvider: React.FC<{ children: ReactNode }> = ({ children 
         setWardCO2Data([]);
         setWardTreeCountData([]);
     }
-  }, []);
+  }, [activeCityId]);
 
   const getStatsForPolygon = useCallback(async (polygonFeature: DrawnGeoJson) => {
     if (!polygonFeature) return null;
     try {
-        const response = await axios.post(`${API_BASE_URL}/api/stats-in-polygon`, {
-            polygon: polygonFeature.geometry 
+        const response = await axios.post(`${API_BASE_URL}/api/stats-in-polygon?cityId=${activeCityId}`, {
+            polygon: polygonFeature.geometry
         });
         return {
             tree_count: parseInt(response.data.tree_count, 10),
@@ -174,14 +177,20 @@ export const TreeStoreProvider: React.FC<{ children: ReactNode }> = ({ children 
         console.error('Error fetching stats for polygon:', error);
         return null;
     }
-  }, []);
+  }, [activeCityId]);
 
-  // Initial data fetch on component mount
+  // Refetch all city-scoped data whenever the active city changes.
+  // Clearing old state first prevents the previous city's numbers from briefly
+  // showing while the new fetch is in flight.
   useEffect(() => {
+    setCityStats(null);
+    setWardCO2Data([]);
+    setWardTreeCountData([]);
+    setTreeSpeciesData([]);
     fetchCityStats();
     fetchWardData();
     fetchTreeSpeciesData();
-  }, [fetchCityStats, fetchWardData, fetchTreeSpeciesData]);
+  }, [activeCityId, fetchCityStats, fetchWardData, fetchTreeSpeciesData]);
 
   return (
     <TreeStoreContext.Provider
