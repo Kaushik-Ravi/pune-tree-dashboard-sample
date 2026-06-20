@@ -12,8 +12,16 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import axios from 'axios';
+import { useCityStore } from './CityStore';
 
 const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
+
+// Read the active city without making this store directly subscribe to it.
+// The useGreenCoverInit hook below watches activeCityId and triggers a
+// cache-clear + refetch on switch.
+function _activeCityId(): string {
+  return useCityStore.getState().activeCityId;
+}
 
 // ============================================================================
 // TYPES
@@ -175,12 +183,14 @@ export const useGreenCoverStore = create<GreenCoverState>()(
         try {
           console.log('[GreenCoverStore] Fetching fresh bundled data...');
           
-          const response = await axios.get(`${API_BASE_URL}/api/green-cover/bundle`, { 
-            timeout: 90000
+          const cityId = _activeCityId();
+          const response = await axios.get(`${API_BASE_URL}/api/green-cover/bundle`, {
+            timeout: 90000,
+            params: { cityId },
           });
-          
+
           const { timeline, wards, comparison, wardStats, _meta } = response.data;
-          
+
           set({
             timelineData: timeline,
             wardData: wards?.data || [],
@@ -192,8 +202,8 @@ export const useGreenCoverStore = create<GreenCoverState>()(
             error: null,
             lastFetchTime: Date.now(),
           });
-          
-          console.log('[GreenCoverStore] Data loaded successfully', {
+
+          console.log(`[GreenCoverStore] Data loaded for ${cityId}`, {
             timelineYears: timeline?.years?.length || 0,
             wardDataCount: wards?.data?.length || 0,
             queryTimeMs: _meta?.query_time_ms
@@ -215,8 +225,10 @@ export const useGreenCoverStore = create<GreenCoverState>()(
       // Internal: refresh data in background without blocking UI
       refreshInBackground: async () => {
         try {
-          const response = await axios.get(`${API_BASE_URL}/api/green-cover/bundle`, { 
-            timeout: 90000
+          const cityId = _activeCityId();
+          const response = await axios.get(`${API_BASE_URL}/api/green-cover/bundle`, {
+            timeout: 90000,
+            params: { cityId },
           });
           
           const { timeline, wards, comparison, wardStats, _meta } = response.data;
@@ -362,13 +374,23 @@ export function getScoreEmoji(score: number): string {
 // ============================================================================
 
 /**
- * Hook to prefetch Green Cover data on app load
- * Similar to how TreeStore fetches data on mount
+ * Hook to prefetch Green Cover data on app load + re-fetch whenever the
+ * active city changes. The store is shared (one Zustand instance) so we
+ * clear its cache + refetch on city switch rather than per-city caching.
  */
 export function useGreenCoverInit() {
-  const { fetchAllData, isInitialized } = useGreenCoverStore();
-  
-  // Fetch data once on app initialization
+  const { fetchAllData, clearCache, isInitialized } = useGreenCoverStore();
+  const activeCityId = useCityStore(state => state.activeCityId);
+
+  // Fetch on mount + whenever city changes
+  React.useEffect(() => {
+    // Clear previous city's cache so stale Pune (or Mysuru) data doesn't
+    // briefly render while the new fetch is in flight.
+    clearCache();
+    fetchAllData();
+  }, [activeCityId, clearCache, fetchAllData]);
+
+  // Initial-mount fallback for the very first render before useEffect fires.
   React.useEffect(() => {
     if (!isInitialized) {
       fetchAllData();

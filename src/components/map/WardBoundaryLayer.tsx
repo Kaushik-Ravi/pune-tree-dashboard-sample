@@ -13,6 +13,7 @@ import type { LayerProps, MapLayerMouseEvent, MapLayerTouchEvent } from 'react-m
 import type { MapRef } from 'react-map-gl/maplibre';
 import * as turf from '@turf/turf';
 import { useGreenCoverStore } from '../../store/GreenCoverStore';
+import { useCityStore } from '../../store/CityStore';
 
 // API base URL - empty string in production uses relative URLs
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
@@ -187,21 +188,22 @@ const WardBoundaryLayer: React.FC<WardBoundaryLayerProps> = ({
     }
   }, [selectedWardNumber, flyToWardTrigger, wardBoundaries, mapRef, landCoverData, comparisonData, selectedYear]);
 
-  // Fetch ward boundaries and land cover data
+  // Fetch ward boundaries and land cover data for the active city
+  const activeCityId = useCityStore(state => state.activeCityId);
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
         const [boundariesRes, landCoverRes, comparisonRes] = await Promise.all([
-          fetch(`${API_BASE}/api/ward-boundaries`),
-          fetch(`${API_BASE}/api/land-cover/wards`),
-          fetch(`${API_BASE}/api/land-cover/comparison?from_year=2019&to_year=2025`)
+          fetch(`${API_BASE}/api/ward-boundaries?cityId=${activeCityId}`),
+          fetch(`${API_BASE}/api/land-cover/wards?cityId=${activeCityId}`),
+          fetch(`${API_BASE}/api/land-cover/comparison?from_year=2019&to_year=2025&cityId=${activeCityId}`),
         ]);
 
         const [boundaries, landCover, comparison] = await Promise.all([
           boundariesRes.json(),
           landCoverRes.json(),
-          comparisonRes.json()
+          comparisonRes.json(),
         ]);
 
         setWardBoundaries(boundaries);
@@ -215,7 +217,7 @@ const WardBoundaryLayer: React.FC<WardBoundaryLayerProps> = ({
     };
 
     fetchData();
-  }, []);
+  }, [activeCityId]);
 
   // Combine boundary data with land cover data
   const enrichedGeoJSON = useMemo(() => {

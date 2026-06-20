@@ -61,6 +61,7 @@ import {
 } from 'lucide-react';
 import { useGreenCoverStore } from '../../../store/GreenCoverStore';
 import { useLayerLoadingStore, rasterLayerToStoreType } from '../../../store/LayerLoadingStore';
+import { useCityStore } from '../../../store/CityStore';
 
 // ============================================================================
 // GREEN SCORE CALCULATION
@@ -1050,6 +1051,11 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
   },
   onRasterConfigChange,
 }) => {
+  // Active city drives the title, year range, and any city-specific text
+  const { activeCityId, getActiveCity } = useCityStore();
+  const activeCity = getActiveCity();
+  const isMysuru = activeCityId === 'mysuru';
+
   // Use Zustand store for data (cached in localStorage)
   const {
     timelineData,
@@ -1074,6 +1080,18 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
   useEffect(() => {
     fetchAllData();
   }, [fetchAllData]);
+
+  // When the active city changes (or first time data loads with a different
+  // year range), snap the selected year to the latest available year. Prevents
+  // Mysuru from defaulting to 2025 when its latest is 2026, etc.
+  useEffect(() => {
+    if (!externalYear && years.length > 0) {
+      const latest = years[years.length - 1];
+      if (!years.includes(internalYear)) {
+        setInternalYear(latest);
+      }
+    }
+  }, [activeCityId, years, externalYear, internalYear]);
   
   // Handle ward click - fly to ward on map and enable boundaries if needed
   const handleWardClick = (wardNumber: number) => {
@@ -1085,7 +1103,9 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
     flyToWard(wardNumber);
   };
   
-  // UI State - use external year if provided, otherwise use internal state
+  // UI State - use external year if provided, otherwise use internal state.
+  // Default to a stable value; the year picker / timeline initializes from
+  // the data once it loads.
   const [internalYear, setInternalYear] = useState(2025);
   const selectedYear = externalYear ?? internalYear;
   const handleYearChange = (year: number) => {
@@ -1114,8 +1134,19 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
     }));
   }, []);
   
-  // Years for timeline
-  const years = [2019, 2020, 2021, 2022, 2023, 2024, 2025];
+  // Years for timeline — derived from the timeline data so Mysuru's 2019-2026
+  // and Pune's 2019-2025 both work without hardcoding either range.
+  const years = useMemo(() => {
+    const fromData = timelineData?.years?.map(y => Number(y.year)).filter(Number.isFinite);
+    if (fromData && fromData.length > 0) {
+      return [...new Set(fromData)].sort((a, b) => a - b);
+    }
+    return [2019, 2020, 2021, 2022, 2023, 2024, 2025];
+  }, [timelineData]);
+
+  const latestYear = years[years.length - 1];
+  const earliestYear = years[0];
+  const periodLabel = `${earliestYear}-${latestYear}`;
   
   // Animation playback
   useEffect(() => {
@@ -1138,14 +1169,14 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
   const cityGreenScore = useMemo(() => {
     if (!timelineData?.years?.length) return 0;
     
-    const latestYear = timelineData.years.find(y => y.year === 2025) || timelineData.years[timelineData.years.length - 1];
-    const treesPct = parseFloat(latestYear.avg_trees_pct);
-    const builtPct = parseFloat(latestYear.avg_built_pct);
+    const latestYear_ = timelineData.years.find(y => Number(y.year) === latestYear) || timelineData.years[timelineData.years.length - 1];
+    const treesPct = parseFloat(latestYear_.avg_trees_pct);
+    const builtPct = parseFloat(latestYear_.avg_built_pct);
     
     const netChange = timelineData.overall_2019_2025 
       ? parseFloat(timelineData.overall_2019_2025.net_tree_change_ha) 
       : 0;
-    const totalArea = parseFloat(latestYear.total_trees_area_ha) + parseFloat(latestYear.total_built_area_ha);
+    const totalArea = parseFloat(latestYear_.total_trees_area_ha) + parseFloat(latestYear_.total_built_area_ha);
     const changePct = (netChange / totalArea) * 100;
     
     // Safely handle wardStats - ensure it's an array
@@ -1238,13 +1269,13 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
     if (netChange > 0) {
       result.push({
         icon: <TrendingUp size={16} />,
-        text: `Pune gained ${netChange.toFixed(0)} hectares of green cover since 2019`,
+        text: `${activeCity.name} gained ${netChange.toFixed(0)} hectares of green cover since ${earliestYear}`,
         type: 'success' as const
       });
     } else {
       result.push({
         icon: <TrendingDown size={16} />,
-        text: `Pune lost ${Math.abs(netChange).toFixed(0)} hectares of green cover since 2019`,
+        text: `${activeCity.name} lost ${Math.abs(netChange).toFixed(0)} hectares of green cover since ${earliestYear}`,
         type: 'danger' as const
       });
     }
@@ -1259,7 +1290,7 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
     
     result.push({
       icon: <Building2 size={16} />,
-      text: `${builtGained.toFixed(0)} hectares of new construction since 2019`,
+      text: `${builtGained.toFixed(0)} hectares of new construction since ${earliestYear}`,
       type: 'info' as const
     });
     
@@ -1313,7 +1344,7 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
         
         {/* Fun fact */}
         <div className="text-xs text-gray-400 text-center max-w-xs mt-2">
-          💡 Pune has over 1.7 million cataloged trees spanning 77 administrative wards
+          💡 {activeCity.facts?.[0]?.stat || ''} {activeCity.facts?.[0]?.label || `tree-cover data spanning ${wardScores.length} wards in ${activeCity.name}`}
         </div>
       </div>
     );
@@ -1339,10 +1370,10 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
         <div>
           <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
             <TreePine className="text-green-600" size={20} />
-            Pune Green Cover Monitor
+            {activeCity.name} Green Cover Monitor
           </h3>
           <p className="text-xs text-gray-500 mt-0.5">
-            Satellite analysis • 2019-2025
+            Satellite analysis • {periodLabel}
           </p>
         </div>
         <button
@@ -1363,7 +1394,7 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
           <div className="flex-1">
             <h4 className="font-semibold text-gray-800">City Green Score</h4>
             <p className="text-sm text-gray-600 mt-1">
-              {getScoreEmoji(cityGreenScore)} Pune's overall green health is <strong>{getScoreLabel(cityGreenScore).toLowerCase()}</strong>
+              {getScoreEmoji(cityGreenScore)} {activeCity.name}'s overall green health is <strong>{getScoreLabel(cityGreenScore).toLowerCase()}</strong>
             </p>
             <div className="flex items-center gap-4 mt-2 text-xs">
               <span className="flex items-center gap-1">
@@ -1382,7 +1413,7 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
         {treesTrend.length > 0 && (
           <div className="mt-3 pt-3 border-t border-green-200">
             <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-              <span>Tree Cover Trend (2019-2025)</span>
+              <span>Tree Cover Trend ({periodLabel})</span>
               <span className="font-medium text-green-600">{treesTrend[treesTrend.length - 1].toFixed(1)}%</span>
             </div>
             <TrendSparkline values={treesTrend} color="#22c55e" height={24} />
@@ -1691,7 +1722,7 @@ const GreenCoverMonitor: React.FC<GreenCoverMonitorProps> = ({
                       <span>0</span>
                       <span>+50%</span>
                     </div>
-                    <p className="text-xs text-gray-400 mt-1 text-center">Tree Cover Change 2019-2025</p>
+                    <p className="text-xs text-gray-400 mt-1 text-center">Tree Cover Change {periodLabel}</p>
                   </div>
                 )}
                 

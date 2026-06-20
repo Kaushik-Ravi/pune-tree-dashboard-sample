@@ -18,6 +18,7 @@ import { Source, Layer, Popup } from 'react-map-gl/maplibre';
 import type { MapRef } from 'react-map-gl/maplibre';
 import { useGreenCoverStore } from '../../store/GreenCoverStore';
 import { useLayerLoadingStore } from '../../store/LayerLoadingStore';
+import { useCityStore } from '../../store/CityStore';
 
 // API base URL - empty string in production uses relative URLs
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
@@ -162,7 +163,8 @@ const DeforestationHotspotsLayer: React.FC<DeforestationHotspotsLayerProps> = ({
       setLoading(true);
       setGlobalLoading('deforestation_hotspots', true);
       try {
-        const response = await fetch(`${API_BASE}/api/ward-boundaries`);
+        const cityId = useCityStore.getState().activeCityId;
+        const response = await fetch(`${API_BASE}/api/ward-boundaries?cityId=${cityId}`);
         if (!response.ok) throw new Error('Failed to fetch ward boundaries');
         const data: WardBoundaryGeoJSON = await response.json();
         setGeojsonData(data);

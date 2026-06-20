@@ -17,6 +17,7 @@ import { Source, Layer, Popup, useMap } from 'react-map-gl/maplibre';
 import type { FillLayerSpecification } from 'maplibre-gl';
 import { useGreenCoverStore } from '../../store/GreenCoverStore';
 import { useLayerLoadingStore } from '../../store/LayerLoadingStore';
+import { useCityStore } from '../../store/CityStore';
 
 // API base URL
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
@@ -145,7 +146,7 @@ const LandCoverOverlay: React.FC<LandCoverOverlayProps> = ({ config }) => {
     console.log('[LandCoverOverlay] Fetching ward boundaries...');
     setGlobalLoading('ward_overlay', true);
     
-    fetch(`${API_BASE}/api/ward-boundaries`)
+    fetch(`${API_BASE}/api/ward-boundaries?cityId=${useCityStore.getState().activeCityId}`)
       .then(res => {
         if (!res.ok) {
           throw new Error(`HTTP error: ${res.status}`);

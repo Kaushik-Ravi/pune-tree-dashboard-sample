@@ -18,7 +18,6 @@ import TreeDetails from './tabs/TreeDetails';
 import PlantingAdvisor from './tabs/PlantingAdvisor';
 import MapLayers, { ShadowQuality } from './tabs/MapLayers';
 import GreenCoverMonitor from './tabs/GreenCoverMonitor';
-import MysuruGreenCoverTab from './tabs/MysuruGreenCoverTab';
 import { TreeFilterBar } from '../filters';
 import { ArchetypeData } from '../../store/TreeStore';
 import { useCityStore } from '../../store/CityStore';
@@ -187,20 +186,9 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
       case 'tree-details':
         return <TreeDetails treeId={selectedTreeId} />;
       case 'green-cover':
-        // Pune has the rich GreenCoverMonitor (timelines, leaderboards, deforestation
-        // hotspots) backed by per-ward land_cover_stats aggregations. Mysuru gets a
-        // lightweight tab that exposes the same raster overlays + year picker +
-        // ward boundary toggle — sufficient until the per-ward zonal stats land.
-        if (activeCityId === 'mysuru') {
-          return (
-            <MysuruGreenCoverTab
-              rasterConfig={rasterConfig}
-              onRasterConfigChange={onRasterConfigChange}
-              showWardBoundaries={showWardBoundaries}
-              onWardBoundariesToggle={onWardBoundariesToggle}
-            />
-          );
-        }
+        // Both Pune and Mysuru use the full GreenCoverMonitor — it reads the
+        // city's per-ward zonal stats (land_cover_stats / mysuru_land_cover_stats),
+        // and its labels + year ranges are driven by useCityStore + timelineData.
         return (
           <GreenCoverMonitor
             showWardBoundaries={showWardBoundaries}
