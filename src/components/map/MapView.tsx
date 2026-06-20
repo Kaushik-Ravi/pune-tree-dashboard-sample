@@ -676,7 +676,11 @@ const MapView: React.FC<MapViewProps> = ({
       const treeFeature = event.features?.find(f => f.layer.id === treeLayerStyle.id);
       const liveFeature = event.features?.find(f => f.layer.id === 'live-trees-circles');
       map.getCanvas().style.cursor = (treeFeature || liveFeature) ? 'pointer' : '';
-      map.setFilter('trees-point-highlight', ['==', 'Tree_ID', treeFeature ? treeFeature.properties.Tree_ID : '']);
+      // Pune PMTiles layer is gated to Pune only — guard the highlight filter
+      // so we don't spam "Cannot filter non-existing layer" on other cities.
+      if (map.getLayer('trees-point-highlight')) {
+        map.setFilter('trees-point-highlight', ['==', 'Tree_ID', treeFeature ? treeFeature.properties.Tree_ID : '']);
+      }
     }
     
     // Handle raster tooltip - suppress when hovering over land-cover-overlay to avoid conflicts

@@ -116,7 +116,16 @@ const MysuruGreenCoverTab: React.FC<MysuruGreenCoverTabProps> = ({
       .then(r => r.json())
       .then((d: { timeline?: { years?: TimelineYear[] } }) => {
         if (cancelled) return;
-        setTimeline(d.timeline?.years ?? []);
+        // Postgres ROUND(numeric) serializes as strings via pg driver. Coerce
+        // every numeric field so Recharts gets actual numbers (Number.toFixed
+        // would otherwise throw "C.toFixed is not a function").
+        const years = (d.timeline?.years ?? []).map(y => ({
+          year: Number(y.year),
+          ward_count: Number(y.ward_count),
+          avg_trees_pct: Number(y.avg_trees_pct),
+          avg_built_pct: Number(y.avg_built_pct),
+        }));
+        setTimeline(years);
       })
       .catch(err => console.warn('[MysuruGreenCoverTab] timeline fetch failed:', err))
       .finally(() => { if (!cancelled) setTimelineLoading(false); });
@@ -182,7 +191,7 @@ const MysuruGreenCoverTab: React.FC<MysuruGreenCoverTabProps> = ({
                   <CartesianGrid stroke="#f0f0f0" strokeDasharray="3 3" />
                   <XAxis dataKey="year" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} label={{ value: '%', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} />
-                  <Tooltip formatter={(v: number) => `${v.toFixed(2)}%`} />
+                  <Tooltip formatter={(v: number | string) => `${Number(v).toFixed(2)}%`} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Line type="monotone" dataKey="avg_trees_pct" name="Trees" stroke="#16a34a" strokeWidth={2} dot={{ r: 3 }} />
                   <Line type="monotone" dataKey="avg_built_pct" name="Built" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
