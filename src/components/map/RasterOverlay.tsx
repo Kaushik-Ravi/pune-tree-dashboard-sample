@@ -100,7 +100,24 @@ const CITY_LAYER_FILES: Record<string, Partial<Record<RasterLayerType, string | 
   },
 };
 
-function rasterUrlFor(layer: RasterLayerType, cityId: string): string | null {
+// For Mysuru we have annual time series uploaded; pick a specific year to
+// override the default 2025 file. Years available 2019-2026 for ndvi (winter),
+// tree_probability (full year), landcover (full year).
+type YearlyBuilder = (year: number) => string;
+const CITY_YEARLY_FILES: Record<string, Partial<Record<RasterLayerType, YearlyBuilder>>> = {
+  mysuru: {
+    ndvi: (y) => `mysuru_ndvi_${y}_winter.tif`,
+    tree_probability_2025: (y) => `mysuru_tree_probability_${y}.tif`,
+    tree_probability_2019: (y) => `mysuru_tree_probability_${y}.tif`,
+    landcover: (y) => `mysuru_landcover_${y}.tif`,
+  },
+};
+
+function rasterUrlFor(layer: RasterLayerType, cityId: string, year?: number): string | null {
+  if (year != null) {
+    const builder = CITY_YEARLY_FILES[cityId]?.[layer];
+    if (builder) return `${BASE_URL}/${builder(year)}`;
+  }
   const file = CITY_LAYER_FILES[cityId]?.[layer];
   return file ? `${BASE_URL}/${file}` : null;
 }
@@ -281,7 +298,7 @@ const RasterOverlay: React.FC<RasterOverlayProps> = ({
   const setGlobalLoading = useLayerLoadingStore(state => state.setLoading);
 
   const layerVisual = LAYER_VISUALS[config.layer];
-  const rasterUrl = rasterUrlFor(config.layer, activeCityId);
+  const rasterUrl = rasterUrlFor(config.layer, activeCityId, config.year);
   // Compose a backwards-compatible layerConfig for the rest of the component
   const layerConfig: LayerConfig | null = rasterUrl
     ? { ...layerVisual, url: rasterUrl }
@@ -389,7 +406,7 @@ const RasterOverlay: React.FC<RasterOverlayProps> = ({
       tiffRef.current = null;
       imageRef.current = null;
     };
-  }, [config.visible, config.layer, layerConfig]);
+  }, [config.visible, config.layer, config.year, activeCityId, layerConfig]);
 
   // Analyze polygon when provided
   useEffect(() => {

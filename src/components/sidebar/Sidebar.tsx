@@ -18,6 +18,7 @@ import TreeDetails from './tabs/TreeDetails';
 import PlantingAdvisor from './tabs/PlantingAdvisor';
 import MapLayers, { ShadowQuality } from './tabs/MapLayers';
 import GreenCoverMonitor from './tabs/GreenCoverMonitor';
+import MysuruGreenCoverTab from './tabs/MysuruGreenCoverTab';
 import { TreeFilterBar } from '../filters';
 import { ArchetypeData } from '../../store/TreeStore';
 import { useCityStore } from '../../store/CityStore';
@@ -154,7 +155,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
   const allTabs = [
     { id: 'city-overview', label: 'City Overview', icon: <BarChartBig size={18} /> },
     { id: 'tree-details', label: 'Tree Details', icon: <TreeIcon size={18} /> },
-    { id: 'green-cover', label: 'Green Cover', icon: <MapAnalysisIcon size={18} />, tourId: 'tab-green-cover', puneOnly: true },
+    { id: 'green-cover', label: 'Green Cover', icon: <MapAnalysisIcon size={18} />, tourId: 'tab-green-cover' },
     { id: 'planting-advisor', label: 'Planting Advisor', icon: <SeedlingIcon size={18} />, tourId: 'tab-planting-advisor', puneOnly: true },
     { id: 'map-layers', label: 'Map Layers', icon: <LayersIcon size={18} />, tourId: 'tab-map-layers' }
   ];
@@ -186,6 +187,20 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
       case 'tree-details':
         return <TreeDetails treeId={selectedTreeId} />;
       case 'green-cover':
+        // Pune has the rich GreenCoverMonitor (timelines, leaderboards, deforestation
+        // hotspots) backed by per-ward land_cover_stats aggregations. Mysuru gets a
+        // lightweight tab that exposes the same raster overlays + year picker +
+        // ward boundary toggle — sufficient until the per-ward zonal stats land.
+        if (activeCityId === 'mysuru') {
+          return (
+            <MysuruGreenCoverTab
+              rasterConfig={rasterConfig}
+              onRasterConfigChange={onRasterConfigChange}
+              showWardBoundaries={showWardBoundaries}
+              onWardBoundariesToggle={onWardBoundariesToggle}
+            />
+          );
+        }
         return (
           <GreenCoverMonitor
             showWardBoundaries={showWardBoundaries}

@@ -801,8 +801,8 @@ const MapView: React.FC<MapViewProps> = ({
         )}
         {/* Live tree markers from Supabase (Mysuru), polled every 15s. No-op for Pune. */}
         <LiveTreesLayer />
-        {/* Mysuru ward boundary outlines. No-op for non-Mysuru. */}
-        <MysuruWardBoundaryLayer />
+        {/* Mysuru ward boundary outlines — driven by the Green Cover tab toggle. */}
+        <MysuruWardBoundaryLayer visible={showWardBoundaries && activeCityId === 'mysuru'} />
         {showLSTOverlay && activeCityId === 'pune' && (
           <Source id="lst-image-source" type="image" url={lstImageUrl} coordinates={lstImageBounds}>
             <Layer id="lst-image-layer" type="raster" source="lst-image-source" paint={{ 'raster-opacity': 0.65 }} />

@@ -15,8 +15,8 @@ import { useCityStore } from '../store/CityStore';
 
 // Back-compat shim: combine visual config with active-city URL into the
 // same shape consumers used to read from the old LAYER_CONFIGS export.
-function getLayerConfig(layer: RasterLayerType, cityId: string) {
-  const url = rasterUrlFor(layer, cityId);
+function getLayerConfig(layer: RasterLayerType, cityId: string, year?: number) {
+  const url = rasterUrlFor(layer, cityId, year);
   if (!url) return null;
   return { ...LAYER_VISUALS[layer], url };
 }
@@ -192,7 +192,7 @@ export function useRasterPixelValue(options: UseRasterPixelValueOptions) {
     if (!layer || !visible) return;
 
     const loadTiff = async () => {
-      const config = getLayerConfig(layer, activeCityId);
+      const config = getLayerConfig(layer, activeCityId, undefined);
       if (!config) return;
       
       // Check cache
@@ -233,7 +233,7 @@ export function useRasterPixelValue(options: UseRasterPixelValueOptions) {
       return;
     }
 
-    const config = getLayerConfig(layer, activeCityId);
+    const config = getLayerConfig(layer, activeCityId, undefined);
     if (!config) return;
     
     const cached = tiffCache.get(config.url);

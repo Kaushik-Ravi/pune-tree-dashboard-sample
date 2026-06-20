@@ -78,8 +78,9 @@ function App() {
   // Raster Overlay state (continuous heatmap visualization)
   const [rasterConfig, setRasterConfig] = useState<{
     visible: boolean;
-    layer: 'tree_probability_2025' | 'tree_probability_2019' | 'tree_change' | 'tree_loss_gain' | 'ndvi' | 'landcover';
+    layer: 'tree_probability_2025' | 'tree_probability_2019' | 'tree_change' | 'tree_loss_gain' | 'ndvi' | 'landcover' | 'lst';
     opacity: number;
+    year?: number; // For year-keyed layers on Mysuru (ndvi/tree_probability/landcover)
   }>({
     visible: false,
     layer: 'tree_probability_2025',
