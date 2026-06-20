@@ -143,6 +143,106 @@ const CITY_BBOX = {
   mysuru: { minLng: 76.57, minLat: 12.24, maxLng: 76.72, maxLat: 12.37 },
 };
 
+// ---------------------------------------------------------------------------
+// Cross-DB spatial join: Mysuru lives on Supabase, ward polygons on DO Postgres.
+// Lazy-load wards once, cache, then use bbox-pre-filtered ray-casting in pure
+// JS to attribute each Supabase tree to a ward. 65 wards × N trees per request
+// is trivial for the dashboard's scale (~thousands of trees max).
+// ---------------------------------------------------------------------------
+
+let _mysuruWardsCache = null;
+let _mysuruWardsCacheTime = 0;
+const MYSURU_WARDS_TTL_MS = 10 * 60 * 1000; // 10 min
+
+async function loadMysuruWards() {
+  if (_mysuruWardsCache && (Date.now() - _mysuruWardsCacheTime) < MYSURU_WARDS_TTL_MS) {
+    return _mysuruWardsCache;
+  }
+  const result = await queryWithRetry(`
+    SELECT ward_no, ward_name, ST_AsGeoJSON(geometry)::json AS geometry
+    FROM mysuru_ward_boundaries
+    ORDER BY ward_no
+  `);
+  // Pre-compute bbox per ward for fast pre-filter.
+  _mysuruWardsCache = result.rows.map(r => {
+    const rings = r.geometry.type === 'Polygon'
+      ? [r.geometry.coordinates[0]]
+      : r.geometry.coordinates.map(p => p[0]); // MultiPolygon: take first ring of each polygon
+    // Compute combined bbox over all rings
+    let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+    for (const ring of rings) {
+      for (const [lng, lat] of ring) {
+        if (lng < minLng) minLng = lng;
+        if (lng > maxLng) maxLng = lng;
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+      }
+    }
+    return {
+      ward_no: r.ward_no,
+      ward_name: r.ward_name,
+      rings,
+      bbox: [minLng, minLat, maxLng, maxLat],
+    };
+  });
+  _mysuruWardsCacheTime = Date.now();
+  return _mysuruWardsCache;
+}
+
+// Ray-casting point-in-polygon. Polygon = array of [lng,lat] in order.
+function _pointInRing(lng, lat, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    const intersect = ((yi > lat) !== (yj > lat))
+      && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function findMysuruWard(lng, lat, wards) {
+  for (const w of wards) {
+    if (lng < w.bbox[0] || lng > w.bbox[2] || lat < w.bbox[1] || lat > w.bbox[3]) continue;
+    for (const ring of w.rings) {
+      if (_pointInRing(lng, lat, ring)) return w;
+    }
+  }
+  return null;
+}
+
+// Returns: [{ ward_no, ward_name, tree_count, co2_kg, trees: [...] }, ...]
+async function aggregateMysuruTreesByWard() {
+  const bbox = CITY_BBOX.mysuru;
+  const rows = await supabaseFetch([
+    'tree_results',
+    '?select=id,latitude,longitude,species,metrics,co2_sequestered_kg',
+    '&is_deleted=eq.false',
+    '&status=neq.PENDING_ANALYSIS',
+    `&latitude=gte.${bbox.minLat}&latitude=lte.${bbox.maxLat}`,
+    `&longitude=gte.${bbox.minLng}&longitude=lte.${bbox.maxLng}`,
+    '&limit=10000',
+  ].join(''));
+  const wards = await loadMysuruWards();
+  const byWard = new Map();
+  for (const w of wards) {
+    byWard.set(w.ward_no, { ward_no: w.ward_no, ward_name: w.ward_name, tree_count: 0, co2_kg: 0, trees: [] });
+  }
+  let unassigned = 0;
+  for (const t of (Array.isArray(rows) ? rows : [])) {
+    const lng = parseFloat(t.longitude);
+    const lat = parseFloat(t.latitude);
+    const w = findMysuruWard(lng, lat, wards);
+    if (!w) { unassigned++; continue; }
+    const bucket = byWard.get(w.ward_no);
+    bucket.tree_count++;
+    bucket.co2_kg += (parseFloat(t.co2_sequestered_kg) || 0);
+    bucket.trees.push(t);
+  }
+  return { perWard: Array.from(byWard.values()), unassigned, totalTrees: rows.length };
+}
+
 // --- Health Check Endpoint ---
 app.get('/api/health', async (req, res) => {
   const startTime = Date.now();
@@ -330,12 +430,22 @@ app.get('/api/ward-data', async (req, res) => {
     const cityId = (req.query.cityId || 'pune').toString();
 
     if (cityId === 'mysuru') {
-      // No per-ward tree aggregation yet for Mysuru — trees live in Supabase
-      // and the spatial join to mysuru_ward_boundaries (DO Postgres) crosses
-      // databases. Return an empty list so the dashboard renders a no-data state
-      // instead of stale Pune numbers.
-      res.setHeader('Cache-Control', 'public, max-age=10');
-      return res.json([]);
+      // Cross-DB spatial join: trees from Supabase, ward polygons from DO.
+      // Done in pure JS — 65 wards × O(thousands of trees) is fast enough.
+      // Short cache: aggregates change as citizens map during the mapathon.
+      res.setHeader('Cache-Control', 'public, max-age=15');
+      try {
+        const { perWard } = await aggregateMysuruTreesByWard();
+        // Shape matches Pune ward-data: { ward, tree_count, co2_kg }
+        return res.json(perWard.map(w => ({
+          ward: String(w.ward_no),
+          tree_count: w.tree_count,
+          co2_kg: w.co2_kg,
+        })));
+      } catch (err) {
+        console.error('[ward-data][mysuru]', err.message);
+        return res.status(500).json({ error: 'Failed to aggregate Mysuru wards', details: err.message });
+      }
     }
 
     if (cityId === 'pune') {
@@ -814,12 +924,98 @@ app.post('/api/chart-data', async (req, res) => {
   const { groupBy, metric, sortBy, sortOrder, limit, cityId } = req.body;
   const city = (cityId || 'pune').toString();
 
-  // Mysuru's mapped_trees has no per-ward / per-species aggregations the
-  // dashboard's current chart presets assume. Return an empty data set so
-  // the chart renders its no-data state instead of Pune's numbers.
+  // Mysuru: aggregate tree_results (Supabase) directly. For ward groupBy we
+  // do the cross-DB spatial join via aggregateMysuruTreesByWard(); for
+  // species/height/canopy/co2 we aggregate the same Supabase rows in JS.
+  // Pune-only groupBys (economic_importance, flowering, location_type) return
+  // an empty data set with a note in _meta.
   if (city === 'mysuru') {
-    res.setHeader('Cache-Control', 'public, max-age=10');
-    return res.json({ data: [], _meta: { source: 'mysuru - no chart aggregations yet' } });
+    res.setHeader('Cache-Control', 'public, max-age=15');
+    try {
+      const { perWard } = await aggregateMysuruTreesByWard();
+      const allTrees = perWard.flatMap(w => w.trees.map(t => ({ ...t, _ward: w.ward_no, _ward_name: w.ward_name })));
+
+      // metric -> tree -> value
+      const treeMetricValue = (t, metric) => {
+        const m = t.metrics || {};
+        switch (metric) {
+          case 'count': return 1;
+          case 'sum_co2': return parseFloat(t.co2_sequestered_kg) || 0;
+          case 'avg_height': return m.height_m != null ? parseFloat(m.height_m) : null;
+          case 'avg_canopy': return m.canopy_m != null ? parseFloat(m.canopy_m) : null;
+          case 'avg_girth': return m.dbh_cm != null ? parseFloat(m.dbh_cm) : null;
+          default: return null;
+        }
+      };
+
+      const treeGroupKey = (t) => {
+        switch (groupBy) {
+          case 'ward': return t._ward != null ? String(t._ward) : 'Unassigned';
+          case 'species': {
+            const sp = t.species || {};
+            return (Array.isArray(sp.commonNames) && sp.commonNames[0])
+              || sp.scientificName || 'Unknown';
+          }
+          case 'height_category': {
+            const h = (t.metrics || {}).height_m;
+            if (h == null) return 'Unknown';
+            if (h < 5) return '1. Short (<5m)';
+            if (h < 10) return '2. Medium (5-10m)';
+            if (h < 15) return '3. Tall (10-15m)';
+            return '4. Very Tall (>15m)';
+          }
+          case 'canopy_category': {
+            const c = (t.metrics || {}).canopy_m;
+            if (c == null) return 'Unknown';
+            if (c < 3) return '1. Small (<3m)';
+            if (c < 6) return '2. Medium (3-6m)';
+            if (c < 10) return '3. Large (6-10m)';
+            return '4. Very Large (>10m)';
+          }
+          default:
+            return null;
+        }
+      };
+
+      if (treeGroupKey(allTrees[0] || {}) === null) {
+        return res.json({ data: [], _meta: { source: 'mysuru', note: `groupBy=${groupBy} not supported for Mysuru` } });
+      }
+
+      const buckets = new Map();
+      for (const t of allTrees) {
+        const key = treeGroupKey(t);
+        if (!key) continue;
+        const v = treeMetricValue(t, metric);
+        if (v == null) continue;
+        const b = buckets.get(key) || { name: key, sum: 0, count: 0 };
+        b.sum += v;
+        b.count++;
+        buckets.set(key, b);
+      }
+
+      const isAvg = metric.startsWith('avg_');
+      let data = Array.from(buckets.values()).map(b => ({
+        name: b.name,
+        value: isAvg ? b.sum / b.count : b.sum,
+      }));
+
+      // Sort + limit per request
+      const sortOrderEff = sortOrder || 'desc';
+      const sortByEff = sortBy || 'value';
+      data.sort((a, b) => {
+        const av = sortByEff === 'name' ? String(a.name).localeCompare(String(b.name)) : a.value - b.value;
+        return sortOrderEff === 'desc' ? -av : av;
+      });
+      if (limit && limit > 0) data = data.slice(0, limit);
+
+      return res.json({
+        data,
+        _meta: { source: 'supabase:tree_results', total_trees: allTrees.length, groupBy, metric },
+      });
+    } catch (err) {
+      console.error('[chart-data][mysuru]', err.message);
+      return res.status(500).json({ error: 'Failed Mysuru chart aggregation', details: err.message });
+    }
   }
 
   // Validate required fields

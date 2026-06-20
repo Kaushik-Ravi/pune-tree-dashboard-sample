@@ -271,8 +271,11 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({
         </button>
       </div>
 
-      {/* Tree Filter Bar - Collapsible */}
-      <TreeFilterBar />
+      {/* Tree Filter Bar — Pune-only for now. Operates on PMTiles attributes
+          (species/height/canopy/economic_i/flowering) which don't exist on
+          Mysuru's Supabase tree_results schema. Will get a dedicated Mysuru
+          filter UI when there's enough data to be worth filtering. */}
+      {activeCityId === 'pune' && <TreeFilterBar />}
 
       <div data-tour-id="sidebar-tabs" className="bg-gray-50 border-b border-gray-200 relative h-[var(--sidebar-tabs-height)] flex items-center">
         {/* Desktop-only scroll buttons */}
