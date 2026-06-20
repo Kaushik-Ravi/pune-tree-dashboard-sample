@@ -89,6 +89,36 @@ async function queryWithRetry(queryText, params = [], retries = 3, delay = 1000)
   }
 }
 
+// --- Supabase Helper (read-only Mysuru data) ---
+// Mysuru live tree data lives in a Supabase project owned by the mobile-app
+// team. We read with the public anon key (RLS-bound). Never write.
+async function supabaseFetch(pathAndQuery) {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_ANON_KEY;
+  if (!url || !key) {
+    throw new Error('SUPABASE_URL or SUPABASE_ANON_KEY missing from env');
+  }
+  const fullUrl = `${url.replace(/\/+$/, '')}/rest/v1/${pathAndQuery}`;
+  const response = await fetch(fullUrl, {
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      Accept: 'application/json',
+    },
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Supabase ${response.status}: ${errorText}`);
+  }
+  return response.json();
+}
+
+// --- Per-city geographic bounds (server-side mirror of frontend CityConfig) ---
+const CITY_BBOX = {
+  pune:   { minLng: 73.7,  minLat: 18.4,  maxLng: 74.0,  maxLat: 18.6  },
+  mysuru: { minLng: 76.57, minLat: 12.24, maxLng: 76.72, maxLat: 12.37 },
+};
+
 // --- Health Check Endpoint ---
 app.get('/api/health', async (req, res) => {
   const startTime = Date.now();
@@ -780,59 +810,76 @@ app.post('/api/chart-data', async (req, res) => {
 // =====================================================
 
 /**
- * GET /api/ward-boundaries
- * Returns ward polygons as GeoJSON for map visualization
- * Cached for 1 hour, stale for 24 hours (polygon data rarely changes)
+ * GET /api/ward-boundaries?cityId=pune|mysuru
+ * Returns ward polygons as a GeoJSON FeatureCollection.
+ * Default cityId is 'pune' for backwards compatibility.
+ * Cached for 1 hour, stale for 24 hours (polygon data rarely changes).
  */
 app.get('/api/ward-boundaries', async (req, res) => {
-  // CDN caching: Ward boundaries are static data, cache heavily
+  const cityId = (req.query.cityId || 'pune').toString();
   res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
-  
+
   try {
-    const query = `
-      SELECT 
-        ward_number,
-        ward_office,
-        prabhag_name,
-        zone,
-        tree_count,
-        ST_AsGeoJSON(geometry)::json as geometry
-      FROM ward_polygons
-      ORDER BY ward_number;
-    `;
-    
-    const result = await queryWithRetry(query);
-    
-    // Format as GeoJSON FeatureCollection
-    const geojson = {
-      type: 'FeatureCollection',
-      features: result.rows.map(row => ({
+    let query;
+    let rowToFeature;
+
+    if (cityId === 'mysuru') {
+      query = `
+        SELECT ward_no, ward_name, ward_code, area_m2, tree_count,
+               ST_AsGeoJSON(geometry)::json AS geometry
+        FROM mysuru_ward_boundaries
+        ORDER BY ward_no;
+      `;
+      rowToFeature = row => ({
+        type: 'Feature',
+        properties: {
+          ward_number: row.ward_no,
+          ward_name: row.ward_name,
+          ward_code: row.ward_code,
+          area_m2: row.area_m2,
+          tree_count: row.tree_count,
+        },
+        geometry: row.geometry,
+      });
+    } else if (cityId === 'pune') {
+      query = `
+        SELECT ward_number, ward_office, prabhag_name, zone, tree_count,
+               ST_AsGeoJSON(geometry)::json AS geometry
+        FROM ward_polygons
+        ORDER BY ward_number;
+      `;
+      rowToFeature = row => ({
         type: 'Feature',
         properties: {
           ward_number: row.ward_number,
           ward_office: row.ward_office,
           prabhag_name: row.prabhag_name,
           zone: row.zone,
-          tree_count: row.tree_count
+          tree_count: row.tree_count,
         },
-        geometry: row.geometry
-      }))
-    };
-    
-    res.json(geojson);
-  } catch (err) {
-    console.error('Error fetching ward boundaries:', err.message);
-    
-    // If table doesn't exist yet, return empty collection
-    if (err.message.includes('does not exist')) {
-      res.json({
-        type: 'FeatureCollection',
-        features: [],
-        error: 'Ward boundaries not yet imported. Run import-ward-polygons.sql first.'
+        geometry: row.geometry,
       });
     } else {
-      res.status(500).json({ error: 'Failed to fetch ward boundaries', details: err.message });
+      return res.status(400).json({ error: `Unknown cityId: ${cityId}` });
     }
+
+    const result = await queryWithRetry(query);
+
+    res.json({
+      type: 'FeatureCollection',
+      features: result.rows.map(rowToFeature),
+    });
+  } catch (err) {
+    console.error(`Error fetching ward boundaries for cityId=${cityId}:`, err.message);
+
+    if (err.message.includes('does not exist')) {
+      return res.json({
+        type: 'FeatureCollection',
+        features: [],
+        error: `Ward boundaries table for ${cityId} not yet imported.`,
+      });
+    }
+    return res.status(500).json({ error: 'Failed to fetch ward boundaries', details: err.message });
   }
 });
 
@@ -1440,6 +1487,76 @@ function generateSampleLandCoverData() {
   return sampleWards;
 }
 
+
+// --- Live Trees Endpoint (city-aware, primarily Mysuru / Supabase) ---
+// Pune trees come from PMTiles (1.79M census) and aren't served here.
+// For Mysuru: reads tree_results live from Supabase, filtered by city bbox,
+// excluding deleted rows and PENDING_ANALYSIS submissions.
+// Returns: { trees: [{id, lat, lng, species_name, status, created_at, co2_sequestered_kg}], count, _meta }
+app.get('/api/trees-live', async (req, res) => {
+  const cityId = (req.query.cityId || 'mysuru').toString();
+  const startTime = Date.now();
+
+  try {
+    if (cityId === 'mysuru') {
+      const bbox = CITY_BBOX.mysuru;
+      const query = [
+        'tree_results',
+        '?select=id,latitude,longitude,species,status,created_at,co2_sequestered_kg,image_url',
+        '&is_deleted=eq.false',
+        '&status=neq.PENDING_ANALYSIS',
+        `&latitude=gte.${bbox.minLat}&latitude=lte.${bbox.maxLat}`,
+        `&longitude=gte.${bbox.minLng}&longitude=lte.${bbox.maxLng}`,
+        '&order=created_at.desc',
+        '&limit=5000',
+      ].join('');
+
+      const rows = await supabaseFetch(query);
+
+      const trees = (Array.isArray(rows) ? rows : []).map(r => {
+        // species is a jsonb in tree_results — shape unknown until first submission
+        // lands, so handle multiple possible structures defensively
+        let speciesName = 'Unknown';
+        if (r.species) {
+          if (typeof r.species === 'string') speciesName = r.species;
+          else if (r.species.scientific_name) speciesName = r.species.scientific_name;
+          else if (r.species.common_name) speciesName = r.species.common_name;
+          else if (r.species.name) speciesName = r.species.name;
+        }
+        return {
+          id: r.id,
+          lat: parseFloat(r.latitude),
+          lng: parseFloat(r.longitude),
+          species_name: speciesName,
+          status: r.status,
+          created_at: r.created_at,
+          co2_sequestered_kg: r.co2_sequestered_kg ? parseFloat(r.co2_sequestered_kg) : null,
+          image_url: r.image_url || null,
+        };
+      });
+
+      res.set('Cache-Control', 'public, max-age=10, stale-while-revalidate=30');
+      return res.json({
+        trees,
+        count: trees.length,
+        _meta: { query_time_ms: Date.now() - startTime, source: 'supabase:tree_results' },
+      });
+    }
+
+    if (cityId === 'pune') {
+      return res.json({
+        trees: [],
+        count: 0,
+        _meta: { source: 'n/a - Pune uses PMTiles', query_time_ms: Date.now() - startTime },
+      });
+    }
+
+    return res.status(400).json({ error: `Unknown cityId: ${cityId}` });
+  } catch (err) {
+    console.error('[trees-live] Error:', err.message);
+    return res.status(500).json({ error: 'Failed to fetch live trees', details: err.message });
+  }
+});
 
 // --- Start Server ---
 // Only start server if not in Vercel serverless environment
